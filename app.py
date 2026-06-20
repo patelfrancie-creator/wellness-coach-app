@@ -67,6 +67,9 @@ def sign_up(email, password, full_name):
 def sign_in(email, password):
     try:
         res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        # CRITICAL: attach the authenticated session to the client so RLS policies
+        # (auth.uid() = user_id) pass on every subsequent table call
+        supabase.postgrest.auth(res.session.access_token)
         return res.user, res.session, None
     except Exception as e:
         return None, None, str(e)
@@ -255,6 +258,7 @@ def show_auth_screen():
                     else:
                         st.session_state["user"] = user
                         st.session_state["session"] = session
+                        st.session_state["access_token"] = session.access_token
                         st.rerun()
                 else:
                     st.warning("Please enter your email and password.")
@@ -423,10 +427,11 @@ def show_main_app(user):
                     p_location = st.text_input("Location", value=profile.get("location","") if profile else "")
                 p_diet = st.text_input("Diet (e.g. Vegetarian, no eggs)", value=profile.get("diet","Vegetarian, no eggs") if profile else "Vegetarian, no eggs")
                 if st.form_submit_button("💾 Save Personal Details", type="primary"):
-                    db_upsert("profiles", {"id": user_id, "full_name": p_name, "age": p_age, "height_cm": p_height, "weight_kg": p_weight, "blood_group": p_blood, "location": p_location, "diet": p_diet})
-                    st.success("Saved!")
-                    st.session_state.system_prompt = build_system_prompt(user_id, {"full_name":p_name,"age":p_age,"height_cm":p_height,"weight_kg":p_weight,"blood_group":p_blood,"location":p_location,"diet":p_diet})
-                    st.rerun()
+                    success = db_upsert("profiles", {"id": user_id, "full_name": p_name, "age": p_age, "height_cm": p_height, "weight_kg": p_weight, "blood_group": p_blood, "location": p_location, "diet": p_diet})
+                    if success:
+                        st.success("Saved!")
+                        st.session_state.system_prompt = build_system_prompt(user_id, {"full_name":p_name,"age":p_age,"height_cm":p_height,"weight_kg":p_weight,"blood_group":p_blood,"location":p_location,"diet":p_diet})
+                        st.rerun()
 
         st.divider()
         st.markdown("##### 🔄 Cycle Tracking")
@@ -1078,4 +1083,9 @@ Thyronorm always first on waking with plain water, nothing else for 45-60 mins."
 if "user" not in st.session_state:
     show_auth_screen()
 else:
+    # CRITICAL: re-attach this user's session token on every rerun.
+    # The supabase client is a shared singleton across all users on the server,
+    # so we must set the correct auth token before any table call happens here.
+    if "access_token" in st.session_state:
+        supabase.postgrest.auth(st.session_state["access_token"])
     show_main_app(st.session_state["user"])
