@@ -109,7 +109,10 @@ def db_delete(table, record_id):
 
 def db_get_single(table, user_id):
     try:
-        res = supabase.table(table).select("*").eq("user_id", user_id).limit(1).execute()
+        # profiles table uses 'id' as its key (references auth.users.id directly);
+        # every other table uses 'user_id'
+        key_col = "id" if table == "profiles" else "user_id"
+        res = supabase.table(table).select("*").eq(key_col, user_id).limit(1).execute()
         return res.data[0] if res.data else None
     except:
         return None
