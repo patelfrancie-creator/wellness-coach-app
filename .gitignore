@@ -1,0 +1,14 @@
+# Never commit secrets
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Mac
+.DS_Store
+
+# Migration script (contains service_role key - never share/commit)
+migrate.py
