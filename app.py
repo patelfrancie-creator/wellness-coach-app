@@ -8,8 +8,8 @@ from supabase import create_client, Client
 
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Wellness Coach",
-    page_icon="🌿",
+    page_title="OneSattva",
+    page_icon="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%23B68A3D'/></svg>",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -17,25 +17,137 @@ st.set_page_config(
 # ── Custom CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --mist: #F2F3EF;
+  --ink: #1C2330;
+  --gold: #B68A3D;
+  --signal: #3D5A52;
+  --paper: #FAFAF7;
+  --mid: #5B6270;
+  --line: rgba(28,35,48,0.10);
+}
+
 html, body, [class*="css"] { font-family: 'Inter', -apple-system, sans-serif; }
-h1, h2, h3 { font-family: 'Fraunces', serif !important; color: #2D3B2D !important; font-weight: 600 !important; }
-h1 { font-size: 2.2rem !important; border-bottom: 2px solid #E8DFD0; padding-bottom: 12px; margin-bottom: 1.2rem !important; }
-.stApp { background-color: #FAF6F0; }
-[data-testid="stSidebar"] { background-color: #2D3B2D; }
-[data-testid="stSidebar"] * { color: #F0EBE2 !important; }
-[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 { color: #F0EBE2 !important; font-family: 'Fraunces', serif !important; }
-[data-testid="stSidebar"] hr { border-color: #4A5C45 !important; }
-.stTabs [data-baseweb="tab-list"] { gap: 4px; background-color: #F0EBE2; padding: 6px; border-radius: 12px; }
-.stTabs [data-baseweb="tab"] { border-radius: 8px; color: #6B7A65; font-weight: 500; padding: 10px 18px; }
-.stTabs [aria-selected="true"] { background-color: #FFFFFF !important; color: #2D3B2D !important; box-shadow: 0 1px 3px rgba(45,59,45,0.1); }
-.stButton > button { border-radius: 10px; border: 1.5px solid #7C9070; color: #2D3B2D; background-color: #FFFFFF; font-weight: 500; transition: all 0.15s ease; }
-.stButton > button:hover { background-color: #7C9070; color: #FFFFFF; }
-.stButton > button[kind="primary"] { background-color: #C8755A; border-color: #C8755A; color: #FFFFFF; }
-[data-testid="stAlert"] { border-radius: 10px; border-left-width: 4px; }
-[data-testid="stMetric"] { background-color: #FFFFFF; padding: 14px; border-radius: 12px; border: 1px solid #E8DFD0; }
-[data-testid="stChatMessage"] { background-color: #FFFFFF; border-radius: 14px; border: 1px solid #E8DFD0; }
-hr { border-color: #E8DFD0 !important; margin: 1.5rem 0 !important; }
+
+h1, h2, h3 {
+  font-family: 'Newsreader', serif !important;
+  color: var(--ink) !important;
+  font-weight: 500 !important;
+}
+h1 {
+  font-size: 2.2rem !important;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+  margin-bottom: 1.2rem !important;
+}
+
+.stApp { background-color: var(--mist); }
+
+[data-testid="stSidebar"] { background-color: var(--ink); }
+[data-testid="stSidebar"] * { color: var(--mist) !important; }
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {
+  color: var(--mist) !important;
+  font-family: 'Newsreader', serif !important;
+}
+[data-testid="stSidebar"] hr { border-color: rgba(242,243,239,0.10) !important; }
+
+.stTabs [data-baseweb="tab-list"] {
+  gap: 4px;
+  background-color: var(--paper);
+  padding: 6px;
+  border-radius: 12px;
+}
+.stTabs [data-baseweb="tab"] {
+  border-radius: 8px;
+  color: var(--mid);
+  font-weight: 500;
+  padding: 10px 18px;
+  font-family: 'Inter', sans-serif;
+}
+.stTabs [aria-selected="true"] {
+  background-color: var(--paper) !important;
+  color: var(--ink) !important;
+  box-shadow: 0 1px 3px rgba(28,35,48,0.08);
+}
+
+.stButton > button {
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  color: var(--ink);
+  background-color: var(--paper);
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  transition: all 0.15s ease;
+}
+.stButton > button:hover {
+  background-color: var(--ink);
+  color: var(--mist);
+  border-color: var(--ink);
+}
+.stButton > button[kind="primary"] {
+  background-color: var(--ink);
+  border-color: var(--ink);
+  color: var(--mist);
+}
+.stButton > button[kind="primary"]:hover {
+  background-color: var(--signal);
+  border-color: var(--signal);
+}
+
+[data-testid="stAlert"] { border-radius: 10px; border-left-width: 3px; }
+
+[data-testid="stMetric"] {
+  background-color: var(--paper);
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+[data-testid="stMetricLabel"] { color: var(--mid) !important; font-family: 'Inter', sans-serif; }
+[data-testid="stMetricValue"] { color: var(--ink) !important; font-family: 'JetBrains Mono', monospace !important; }
+
+[data-testid="stChatMessage"] {
+  background-color: var(--paper);
+  border-radius: 14px;
+  border: 1px solid var(--line);
+}
+
+hr { border-color: var(--line) !important; margin: 1.5rem 0 !important; }
+
+.triage-now {
+  background: rgba(61,90,82,0.10);
+  color: #3D5A52;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-family: 'Inter', sans-serif;
+  display: inline-block;
+}
+.triage-watch {
+  background: rgba(199,194,184,0.28);
+  color: #6B6358;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-family: 'Inter', sans-serif;
+  display: inline-block;
+}
+
+.lab-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+input, textarea, select {
+  font-family: 'Inter', sans-serif !important;
+}
+
+.stDataFrame { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stCaption, [data-testid="stCaptionContainer"] { color: var(--mid) !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -43,7 +155,6 @@ hr { border-color: #E8DFD0 !important; margin: 1.5rem 0 !important; }
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 ANTHROPIC_KEY = st.secrets["ANTHROPIC_KEY"]
-
 # ── Clients ────────────────────────────────────────────────────────────────────
 @st.cache_resource
 def get_supabase() -> Client:
@@ -240,8 +351,21 @@ For complex questions use this structure:
 def show_auth_screen():
     st.markdown("""
     <div style='max-width:420px; margin: 60px auto 0; text-align:center;'>
-    <h1 style='border:none; font-size:2.8rem; margin-bottom:4px;'>🌿 Wellness Coach</h1>
-    <p style='color:#8A9485; font-size:1.1rem; margin-bottom:2rem;'>Your personal integrative medicine companion</p>
+      <svg width="48" height="48" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="margin-bottom:12px">
+        <defs>
+          <radialGradient id="glow-login" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#FAFAF7"/>
+            <stop offset="62%" stop-color="#B68A3D"/>
+            <stop offset="100%" stop-color="#1C2330" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <circle cx="50" cy="50" r="32" fill="url(#glow-login)"/>
+        <circle cx="50" cy="50" r="6" fill="#FAFAF7"/>
+      </svg>
+      <h1 style='border:none;font-size:2.4rem;margin-bottom:4px;font-family:Newsreader,serif;font-style:italic;color:#1C2330;'>
+        <span style='font-style:normal;opacity:0.55;font-size:0.58em;vertical-align:0.28em;margin-right:0.04em;'>one</span>Sattva
+      </h1>
+      <p style='font-family:Newsreader,serif;font-style:italic;color:#B68A3D;font-size:1rem;margin-bottom:2rem;'>With you. For you.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -298,7 +422,23 @@ def show_main_app(user):
 
     # ── Sidebar ────────────────────────────────────────────────────────────────
     with st.sidebar:
-        st.markdown(f"### 🌿 {name}")
+        st.markdown(f"""
+        <div style='display:flex;align-items:center;gap:10px;padding-bottom:16px;border-bottom:1px solid rgba(242,243,239,0.10);margin-bottom:16px;'>
+          <svg width="22" height="22" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <defs><radialGradient id="g" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#F2F3EF"/>
+              <stop offset="62%" stop-color="#B68A3D"/>
+              <stop offset="100%" stop-color="#1C2330" stop-opacity="0"/>
+            </radialGradient></defs>
+            <circle cx="50" cy="50" r="32" fill="url(#g)"/>
+            <circle cx="50" cy="50" r="6" fill="#F2F3EF"/>
+          </svg>
+          <span style="font-family:Newsreader,serif;font-style:italic;font-size:20px;color:#F2F3EF;">
+            <span style="font-style:normal;opacity:0.55;font-size:0.58em;vertical-align:0.28em;margin-right:0.04em;">one</span>Sattva
+          </span>
+        </div>
+        <div style="font-family:Inter,sans-serif;font-size:14px;color:#F2F3EF;opacity:0.85;">{name}</div>
+        """, unsafe_allow_html=True)
         if profile:
             st.caption(f"{profile.get('age','?')} · {profile.get('height_cm','?')}cm · {profile.get('weight_kg','?')}kg")
 
@@ -326,7 +466,7 @@ def show_main_app(user):
             st.caption("Add goals in Profile tab")
 
         st.divider()
-        if st.button("🚪 Sign Out", use_container_width=True):
+        if st.button("Sign out", use_container_width=True):
             sign_out()
 
         st.caption(f"Logged in as {user.email}")
@@ -335,7 +475,7 @@ def show_main_app(user):
     tab0, tab_profile, tab5, tab6, tab2, tab4b, tab4, tab3, tab1 = st.tabs([
         "🏡 Home", "👤 My Profile", "🧪 Lab Reports", "⌚ Wearable Data",
         "📋 Daily Check-In", "🗺️ Treatment Roadmap", "📅 Weekly Protocol",
-        "📊 My Trends", "🌿 Wellness Coach"
+        "📊 My Trends", "🌿 Your Coach"
     ])
 
     # ════════════════════════════
@@ -344,7 +484,7 @@ def show_main_app(user):
     with tab0:
         st.markdown(f"""
         <div style='padding:8px 0 4px;'>
-        <h1 style='border:none; margin-bottom:4px !important; padding-bottom:0 !important;'>Good to see you, {name} 🌿</h1>
+        <h1 style='border:none; margin-bottom:4px !important; padding-bottom:0 !important; font-family:Newsreader,serif;'>Good to see you, {name}</h1>
         <p style='color:#8A9485; font-size:1.05rem; margin-top:0;'>Here's where things stand today.</p>
         </div>
         """, unsafe_allow_html=True)
@@ -1014,8 +1154,8 @@ Thyronorm always first on waking with plain water, nothing else for 45-60 mins."
     # WELLNESS COACH CHAT
     # ════════════════════════════
     with tab1:
-        st.title("🌿 Wellness Coach")
-        st.caption("Integrative Medicine · Functional Labs · Bio-Individual · Ayurveda · TCM")
+        st.title("🌿 Your Coach")
+        st.caption("OneSattva · Integrative Medicine · Functional Labs · Ayurveda · TCM")
 
         if "messages" not in st.session_state:
             st.session_state.messages = []
