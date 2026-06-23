@@ -55,6 +55,21 @@ h1 {
 }
 [data-testid="stSidebar"] hr { border-color: rgba(242,243,239,0.10) !important; }
 
+[data-testid="stSidebar"] .stButton > button {
+  background-color: rgba(242,243,239,0.08) !important;
+  border: 1px solid rgba(242,243,239,0.15) !important;
+  color: #F2F3EF !important;
+  font-family: Inter, sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  border-radius: 8px !important;
+}
+[data-testid="stSidebar"] .stButton > button:hover {
+  background-color: rgba(242,243,239,0.15) !important;
+  border-color: rgba(242,243,239,0.25) !important;
+  color: #F2F3EF !important;
+}
+
 .stTabs [data-baseweb="tab-list"] {
   gap: 4px;
   background-color: var(--paper);
@@ -155,6 +170,7 @@ input, textarea, select {
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 ANTHROPIC_KEY = st.secrets["ANTHROPIC_KEY"]
+
 # ── Clients ────────────────────────────────────────────────────────────────────
 @st.cache_resource
 def get_supabase() -> Client:
@@ -350,22 +366,24 @@ For complex questions use this structure:
 # ════════════════════════════════════════════════════════════════════════════════
 def show_auth_screen():
     st.markdown("""
-    <div style='max-width:420px; margin: 60px auto 0; text-align:center;'>
-      <svg width="48" height="48" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="margin-bottom:12px">
-        <defs>
-          <radialGradient id="glow-login" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#FAFAF7"/>
-            <stop offset="62%" stop-color="#B68A3D"/>
-            <stop offset="100%" stop-color="#1C2330" stop-opacity="0"/>
-          </radialGradient>
-        </defs>
-        <circle cx="50" cy="50" r="32" fill="url(#glow-login)"/>
-        <circle cx="50" cy="50" r="6" fill="#FAFAF7"/>
-      </svg>
-      <h1 style='border:none;font-size:2.4rem;margin-bottom:4px;font-family:Newsreader,serif;font-style:italic;color:#1C2330;'>
-        <span style='font-style:normal;opacity:0.55;font-size:0.58em;vertical-align:0.28em;margin-right:0.04em;'>one</span>Sattva
-      </h1>
-      <p style='font-family:Newsreader,serif;font-style:italic;color:#B68A3D;font-size:1rem;margin-bottom:2rem;'>With you. For you.</p>
+    <div style='max-width:380px;margin:40px auto 24px;text-align:center;'>
+      <div style='display:inline-flex;align-items:center;justify-content:center;gap:10px;margin-bottom:8px;'>
+        <svg width="36" height="36" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="glow-login" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#FAFAF7"/>
+              <stop offset="62%" stop-color="#B68A3D"/>
+              <stop offset="100%" stop-color="#1C2330" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <circle cx="50" cy="50" r="32" fill="url(#glow-login)"/>
+          <circle cx="50" cy="50" r="6" fill="#FAFAF7"/>
+        </svg>
+        <span style='font-family:Newsreader,serif;font-style:italic;font-size:2.2rem;color:#1C2330;line-height:1;'>
+          <span style='font-style:normal;opacity:0.45;font-size:0.55em;vertical-align:0.3em;margin-right:0.02em;'>one</span>Sattva
+        </span>
+      </div>
+      <p style='font-family:Newsreader,serif;font-style:italic;color:#B68A3D;font-size:0.95rem;margin:0 0 28px;letter-spacing:0.01em;'>With you. For you.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -422,60 +440,66 @@ def show_main_app(user):
 
     # ── Sidebar ────────────────────────────────────────────────────────────────
     with st.sidebar:
+        # ── Brand mark + wordmark ──
         st.markdown(f"""
-        <div style='display:flex;align-items:center;gap:10px;padding-bottom:16px;border-bottom:1px solid rgba(242,243,239,0.10);margin-bottom:16px;'>
-          <svg width="22" height="22" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-            <defs><radialGradient id="g" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="#F2F3EF"/>
-              <stop offset="62%" stop-color="#B68A3D"/>
-              <stop offset="100%" stop-color="#1C2330" stop-opacity="0"/>
-            </radialGradient></defs>
-            <circle cx="50" cy="50" r="32" fill="url(#g)"/>
-            <circle cx="50" cy="50" r="6" fill="#F2F3EF"/>
-          </svg>
-          <span style="font-family:Newsreader,serif;font-style:italic;font-size:20px;color:#F2F3EF;">
-            <span style="font-style:normal;opacity:0.55;font-size:0.58em;vertical-align:0.28em;margin-right:0.04em;">one</span>Sattva
-          </span>
+        <div style='padding:20px 4px 16px;border-bottom:1px solid rgba(242,243,239,0.12);margin-bottom:20px;'>
+          <div style='display:flex;align-items:center;gap:9px;margin-bottom:12px;'>
+            <svg width="20" height="20" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+              <defs><radialGradient id="sg" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#F2F3EF"/>
+                <stop offset="62%" stop-color="#B68A3D"/>
+                <stop offset="100%" stop-color="#1C2330" stop-opacity="0"/>
+              </radialGradient></defs>
+              <circle cx="50" cy="50" r="32" fill="url(#sg)"/>
+              <circle cx="50" cy="50" r="6" fill="#F2F3EF"/>
+            </svg>
+            <span style="font-family:Newsreader,serif;font-style:italic;font-size:18px;color:#F2F3EF;line-height:1;">
+              <span style="font-style:normal;opacity:0.45;font-size:0.55em;vertical-align:0.3em;margin-right:0.02em;">one</span>Sattva
+            </span>
+          </div>
+          <div style="font-family:Inter,sans-serif;font-size:13px;color:#F2F3EF;opacity:0.7;">{name}</div>
+          {f"<div style='font-family:Inter,sans-serif;font-size:11px;color:#F2F3EF;opacity:0.45;margin-top:2px;'>{profile.get('age','')}{'yr' if profile.get('age') else ''} · {profile.get('location','')}</div>" if profile else ""}
         </div>
-        <div style="font-family:Inter,sans-serif;font-size:14px;color:#F2F3EF;opacity:0.85;">{name}</div>
         """, unsafe_allow_html=True)
-        if profile:
-            st.caption(f"{profile.get('age','?')} · {profile.get('height_cm','?')}cm · {profile.get('weight_kg','?')}kg")
 
-        st.divider()
-
-        st.subheader("🔄 Cycle")
+        # ── Cycle status ──
+        st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.08em;color:#F2F3EF;opacity:0.45;margin:0 0 8px;text-transform:uppercase;'>Cycle</p>""", unsafe_allow_html=True)
         if cycle_day:
-            st.markdown(f"**Day {cycle_day}** · {cycle_phase.split(' (')[0]}")
-            if days_to_next:
-                st.caption(f"~{days_to_next} days until next period")
-            if st.button("🩸 New Period Today", use_container_width=True, key="new_period"):
+            st.markdown(f"""
+            <div style='background:rgba(242,243,239,0.07);border-radius:10px;padding:12px 14px;margin-bottom:8px;'>
+              <div style='font-family:JetBrains Mono,monospace;font-size:22px;color:#F2F3EF;font-weight:500;line-height:1;'>Day {cycle_day}</div>
+              <div style='font-family:Inter,sans-serif;font-size:12px;color:#F2F3EF;opacity:0.6;margin-top:4px;'>{cycle_phase.split(' (')[0]}</div>
+              {f"<div style='font-family:Inter,sans-serif;font-size:11px;color:#B68A3D;margin-top:6px;'>~{days_to_next}d until next period</div>" if days_to_next else ""}
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("New period started today", use_container_width=True, key="new_period"):
                 db_upsert("cycle_data", {"user_id": user_id, "last_period_start": date.today().isoformat()})
                 st.session_state.system_prompt = build_system_prompt(user_id, profile)
                 st.rerun()
         else:
-            st.caption("Set period date in Profile tab")
+            st.markdown("""<div style='font-family:Inter,sans-serif;font-size:12px;color:#F2F3EF;opacity:0.5;'>Set period date in Profile tab</div>""", unsafe_allow_html=True)
 
-        st.divider()
-        st.subheader("🎯 Goals")
+        st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+
+        # ── Goals ──
         goals = db_get("goals", user_id)
         if goals:
-            for g in goals[:4]:
-                st.markdown(f"- {g['goal'][:40]}")
-        else:
-            st.caption("Add goals in Profile tab")
+            st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.08em;color:#F2F3EF;opacity:0.45;margin:0 0 8px;text-transform:uppercase;'>Goals</p>""", unsafe_allow_html=True)
+            for g in goals[:3]:
+                st.markdown(f"""<div style='font-family:Inter,sans-serif;font-size:12px;color:#F2F3EF;opacity:0.7;padding:4px 0;border-bottom:1px solid rgba(242,243,239,0.07);'>{g['goal'][:45]}</div>""", unsafe_allow_html=True)
 
-        st.divider()
-        if st.button("Sign out", use_container_width=True):
+        st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
+
+        # ── Sign out ──
+        st.markdown(f"""<div style='font-family:Inter,sans-serif;font-size:11px;color:#F2F3EF;opacity:0.35;margin-bottom:8px;'>{user.email}</div>""", unsafe_allow_html=True)
+        if st.button("Sign out", use_container_width=True, key="signout_btn"):
             sign_out()
-
-        st.caption(f"Logged in as {user.email}")
 
     # ── Tabs ───────────────────────────────────────────────────────────────────
     tab0, tab_profile, tab5, tab6, tab2, tab4b, tab4, tab3, tab1 = st.tabs([
         "🏡 Home", "👤 My Profile", "🧪 Lab Reports", "⌚ Wearable Data",
         "📋 Daily Check-In", "🗺️ Treatment Roadmap", "📅 Weekly Protocol",
-        "📊 My Trends", "🌿 Your Coach"
+        "📊 My Trends", "✦ Your Coach"
     ])
 
     # ════════════════════════════
@@ -484,7 +508,7 @@ def show_main_app(user):
     with tab0:
         st.markdown(f"""
         <div style='padding:8px 0 4px;'>
-        <h1 style='border:none; margin-bottom:4px !important; padding-bottom:0 !important; font-family:Newsreader,serif;'>Good to see you, {name}</h1>
+        <h1 style='border:none; margin-bottom:4px !important; padding-bottom:0 !important; font-family:Newsreader,serif;'>Good to see you, {name}.</h1>
         <p style='color:#8A9485; font-size:1.05rem; margin-top:0;'>Here's where things stand today.</p>
         </div>
         """, unsafe_allow_html=True)
@@ -1154,7 +1178,7 @@ Thyronorm always first on waking with plain water, nothing else for 45-60 mins."
     # WELLNESS COACH CHAT
     # ════════════════════════════
     with tab1:
-        st.title("🌿 Your Coach")
+        st.title("✦ Your Coach")
         st.caption("OneSattva · Integrative Medicine · Functional Labs · Ayurveda · TCM")
 
         if "messages" not in st.session_state:
