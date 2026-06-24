@@ -1363,7 +1363,7 @@ Complete every section. Never cut off."""
                 st.dataframe(wdf_all[display_cols].sort_values("data_date", ascending=False), use_container_width=True, hide_index=True)
 
             # Delete by date
-            dates_list = wdf["data_date"].dt.strftime("%Y-%m-%d").tolist()
+            dates_list = wdf_all["data_date"].dt.strftime("%Y-%m-%d").tolist()
             del_date = st.selectbox("Delete a specific date", ["-- none --"] + dates_list)
             if del_date != "-- none --":
                 if st.button(f"🗑️ Delete {del_date}"):
