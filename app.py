@@ -1084,52 +1084,175 @@ Has the priority order changed?
     # ════════════════════════════
     with tab2:
         st.title("📋 Daily Check-In")
-        st.caption("Takes 60 seconds. The AI uses this to personalise your advice.")
+
+        now = datetime.now()
+        hour = now.hour
+        if hour < 12:
+            time_greeting = "Morning check-in"
+        elif hour < 17:
+            time_greeting = "Afternoon check-in"
+        else:
+            time_greeting = "Evening check-in"
+
+        st.caption(f"{time_greeting} · {date.today().strftime('%A, %d %B')} · Cycle Day {cycle_day or '?'}")
 
         today_checkins = db_get("checkins", user_id, order_col="checkin_date", limit=1)
         already_logged = today_checkins and today_checkins[0].get("checkin_date") == date.today().isoformat()
 
+        # Get yesterday's values for smart defaults
+        yesterday_checkins = db_get("checkins", user_id, order_col="checkin_date", limit=2)
+        yesterday = yesterday_checkins[1] if len(yesterday_checkins) > 1 else None
+        prev_energy = int(yesterday.get("energy", 5)) if yesterday else 5
+        prev_mood = int(yesterday.get("mood", 5)) if yesterday else 5
+        prev_sleep_hrs = float(yesterday.get("sleep_hours", 7)) if yesterday else 7.0
+        prev_sleep_q = int(yesterday.get("sleep_quality", 5)) if yesterday else 5
+        prev_stress = int(yesterday.get("stress", 3)) if yesterday else 3
+
         if already_logged:
-            st.success(f"✅ Already logged today. Come back tomorrow!")
             row = today_checkins[0]
-            c1,c2,c3,c4 = st.columns(4)
+            st.success("✅ Logged for today")
+
+            # Show today's snapshot
+            c1, c2, c3, c4, c5 = st.columns(5)
             c1.metric("Energy", f"{row.get('energy','?')}/10")
-            c2.metric("Sleep", f"{row.get('sleep_hours','?')} hrs")
-            c3.metric("Sleep Quality", f"{row.get('sleep_quality','?')}/10")
-            c4.metric("Mood", f"{row.get('mood','?')}/10")
-        else:
+            c2.metric("Mood", f"{row.get('mood','?')}/10")
+            c3.metric("Sleep", f"{row.get('sleep_hours','?')}h")
+            c4.metric("Bloating", row.get('bloating','?'))
+            c5.metric("Workout", row.get('workout','?')[:8] if row.get('workout') else '?')
+
+            if row.get("notes"):
+                st.caption(f"📝 {row['notes']}")
+
+            # Show AI insight if not already generated
+            if "checkin_insight" not in st.session_state:
+                recent_for_insight = db_get("checkins", user_id, order_col="checkin_date", limit=7)
+                insight_prompt = f"""Today's check-in for {name}:
+Cycle Day {cycle_day or '?'} · {cycle_phase or 'Unknown phase'}
+Energy: {row.get('energy')}/10 · Mood: {row.get('mood')}/10 · Sleep: {row.get('sleep_hours')}hrs (quality {row.get('sleep_quality')}/10)
+Bloating: {row.get('bloating')} · Digestion: {row.get('digestion')} · Workout: {row.get('workout')}
+Notes: {row.get('notes','')}
+
+Recent 7-day pattern: {', '.join([f"Day {c.get('cycle_day','?')}: energy {c.get('energy','?')}, bloating {c.get('bloating','?')}" for c in (recent_for_insight or [])[:5]])}
+
+Give ONE sharp clinical observation in 2-3 sentences. Reference their cycle phase and pattern if relevant. Be direct and specific — not generic encouragement. End with one concrete action for today if warranted."""
+
+                with st.spinner(""):
+                    insight_resp = ai_client.messages.create(
+                        model="claude-sonnet-4-6",
+                        max_tokens=300,
+                        system=st.session_state.system_prompt,
+                        messages=[{"role":"user","content":insight_prompt}]
+                    )
+                    st.session_state.checkin_insight = insight_resp.content[0].text
+
+            if st.session_state.get("checkin_insight"):
+                st.markdown(f"""
+                <div style='background:#F2F3EF;border-left:3px solid #B68A3D;border-radius:0 10px 10px 0;
+                            padding:14px 18px;margin-top:16px;'>
+                <p style='font-family:Inter,sans-serif;font-size:13px;color:#1C2330;margin:0;line-height:1.6;'>
+                {st.session_state.checkin_insight}
+                </p>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.divider()
+            if st.button("✏️ Edit today's check-in", use_container_width=True):
+                st.session_state.edit_checkin = True
+                st.rerun()
+
+        if not already_logged or st.session_state.get("edit_checkin"):
+            if st.session_state.get("edit_checkin"):
+                st.caption("Editing today's check-in")
+                prefill = today_checkins[0] if today_checkins else {}
+                prev_energy = int(prefill.get("energy", prev_energy))
+                prev_mood = int(prefill.get("mood", prev_mood))
+                prev_sleep_hrs = float(prefill.get("sleep_hours", prev_sleep_hrs))
+                prev_sleep_q = int(prefill.get("sleep_quality", prev_sleep_q))
+                prev_stress = int(prefill.get("stress", prev_stress))
+
             with st.form("checkin_form"):
-                fc1, fc2 = st.columns(2)
-                with fc1:
-                    c_date = st.date_input("Date", value=date.today())
-                    c_cycle_day = st.number_input("Cycle Day", 1, 35, value=cycle_day if cycle_day else 1)
-                    c_phase = st.selectbox("Cycle Phase", ["Follicular","Ovulation","Luteal","Menstruation"])
-                    c_energy = st.slider("⚡ Energy", 1, 10, 5)
-                    c_mood = st.slider("😊 Mood", 1, 10, 5)
-                    c_stress = st.slider("😤 Stress", 1, 10, 3)
-                with fc2:
-                    c_sleep_hrs = st.number_input("😴 Sleep Hours", 0.0, 12.0, 7.0, step=0.5)
-                    c_sleep_q = st.slider("🌙 Sleep Quality", 1, 10, 5)
-                    c_bloating = st.selectbox("🫧 Bloating", ["None","Mild","Moderate","Severe"])
-                    c_digestion = st.selectbox("🌿 Digestion", ["Good","Average","Poor"])
-                    c_bowel = st.selectbox("💧 Bowel", ["Normal","Loose","Constipated","None today"])
-                    c_workout = st.selectbox("🏋️ Workout", ["Strength Training","Padel","Cardio","Pilates","Walk/Steps only","Rest day"])
-                c_rumination = st.selectbox("🔄 Rumination", ["None","Mild (1-2)","Moderate (3-5)","Frequent (5+)"])
-                c_notes = st.text_area("📝 Notes", placeholder="Anything unusual today...")
-                if st.form_submit_button("✅ Save Check-In", type="primary"):
+                # Row 1 — Vitals (sliders, pre-filled from yesterday)
+                st.markdown("**How are you feeling?**")
+                s1, s2, s3 = st.columns(3)
+                with s1:
+                    c_energy = st.slider("⚡ Energy", 1, 10, prev_energy,
+                        help="1 = exhausted, 10 = peak energy")
+                with s2:
+                    c_mood = st.slider("😊 Mood", 1, 10, prev_mood,
+                        help="1 = very low, 10 = excellent")
+                with s3:
+                    c_stress = st.slider("😤 Stress", 1, 10, prev_stress,
+                        help="1 = none, 10 = very high")
+
+                # Row 2 — Sleep
+                st.markdown("**Sleep last night**")
+                sl1, sl2 = st.columns(2)
+                with sl1:
+                    c_sleep_hrs = st.number_input("Hours", 0.0, 12.0, prev_sleep_hrs, step=0.5)
+                with sl2:
+                    c_sleep_q = st.slider("Quality", 1, 10, prev_sleep_q)
+
+                # Row 3 — Gut (most important for this patient)
+                st.markdown("**Gut & digestion**")
+                g1, g2, g3 = st.columns(3)
+                with g1:
+                    c_bloating = st.selectbox("Bloating", ["None","Mild","Moderate","Severe"],
+                        index=["None","Mild","Moderate","Severe"].index(
+                            today_checkins[0].get("bloating","None") if st.session_state.get("edit_checkin") and today_checkins else "None"))
+                with g2:
+                    c_digestion = st.selectbox("Digestion", ["Good","Average","Poor"],
+                        index=["Good","Average","Poor"].index(
+                            today_checkins[0].get("digestion","Good") if st.session_state.get("edit_checkin") and today_checkins else "Good"))
+                with g3:
+                    c_bowel = st.selectbox("Bowel", ["Normal","Loose","Constipated","None today"])
+
+                # Row 4 — Activity + Rumination
+                st.markdown("**Activity**")
+                a1, a2 = st.columns(2)
+                with a1:
+                    # Smart default based on weekly protocol if it exists
+                    workout_options = ["Strength Training","Padel","Cardio","Pilates","Walk/Steps only","Rest day","Other"]
+                    c_workout = st.selectbox("Today's workout", workout_options)
+                with a2:
+                    c_rumination = st.selectbox("Rumination", ["None","Mild (1-2 episodes)","Moderate (3-5)","Frequent (5+)"])
+
+                # Notes — free text, optional
+                c_notes = st.text_area("Anything else?", placeholder="Unusual symptoms, stress, travel, medication change...", height=80)
+
+                submitted = st.form_submit_button("✅ Save", type="primary", use_container_width=True)
+                if submitted:
+                    # Derive cycle phase from auto-calculated cycle_day
+                    if cycle_day:
+                        if cycle_day <= 5: c_phase = "Menstruation"
+                        elif cycle_day <= 13: c_phase = "Follicular"
+                        elif cycle_day <= 16: c_phase = "Ovulation"
+                        else: c_phase = "Luteal"
+                    else:
+                        c_phase = "Unknown"
+
                     db_upsert("checkins", {
-                        "user_id": user_id, "checkin_date": c_date.isoformat(),
-                        "cycle_day": c_cycle_day, "cycle_phase": c_phase,
-                        "energy": c_energy, "mood": c_mood, "stress": c_stress,
-                        "sleep_hours": c_sleep_hrs, "sleep_quality": c_sleep_q,
-                        "bloating": c_bloating, "digestion": c_digestion,
-                        "bowel": c_bowel, "workout": c_workout,
-                        "rumination": c_rumination, "notes": c_notes
+                        "user_id": user_id,
+                        "checkin_date": date.today().isoformat(),
+                        "cycle_day": cycle_day,
+                        "cycle_phase": c_phase,
+                        "energy": c_energy,
+                        "mood": c_mood,
+                        "stress": c_stress,
+                        "sleep_hours": c_sleep_hrs,
+                        "sleep_quality": c_sleep_q,
+                        "bloating": c_bloating,
+                        "digestion": c_digestion,
+                        "bowel": c_bowel,
+                        "workout": c_workout,
+                        "rumination": c_rumination,
+                        "notes": c_notes
                     })
                     st.session_state.system_prompt = build_system_prompt(user_id, profile)
-                    st.success("✅ Check-in saved!")
-                    st.balloons()
+                    st.session_state.pop("checkin_insight", None)
+                    st.session_state.pop("edit_checkin", None)
                     st.rerun()
+
+
 
     # ════════════════════════════
     # TREATMENT ROADMAP
@@ -1519,7 +1642,10 @@ If medication includes Thyronorm — always first on waking, plain water only, 4
     # ════════════════════════════
     with tab3:
         st.title("📊 My Trends")
+        st.caption("Patterns across your check-ins, wearable data, and cycle phases.")
+
         all_checkins = db_get("checkins", user_id, order_col="checkin_date")
+
         if not all_checkins:
             st.info("No check-ins yet. Complete your first daily check-in to see trends here.")
         else:
@@ -1527,28 +1653,124 @@ If medication includes Thyronorm — always first on waking, plain water only, 4
             df_t["checkin_date"] = pd.to_datetime(df_t["checkin_date"])
             df_t = df_t.sort_values("checkin_date")
             recent_t = df_t.tail(7)
+            last_30 = df_t.tail(30)
 
-            st.subheader("Last 7 Days")
-            tc1,tc2,tc3,tc4 = st.columns(4)
-            for col, field, label in [(tc1,"energy","Avg Energy"),(tc2,"sleep_hours","Avg Sleep"),(tc3,"mood","Avg Mood"),(tc4,"stress","Avg Stress")]:
+            # ── 7-day snapshot ───────────────────────────────────────────────────
+            st.markdown("#### Last 7 days")
+            tc1,tc2,tc3,tc4,tc5 = st.columns(5)
+            metrics = [
+                (tc1,"energy","Energy",""),
+                (tc2,"mood","Mood",""),
+                (tc3,"sleep_hours","Sleep","hrs"),
+                (tc4,"sleep_quality","Sleep Quality",""),
+                (tc5,"stress","Stress",""),
+            ]
+            for col, field, label, unit in metrics:
                 if field in recent_t.columns:
-                    col.metric(label, f"{pd.to_numeric(recent_t[field], errors='coerce').mean():.1f}")
+                    val = pd.to_numeric(recent_t[field], errors="coerce").mean()
+                    if not pd.isna(val):
+                        col.metric(label, f"{val:.1f}{unit}")
+
+            # ── Pattern detection ─────────────────────────────────────────────────
+            st.divider()
+            st.markdown("#### Pattern flags")
+
+            flags = []
+            if "energy" in df_t.columns and "cycle_phase" in df_t.columns:
+                for phase in ["Luteal","Follicular","Ovulation","Menstruation"]:
+                    phase_data = df_t[df_t["cycle_phase"] == phase]
+                    if len(phase_data) >= 3:
+                        avg_energy = pd.to_numeric(phase_data["energy"], errors="coerce").mean()
+                        if avg_energy <= 4:
+                            flags.append(f"⚠️ **Consistently low energy in {phase} phase** (avg {avg_energy:.1f}/10 across {len(phase_data)} logged days)")
+
+            if "bloating" in df_t.columns:
+                bloating_counts = last_30["bloating"].value_counts()
+                mod_severe = bloating_counts.get("Moderate",0) + bloating_counts.get("Severe",0)
+                if mod_severe >= 10:
+                    flags.append(f"⚠️ **Bloating {mod_severe} of last 30 days** at moderate or severe — persistent gut pattern")
+
+            if "sleep_hours" in df_t.columns:
+                avg_sleep = pd.to_numeric(last_30["sleep_hours"], errors="coerce").mean()
+                if not pd.isna(avg_sleep) and avg_sleep < 6.5:
+                    flags.append(f"⚠️ **Average sleep {avg_sleep:.1f}hrs over last 30 days** — consistently below functional threshold of 7hrs")
+
+            if "energy" in df_t.columns and "mood" in df_t.columns:
+                last_7_energy = pd.to_numeric(recent_t["energy"], errors="coerce").mean()
+                prev_7_energy = pd.to_numeric(df_t.tail(14).head(7)["energy"], errors="coerce").mean()
+                if not pd.isna(last_7_energy) and not pd.isna(prev_7_energy):
+                    if last_7_energy < prev_7_energy - 1.5:
+                        flags.append(f"📉 **Energy declining** — down {prev_7_energy-last_7_energy:.1f} points vs previous week")
+                    elif last_7_energy > prev_7_energy + 1.5:
+                        flags.append(f"📈 **Energy improving** — up {last_7_energy-prev_7_energy:.1f} points vs previous week")
+
+            if flags:
+                for f in flags:
+                    st.markdown(f)
+            else:
+                st.success("✅ No significant pattern flags in your recent data.")
+
+            # ── AI trend summary (generate once per session) ──────────────────────
+            if len(df_t) >= 7:
+                if st.button("✦ Ask your coach to interpret these trends", use_container_width=True, key="trend_insight_btn"):
+                    trend_summary = df_t[["checkin_date","cycle_phase","energy","mood","sleep_hours","bloating","digestion"]].tail(30).to_string(index=False)
+                    trend_prompt = f"""Analyse this patient's check-in trends over the last 30 days and give a clinical pattern interpretation.
+
+Data:
+{trend_summary}
+
+Current cycle phase: {cycle_phase}
+Current cycle day: {cycle_day}
+
+Identify 2-3 meaningful patterns (not just describing the data — interpret what they mean clinically). Reference the cycle phase where relevant. Be direct and specific. If something warrants a change to the current protocol, say so. Keep it under 200 words total."""
+
+                    with st.spinner("Analysing your patterns..."):
+                        trend_resp = ai_client.messages.create(
+                            model="claude-sonnet-4-6",
+                            max_tokens=500,
+                            system=st.session_state.system_prompt,
+                            messages=[{"role":"user","content":trend_prompt}]
+                        )
+                        st.session_state.trend_insight = trend_resp.content[0].text
+
+                if st.session_state.get("trend_insight"):
+                    st.markdown(f"""
+                    <div style='background:#F2F3EF;border-left:3px solid #B68A3D;border-radius:0 10px 10px 0;
+                                padding:16px 20px;margin:16px 0;'>
+                    <p style='font-family:Inter,sans-serif;font-size:13px;color:#1C2330;margin:0;line-height:1.6;'>
+                    {st.session_state.trend_insight}
+                    </p>
+                    </div>
+                    """, unsafe_allow_html=True)
 
             st.divider()
-            plot_fields = [f for f in ["energy","mood","sleep_quality"] if f in df_t.columns]
-            if plot_fields:
-                st.subheader("Energy, Mood & Sleep Quality")
-                st.line_chart(df_t[["checkin_date"]+plot_fields].set_index("checkin_date"))
-            if "sleep_hours" in df_t.columns:
-                st.subheader("Sleep Hours")
-                st.line_chart(df_t[["checkin_date","sleep_hours"]].set_index("checkin_date"))
-            if "bloating" in df_t.columns:
-                st.divider()
-                st.subheader("Bloating Frequency")
-                st.bar_chart(df_t["bloating"].value_counts())
+
+            # ── Charts ────────────────────────────────────────────────────────────
+            chart_tab1, chart_tab2, chart_tab3 = st.tabs(["Energy & Mood", "Sleep", "Gut"])
+
+            with chart_tab1:
+                plot_fields = [f for f in ["energy","mood"] if f in df_t.columns]
+                if plot_fields:
+                    st.line_chart(df_t[["checkin_date"]+plot_fields].set_index("checkin_date"))
+
+            with chart_tab2:
+                sleep_fields = [f for f in ["sleep_hours","sleep_quality"] if f in df_t.columns]
+                if sleep_fields:
+                    st.line_chart(df_t[["checkin_date"]+sleep_fields].set_index("checkin_date"))
+
+            with chart_tab3:
+                if "bloating" in df_t.columns:
+                    st.markdown("**Bloating frequency**")
+                    st.bar_chart(df_t["bloating"].value_counts())
+                if "digestion" in df_t.columns:
+                    st.markdown("**Digestion frequency**")
+                    st.bar_chart(df_t["digestion"].value_counts())
+
             st.divider()
             display_cols = [c for c in ["checkin_date","cycle_phase","energy","mood","stress","sleep_hours","sleep_quality","bloating","digestion","workout","notes"] if c in df_t.columns]
-            st.dataframe(df_t[display_cols].sort_values("checkin_date", ascending=False), use_container_width=True)
+            st.dataframe(df_t[display_cols].sort_values("checkin_date", ascending=False), use_container_width=True, hide_index=True)
+
+
 
     # ════════════════════════════
     # WELLNESS COACH CHAT
