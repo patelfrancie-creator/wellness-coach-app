@@ -570,7 +570,7 @@ def show_auth_screen():
 
         else:
             full_name = st.text_input("Full Name")
-            email = st.text_input("Email")
+            email = st.text_input("Email", key="email_572")
             password = st.text_input("Password (min 6 characters)", type="password")
             if st.button("Create Account", use_container_width=True, type="primary"):
                 if full_name and email and password:
@@ -1175,7 +1175,7 @@ RULES: Complete every table fully. Never cut off. Gut-friendly cooked foods only
             st.caption("Medication changes, new symptoms, anything your coach should know.")
             notes_ov = db_get_single("profile_notes", user_id)
             curr_ov = notes_ov.get("notes","") if notes_ov else ""
-            new_notes_ov = st.text_area("Notes", value=curr_ov, height=100, placeholder="e.g. Started B-Complex on 15 June. Stopped Sampraz.")
+            new_notes_ov = st.text_area("Notes", value=curr_ov, height=100, placeholder="e.g. Started B-Complex on 15 June. Stopped Sampraz.", key="notes_1177")
             if st.button("Save notes", type="primary", key="save_notes_ov"):
                 db_upsert("profile_notes",{"user_id":user_id,"notes":new_notes_ov})
                 st.session_state.system_prompt = build_system_prompt(user_id, profile)
@@ -1228,7 +1228,7 @@ RULES: Complete every table fully. Never cut off. Gut-friendly cooked foods only
                 with st.form("ac_e"):
                     ac1,ac2 = st.columns([3,2])
                     with ac1: nc = st.text_input("Condition")
-                    with ac2: nn = st.text_input("Notes")
+                    with ac2: nn = st.text_input("Notes", key="notes_1230")
                     if st.form_submit_button("+ Add") and nc:
                         db_upsert("medical_history",{"user_id":user_id,"condition":nc,"notes":nn}); st.rerun()
 
@@ -1256,7 +1256,7 @@ RULES: Complete every table fully. Never cut off. Gut-friendly cooked foods only
                 with st.form("as_e"):
                     as1,as2,as3 = st.columns(3)
                     with as1: ns = st.text_input("Supplement")
-                    with as2: nsd = st.text_input("Dose")
+                    with as2: nsd = st.text_input("Dose", key="dose_1258")
                     with as3: nst = st.text_input("Timing")
                     if st.form_submit_button("+ Add") and ns:
                         db_upsert("supplements",{"user_id":user_id,"name":ns,"dose":nsd,"timing":nst,"active":True}); st.rerun()
@@ -1623,7 +1623,7 @@ def show_onboarding(user):
                         min_value=date(1940,1,1), max_value=date.today())
                     p_sex = st.selectbox("Sex assigned at birth *", ["","Female","Male","Intersex"],
                         index=["","Female","Male","Intersex"].index(profile.get("sex","")) if profile and profile.get("sex","") in ["Female","Male","Intersex"] else 0)
-                    p_blood = st.selectbox("Blood group", ["","A+","A-","B+","B-","O+","O-","AB+","AB-"],
+                    p_blood = st.selectbox("Blood group", ["","A+","A-","B+","B-","O+","O-","AB+","AB-"], key="blood_group_1625",
                         index=["","A+","A-","B+","B-","O+","O-","AB+","AB-"].index(profile.get("blood_group","")) if profile and profile.get("blood_group","") in ["A+","A-","B+","B-","O+","O-","AB+","AB-"] else 0)
                 with c2:
                     p_height = st.number_input("Height (cm) *", 100, 220, value=int(profile.get("height_cm",165)) if profile and profile.get("height_cm") else 165)
@@ -1665,7 +1665,7 @@ def show_onboarding(user):
             with st.form("add_cond_ob"):
                 nc1, nc2 = st.columns([3,2])
                 with nc1: new_cond = st.text_input("Condition or challenge", placeholder="e.g. Hypothyroidism, PCOS")
-                with nc2: new_notes = st.text_input("Notes", placeholder="e.g. diagnosed 2020")
+                with nc2: new_notes = st.text_input("Notes", placeholder="e.g. diagnosed 2020", key="notes_1667")
                 if st.form_submit_button("+ Add") and new_cond:
                     db_upsert("medical_history", {"user_id": user_id, "condition": new_cond, "notes": new_notes}); st.rerun()
 
@@ -1679,9 +1679,9 @@ def show_onboarding(user):
                     db_delete("medications", m["id"]); st.rerun()
             with st.form("add_med_ob"):
                 mm1, mm2, mm3 = st.columns(3)
-                with mm1: new_med = st.text_input("Medication", placeholder="e.g. Thyronorm")
-                with mm2: new_dose = st.text_input("Dose", placeholder="e.g. 50mcg")
-                with mm3: new_freq = st.text_input("Frequency", placeholder="e.g. Daily on waking")
+                with mm1: new_med = st.text_input("Medication", placeholder="e.g. Thyronorm", key="medication_1681")
+                with mm2: new_dose = st.text_input("Dose", placeholder="e.g. 50mcg", key="dose_1682")
+                with mm3: new_freq = st.text_input("Frequency", placeholder="e.g. Daily on waking", key="frequency_1683")
                 if st.form_submit_button("+ Add medication") and new_med:
                     db_upsert("medications", {"user_id": user_id, "name": new_med, "dose": new_dose, "frequency": new_freq, "active": True}); st.rerun()
 
@@ -1695,9 +1695,9 @@ def show_onboarding(user):
                     db_delete("supplements", s["id"]); st.rerun()
             with st.form("add_supp_ob"):
                 ss1, ss2, ss3 = st.columns(3)
-                with ss1: new_supp = st.text_input("Supplement", placeholder="e.g. Magnesium Glycinate")
-                with ss2: new_sdose = st.text_input("Dose", placeholder="e.g. 400mg")
-                with ss3: new_stiming = st.text_input("Timing", placeholder="e.g. Before bed")
+                with ss1: new_supp = st.text_input("Supplement", placeholder="e.g. Magnesium Glycinate", key="supplement_1697")
+                with ss2: new_sdose = st.text_input("Dose", placeholder="e.g. 400mg", key="dose_1698")
+                with ss3: new_stiming = st.text_input("Timing", placeholder="e.g. Before bed", key="timing_1699")
                 if st.form_submit_button("+ Add supplement") and new_supp:
                     db_upsert("supplements", {"user_id": user_id, "name": new_supp, "dose": new_sdose, "timing": new_stiming, "active": True}); st.rerun()
 
@@ -1755,7 +1755,7 @@ def show_onboarding(user):
             with st.form("cycle_ob"):
                 cyc1, cyc2 = st.columns(2)
                 with cyc1:
-                    lp_date = st.date_input("Last period start", value=date.fromisoformat(ob_cd["last_period_start"]) if ob_cd and ob_cd.get("last_period_start") else date.today())
+                    lp_date = st.date_input("Last period start", value=date.fromisoformat(ob_cd["last_period_start"]) if ob_cd and ob_cd.get("last_period_start") else date.today(), key="last_period_start_1757")
                 with cyc2:
                     avg_len = st.number_input("Avg cycle length (days)", 21, 40, value=ob_cd.get("avg_cycle_length",28) if ob_cd else 28)
                 if st.form_submit_button("Save cycle data"):
