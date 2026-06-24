@@ -675,7 +675,7 @@ function osNav(s){
     for i, (sid, icon, label) in enumerate(nav_items):
         with nav_cols[i]:
             active_style = "color:#B68A3D;font-weight:600;" if screen == sid else "color:#5B6270;"
-            if st.button(f"{'●' if screen==sid else '○'} {label}", key=f"nav_{sid}",
+            if st.button(f"{'●' if screen==sid else '○'} {label}", key=f"nav_{sid}_{screen}",
                          use_container_width=True,
                          help=label):
                 st.session_state.screen = sid
@@ -927,7 +927,7 @@ Keep it tight."""}])
         for i, (tid, tlabel) in enumerate(proto_tabs):
             with pt_cols[i]:
                 active = st.session_state.proto_tab == tid
-                if st.button(tlabel, key=f"pt_{tid}", use_container_width=True,
+                if st.button(tlabel, key=f"pt_{tid}_{screen}", use_container_width=True,
                              type="primary" if active else "secondary"):
                     st.session_state.proto_tab = tid
                     st.rerun()
@@ -1110,7 +1110,7 @@ RULES: Complete every table fully. Never cut off. Gut-friendly cooked foods. No 
                  "Why am I not losing weight?"),
             ]
             for prompt_text, btn_label in quick_prompts:
-                if st.button(f"{btn_label} ↗", use_container_width=True, key=f"qp_{btn_label}"):
+                if st.button(f"{btn_label} ↗", use_container_width=True, key=f"qp_{i}_{screen}"):
                     st.session_state.messages.append({"role":"user","content":prompt_text})
                     st.rerun()
 
@@ -1147,7 +1147,7 @@ RULES: Complete every table fully. Never cut off. Gut-friendly cooked foods. No 
         for i, (sid, slabel) in enumerate(sections):
             with sec_cols[i]:
                 active = st.session_state.profile_section == sid
-                if st.button(slabel, key=f"ps_{sid}", use_container_width=True,
+                if st.button(slabel, key=f"ps_{sid}_{screen}", use_container_width=True,
                              type="primary" if active else "secondary"):
                     st.session_state.profile_section = sid
                     st.rerun()
