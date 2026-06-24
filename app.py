@@ -271,93 +271,253 @@ def calculate_cycle_status(user_id):
 
 # ── System prompt builder ──────────────────────────────────────────────────────
 def build_system_prompt(user_id, profile):
-    base = """You are an expert integrative medicine practitioner and personal wellness coach specializing in functional medicine, Ayurveda, and Traditional Chinese Medicine (TCM). You are the patient's personal doctor-friend — someone with the knowledge of a specialist and the honesty of a close friend.
+    from datetime import date as _date, datetime as _datetime
 
-NON-NEGOTIABLE RESPONSE RULES:
-1. ALWAYS COMPLETE YOUR RESPONSE — never cut off. Use tables and bullets to compress if needed, but always finish.
-2. DATA ANOMALY PROTOCOL — if data looks unusual, flag it and ask one clarifying question before making recommendations.
-3. EXPERT VOICE — you are the expert. If something in the current routine is suboptimal, say so clearly. State non-negotiables explicitly.
-4. BE SPECIFIC — exact brands available in India, exact dosages, exact timing.
-5. NEVER DEFLECT to "consult a nutritionist" without first giving the full specific answer yourself.
-6. NO EGGS — patient is lacto-vegetarian, no eggs ever.
-7. GUT-FRIENDLY FOODS — always cooked, warm, easy-to-digest. No raw proteins.
-8. THYRONORM RULE — always first on waking with plain water only. Nothing else for 45-60 mins including lemon water, herbal tea, or supplements.
+    today = _date.today()
+    three_months_ago = _date(today.year, today.month - 3 if today.month > 3 else today.month + 9,
+                              today.day) if today.month > 3 else _date(today.year - 1, today.month + 9, today.day)
 
-BRAND GUIDANCE FOR INDIA: Thorne, Himalayan Organics, Miduty, Wellbeing Nutrition, Carbamide Forte, Now Foods, Jarrow, Solgar (iHerb India/Amazon). For Ayurvedic: Kottakkal, Organic India, Kerala Ayurveda.
+    # ── Core identity and operating principles ───────────────────────────────────
+    base = f"""You are OneSattva — an expert integrative medicine practitioner, functional nutritionist, and personal wellness coach. You reason across functional medicine, Ayurveda, and Traditional Chinese Medicine simultaneously, not separately. Today's date is {today.strftime("%A, %d %B %Y")}.
 
-AYURVEDIC CONSTITUTION: Kapha-Vata with Kapha excess — sluggish metabolism, water retention, slow digestion. Recommend warm cooked spiced foods, morning movement, consistent meal times.
+═══════════════════════════════════════════════════════
+NON-NEGOTIABLE RULES — ALWAYS FOLLOW THESE
+═══════════════════════════════════════════════════════
 
-TCM PATTERN: Kidney Yang Deficiency + Liver Qi Stagnation — warming foods, bitter greens for liver, consistent routine.
+RULE 1 — COMPLETE EVERY RESPONSE:
+Never cut off mid-sentence, mid-table, or mid-section. If a response is long, compress with tables and bullets — but always finish. Every section listed must be completed. If continuation is needed, say "Continued in next message" and do so when asked.
 
-For complex questions use this structure:
-1. What is happening (mechanism)
-2. What it means for this patient specifically
-3. Exact protocol — brand, dose, timing, duration
-4. What to expect and when
+RULE 2 — EXPERT VOICE, NOT SCHEDULER:
+You are the expert. The patient has come to you for real clinical guidance. This means:
+- If their current routine is suboptimal or working against their goals, say so directly and say what to change.
+- State non-negotiables explicitly: "This is non-negotiable because [mechanism]."
+- Where there is room for adjustment, propose a specific compromise that still achieves the goal.
+- Never simply repackage what the patient already does as a "plan." A plan contains changes.
+
+RULE 3 — DATA ANOMALY PROTOCOL:
+If any data point (check-in, lab value, wearable metric) is unusual or contradicts the established trend, DO NOT assume or proceed. Instead: flag the anomaly clearly, then ask ONE specific clarifying question before making recommendations based on it.
+
+RULE 4 — DATA FRESHNESS:
+Lab reports older than 3 months: move to historical/trend context only. Do not treat as current status. If no lab report exists within the last 3 months, flag this explicitly rather than reasoning from stale data.
+Wearable data: last 7 days = current state. Last 30 days = recent pattern. Beyond 3 months = trend context only.
+Check-ins: last 14 days inform current recommendations. Beyond that, used for pattern recognition only.
+
+RULE 5 — GAP DETECTION:
+If the check-in data shows a gap of 3-7 days: note it but continue with the protocol.
+If the gap is 1-2 weeks: ask a brief re-calibration question before making recommendations — "It's been [X] days since your last log. Has anything changed — symptoms, medications, how you're feeling?"
+If the gap is 2+ weeks: do not continue the old protocol. Generate a fresh re-entry assessment before resuming.
+
+RULE 6 — SPECIFIC, NOT GENERIC:
+Always recommend exact brands (available in the patient's location), exact doses, exact timing. Never give generic supplement or food advice when the patient's labs, conditions, and goals give you enough context to be specific.
+
+RULE 7 — NEVER DEFLECT:
+Never say "consult a nutritionist" or "ask your doctor" without first giving a complete, specific answer yourself. You are their nutritionist and functional medicine coach. You can recommend they also discuss with their physician, but give your full expert answer first.
+
+═══════════════════════════════════════════════════════
+FUNCTIONAL NUTRITIONIST VOICE
+═══════════════════════════════════════════════════════
+
+When giving nutrition guidance, think and speak as an experienced functional nutritionist:
+- Specific foods with exact portions, preparation methods, and timing — not food categories
+- Reason through gut status, absorption capacity, and digestive fire (Agni) when selecting foods
+- Consider cycle phase, time of day, workout timing, and medication interactions for every meal recommendation
+- Favour cooked, warm, easily digestible proteins over raw (low stomach acid is common)
+- No raw salads as main meals for patients with gut issues — always cooked vegetables
+- Foods as medicine: specific therapeutic choices (e.g. bitter melon for insulin sensitivity, ashwagandha timing around cortisol rhythm, seed cycling for hormone balance)
+- Gut-healing foods: bone broth (if non-vegetarian), cooked moong dal, ghee, fermented foods appropriate to the patient
+- Diet must respect the patient's stated dietary preferences (vegetarian, vegan, etc.) — never suggest foods outside their diet without flagging it first
+
+═══════════════════════════════════════════════════════
+FITNESS TRAINER VOICE
+═══════════════════════════════════════════════════════
+
+When giving training guidance, think and speak as an experienced strength and conditioning coach with functional medicine awareness:
+- Specific exercises, not just categories. "3 sets of 8 Romanian deadlifts at RPE 7" not "do some leg work"
+- Cycle-phase periodisation for female patients: heavier compound lifts in follicular phase (Days 1-14), moderate in ovulation, deload in luteal, minimal in menstruation
+- Recovery awareness: if wearable data shows HRV below baseline or recovery score below 50%, modify the session — do not push through
+- Warm-up and cool-down as non-negotiable, not optional extras
+- Progressive overload: give specific progression targets week on week, not just "increase weight when ready"
+- Training around health conditions: adapt for thyroid, gut issues, hormonal imbalances — explain exactly how and why
+
+═══════════════════════════════════════════════════════
+INTEGRATIVE CROSS-SYSTEM REASONING
+═══════════════════════════════════════════════════════
+
+Always reason across all three systems simultaneously:
+- FUNCTIONAL MEDICINE: root cause focus, lab interpretation against functional ranges (not just conventional), HPA axis, gut-brain-thyroid axis, microbiome
+- AYURVEDA: constitutional type (Prakriti), Agni (digestive fire), seasonal and time-of-day recommendations, Dinacharya (daily routine)
+- TCM: organ system patterns, Five Element theory, Qi and Blood, meridian timing for supplements and activities
+
+For complex questions, structure your response:
+1. What is happening — mechanism across all relevant systems
+2. What it means for this patient specifically — reference their actual labs, conditions, and patterns
+3. Exact protocol — brand, dose, timing, duration, what to watch for
+4. What to expect and when — realistic timeline
 5. One priority action to start today
+
+═══════════════════════════════════════════════════════
+GEOGRAPHY AND BRAND GUIDANCE
+═══════════════════════════════════════════════════════
+
+Always recommend brands and foods available in the patient's location. Default guidance is for India unless location specifies otherwise.
+
+INDIA SUPPLEMENT BRANDS (in order of preference by category):
+- General: Thorne (iHerb/Amazon), Himalayan Organics, Miduty, Wellbeing Nutrition, Carbamide Forte, Now Foods, Jarrow, Solgar
+- Ayurvedic: Kottakkal, Organic India, Kerala Ayurveda, Baidyanath
+- Functional food: True Elements, Sorich Organics, Conscious Food
+- Testing: Thyrocare (Aarogyam panels), SRL Diagnostics, Apollo Diagnostics, Redcliffe Labs
+
+INDIA FOOD GUIDANCE: Favour seasonally available, locally sourced foods. Mumbai-specific options where relevant: farmer's markets, Godrej Nature's Basket, organic stores.
+
 """
+
+    # ── Patient profile ──────────────────────────────────────────────────────────
     if profile:
         name = profile.get("full_name", "the patient")
-        base += f"\n\nPATIENT: {name}"
-        if profile.get("age"): base += f", {profile['age']} years old"
+        base += f"\n═══════════════════════════════════════════════════════\nPATIENT PROFILE\n═══════════════════════════════════════════════════════\n"
+        base += f"Name: {name}"
+        if profile.get("age"): base += f" | Age: {profile['age']}"
+        if profile.get("sex"): base += f" | Sex: {profile['sex']}"
         if profile.get("height_cm") and profile.get("weight_kg"):
-            base += f", {profile['height_cm']}cm, {profile['weight_kg']}kg"
-        if profile.get("blood_group"): base += f", Blood group {profile['blood_group']}"
-        if profile.get("location"): base += f", {profile['location']}"
-        if profile.get("diet"): base += f", Diet: {profile['diet']}"
+            base += f" | {profile['height_cm']}cm · {profile['weight_kg']}kg"
+        if profile.get("blood_group"): base += f" | Blood group: {profile['blood_group']}"
+        if profile.get("location"): base += f" | Location: {profile['location']}"
+        if profile.get("diet"): base += f"\nDiet: {profile['diet']}"
+        if profile.get("allergies"): base += f" | Allergies: {profile['allergies']}"
+        if profile.get("alcohol") and profile.get("alcohol") != "None":
+            base += f" | Alcohol: {profile['alcohol']}"
+        if profile.get("smoking") and profile.get("smoking") != "None":
+            base += f" | Smoking/vaping: {profile['smoking']}"
+        if profile.get("wake_time") or profile.get("sleep_time"):
+            base += f"\nSchedule: Wake {profile.get('wake_time','?')} · Bed {profile.get('sleep_time','?')}"
 
-    # Goals
+    # ── Goals with timeframes ────────────────────────────────────────────────────
     goals = db_get("goals", user_id)
     if goals:
-        base += "\n\nGOALS:\n" + "\n".join([f"- {g['goal']}" for g in goals])
+        base += "\n\nGOALS:\n"
+        for g in goals:
+            tf = f" [{g['timeframe']}]" if g.get("timeframe") else ""
+            base += f"- {g['goal']}{tf}\n"
 
-    # Medical history
+    # ── Medical history ──────────────────────────────────────────────────────────
     conditions = db_get("medical_history", user_id)
     if conditions:
-        base += "\n\nMEDICAL CONDITIONS:\n" + "\n".join([f"- {c['condition']}: {c.get('notes','')}" for c in conditions])
+        base += "\nMEDICAL CONDITIONS:\n"
+        for c in conditions:
+            base += f"- {c['condition']}: {c.get('notes','')}\n"
 
-    # Medications
+    # ── Medications ──────────────────────────────────────────────────────────────
     meds = db_get("medications", user_id)
-    if meds:
-        active_meds = [m for m in meds if m.get("active", True)]
-        if active_meds:
-            base += "\n\nCURRENT MEDICATIONS:\n" + "\n".join([f"- {m['name']} {m.get('dose','')} {m.get('frequency','')}" for m in active_meds])
+    active_meds = [m for m in meds if m.get("active", True)] if meds else []
+    if active_meds:
+        base += "\nCURRENT MEDICATIONS:\n"
+        for m in active_meds:
+            base += f"- {m['name']} {m.get('dose','')} {m.get('frequency','')}\n"
 
-    # Supplements
+    # ── Supplements ──────────────────────────────────────────────────────────────
     supps = db_get("supplements", user_id)
-    if supps:
-        active_supps = [s for s in supps if s.get("active", True)]
-        if active_supps:
-            base += "\n\nCURRENT SUPPLEMENTS:\n" + "\n".join([f"- {s['name']} {s.get('dose','')} ({s.get('timing','')})" for s in active_supps])
+    active_supps = [s for s in supps if s.get("active", True)] if supps else []
+    if active_supps:
+        base += "\nCURRENT SUPPLEMENTS:\n"
+        for s in active_supps:
+            base += f"- {s['name']} {s.get('dose','')} ({s.get('timing','')})\n"
 
-    # Recent check-ins
-    checkins = db_get("checkins", user_id, order_col="checkin_date", limit=7)
-    if checkins:
-        base += "\n\nRECENT 7-DAY CHECK-IN DATA:\n"
-        for c in reversed(checkins):
-            base += f"- {c.get('checkin_date','')}: Energy {c.get('energy','?')}/10, Sleep {c.get('sleep_hours','?')}hrs (quality {c.get('sleep_quality','?')}/10), Bloating: {c.get('bloating','?')}, Mood: {c.get('mood','?')}/10, Workout: {c.get('workout','?')}, Notes: {c.get('notes','')}\n"
-
-    # Recent wearable data
-    wearable = db_get("wearable_data", user_id, order_col="data_date", limit=7)
-    if wearable:
-        base += "\n\nRECENT WEARABLE DATA (WHOOP):\n"
-        for w in reversed(wearable):
-            parts = [f"- {w.get('data_date','')}"]
-            for field in ["recovery_score","hrv","resting_hr","strain","sleep_performance"]:
-                if w.get(field): parts.append(f"{field}: {w[field]}")
-            base += ", ".join(parts) + "\n"
-
-    # Profile notes
+    # ── Profile notes ────────────────────────────────────────────────────────────
     notes = db_get_single("profile_notes", user_id)
     if notes and notes.get("notes"):
-        base += f"\n\nPROFILE UPDATES FROM PATIENT:\n{notes['notes']}"
+        base += f"\nPROFILE UPDATES / RECENT CHANGES:\n{notes['notes']}\n"
 
-    # Lab reports
-    labs = db_get("lab_reports", user_id, order_col="report_date", limit=5)
+    # ── Lab reports with freshness classification ────────────────────────────────
+    labs = db_get("lab_reports", user_id, order_col="report_date", limit=10)
     if labs:
-        base += "\n\nUPLOADED LAB REPORTS:\n"
+        base += "\n═══════════════════════════════════════════════════════\nLAB REPORTS\n═══════════════════════════════════════════════════════\n"
+        current_labs = []
+        historical_labs = []
         for l in labs:
-            base += f"- {l.get('report_date','')}: {l.get('summary','')}\n"
+            try:
+                rep_date = _date.fromisoformat(l.get("report_date",""))
+                if rep_date >= three_months_ago:
+                    current_labs.append(l)
+                else:
+                    historical_labs.append(l)
+            except:
+                historical_labs.append(l)
+
+        if current_labs:
+            base += "CURRENT LABS (within last 3 months — use as primary reference):\n"
+            for l in current_labs:
+                base += f"- {l.get('report_date','')}: {l.get('summary','')} | Raw: {l.get('raw_values','')[:300]}\n"
+        else:
+            base += "⚠️ NO CURRENT LABS (all reports older than 3 months). Flag this to the patient — do not treat old values as current status.\n"
+
+        if historical_labs:
+            base += "\nHISTORICAL LABS (older than 3 months — use for trend analysis only, not current status):\n"
+            for l in historical_labs:
+                base += f"- {l.get('report_date','')}: {l.get('summary','')}\n"
+    else:
+        base += "\n⚠️ NO LAB REPORTS UPLOADED. Recommendations will be general until labs are provided. Remind the patient that labs are needed for a precise protocol.\n"
+
+    # ── Wearable data with freshness classification ──────────────────────────────
+    wearable_all = db_get("wearable_data", user_id, order_col="data_date", limit=90)
+    if wearable_all:
+        base += "\n═══════════════════════════════════════════════════════\nWEARABLE DATA\n═══════════════════════════════════════════════════════\n"
+        seven_days_ago = today - timedelta(days=7)
+        thirty_days_ago = today - timedelta(days=30)
+        ninety_days_ago = today - timedelta(days=90)
+
+        current_w, recent_w, trend_w = [], [], []
+        for w in wearable_all:
+            try:
+                wd = _date.fromisoformat(w.get("data_date",""))
+                if wd >= seven_days_ago: current_w.append(w)
+                elif wd >= thirty_days_ago: recent_w.append(w)
+                elif wd >= ninety_days_ago: trend_w.append(w)
+            except: pass
+
+        def fmt_wearable(w):
+            parts = [w.get("data_date","")]
+            for f in ["recovery_score","hrv","resting_hr","strain","sleep_performance"]:
+                if w.get(f) is not None: parts.append(f"{f.replace('_',' ')}: {w[f]}")
+            return " | ".join(parts)
+
+        if current_w:
+            base += "CURRENT (last 7 days):\n" + "\n".join([f"- {fmt_wearable(w)}" for w in reversed(current_w)]) + "\n"
+        if recent_w:
+            # Summarise 8-30 days as averages rather than listing every row
+            import statistics
+            def avg_field(rows, field):
+                vals = [float(r[field]) for r in rows if r.get(field) is not None]
+                return round(statistics.mean(vals), 1) if vals else None
+            r_avg = {f: avg_field(recent_w, f) for f in ["recovery_score","hrv","resting_hr","strain","sleep_performance"]}
+            r_str = " | ".join([f"{k.replace('_',' ')}: {v}" for k, v in r_avg.items() if v is not None])
+            base += f"RECENT AVERAGE (last 30 days, {len(recent_w)} days of data): {r_str}\n"
+        if not current_w and not recent_w:
+            base += "⚠️ No recent wearable data. Cannot assess current recovery or readiness.\n"
+
+    # ── Check-ins with gap detection ─────────────────────────────────────────────
+    checkins = db_get("checkins", user_id, order_col="checkin_date", limit=14)
+    if checkins:
+        latest_checkin = checkins[0]
+        try:
+            latest_date = _date.fromisoformat(latest_checkin.get("checkin_date",""))
+            gap_days = (today - latest_date).days
+        except:
+            gap_days = 0
+
+        base += "\n═══════════════════════════════════════════════════════\nCHECK-IN DATA\n═══════════════════════════════════════════════════════\n"
+
+        if gap_days >= 14:
+            base += f"⚠️ GAP ALERT: Last check-in was {gap_days} days ago. Do NOT continue with the old protocol. First, ask a re-entry question: 'It's been {gap_days} days since your last log. Has anything changed — symptoms, medications, energy, how you're feeling overall?' Then reassess before resuming.\n"
+        elif gap_days >= 7:
+            base += f"⚠️ CHECK-IN GAP: {gap_days} days since last log. Before giving recommendations, ask: 'It's been {gap_days} days — anything changed recently?' One question only.\n"
+        elif gap_days >= 3:
+            base += f"Note: {gap_days}-day gap in check-ins. Continue with protocol but note the gap.\n"
+
+        base += f"RECENT CHECK-INS (last 14 days):\n"
+        for c in reversed(checkins[:14]):
+            base += f"- {c.get('checkin_date','')}: Energy {c.get('energy','?')}/10 · Mood {c.get('mood','?')}/10 · Sleep {c.get('sleep_hours','?')}hrs (quality {c.get('sleep_quality','?')}/10) · Bloating: {c.get('bloating','?')} · Digestion: {c.get('digestion','?')} · Workout: {c.get('workout','?')} · Rumination: {c.get('rumination','?')} · Notes: {c.get('notes','')}\n"
+    else:
+        base += "\nNo check-in data yet.\n"
 
     return base
 
