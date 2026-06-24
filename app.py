@@ -1560,61 +1560,128 @@ If medication includes Thyronorm — always first on waking, plain water only, 4
         if "messages" not in st.session_state:
             st.session_state.messages = []
 
+        # ── Build full system prompt with roadmap + monthly context ─────────────
+        roadmap_chat_ctx = ""
+        if st.session_state.get("treatment_roadmap") and st.session_state.get("roadmap_committed"):
+            roadmap_chat_ctx += f"\n\nCOMMITTED TREATMENT ROADMAP (the patient has committed to this plan — all advice must align with it):\n{st.session_state.treatment_roadmap[:1500]}"
+        if st.session_state.get("monthly_protocol"):
+            roadmap_chat_ctx += f"\n\nCURRENT MONTH PROTOCOL:\n{st.session_state.monthly_protocol[:800]}"
+
+        cycle_ctx = f"\n\nCURRENT CYCLE STATUS: {cycle_phase or 'Unknown phase'}"
+        if cycle_day:
+            cycle_ctx += f", Day {cycle_day}"
+        if days_to_next:
+            cycle_ctx += f", ~{days_to_next} days until next period"
+        cycle_ctx += f". Today is {date.today().strftime('%A %d %B %Y')}. Factor this into all recommendations."
+
+        full_system = st.session_state.system_prompt + cycle_ctx + roadmap_chat_ctx
+
+        # ── Welcome screen (shown when no messages yet) ──────────────────────────
         if not st.session_state.messages:
+            # Dynamic context card
+            last_checkin = db_get("checkins", user_id, order_col="checkin_date", limit=1)
+            energy_note = ""
+            if last_checkin:
+                energy = last_checkin[0].get("energy")
+                bloating = last_checkin[0].get("bloating","")
+                ci_date = last_checkin[0].get("checkin_date","")
+                if energy and int(energy) <= 4:
+                    energy_note = f"Your last check-in ({ci_date}) showed low energy ({energy}/10)."
+                elif bloating in ["Moderate","Severe"]:
+                    energy_note = f"Your last check-in ({ci_date}) showed {bloating.lower()} bloating."
+
+            wearable_note = ""
+            recent_w = db_get("wearable_data", user_id, order_col="data_date", limit=1)
+            if recent_w and recent_w[0].get("recovery_score"):
+                rec = recent_w[0]["recovery_score"]
+                if float(rec) < 50:
+                    wearable_note = f"WHOOP recovery today: {rec}% — low."
+
+            context_line = " · ".join(filter(None, [
+                f"Day {cycle_day} · {cycle_phase.split(' (')[0]}" if cycle_day else None,
+                energy_note or None,
+                wearable_note or None
+            ]))
+
             st.markdown(f"""
-            <div style='background:linear-gradient(135deg,#F0EBE2,#FAF6F0);padding:22px;border-radius:14px;border-left:4px solid #7C9070;margin-bottom:20px;'>
-            <h4 style='margin:0;color:#2D3B2D;font-family:"Fraunces",serif;'>Good to see you, {name} 🌿</h4>
-            <p style='margin:8px 0 0;color:#6B7A65;'>I know your full health profile, labs, and goals. Ask me anything.</p>
+            <div style='background:#F2F3EF;padding:20px 24px;border-radius:14px;
+                        border-left:3px solid #B68A3D;margin-bottom:20px;'>
+              <p style='font-family:Newsreader,serif;font-size:1.15rem;color:#1C2330;
+                         margin:0 0 4px;font-weight:500;'>Good to see you, {name}.</p>
+              <p style='font-family:Inter,sans-serif;font-size:13px;color:#5B6270;margin:0;'>
+                I have your full profile, labs, and goals. Ask me anything — or pick a question below.
+              </p>
+              {f"<p style='font-family:Inter,sans-serif;font-size:12px;color:#B68A3D;margin:8px 0 0;'>{context_line}</p>" if context_line else ""}
             </div>
             """, unsafe_allow_html=True)
 
-            st.markdown("**Quick questions:**")
-            qc1, qc2 = st.columns(2)
-            with qc1:
-                if st.button("💊 Full supplement protocol", use_container_width=True):
-                    st.session_state.messages.append({"role":"user","content":"Give me my complete supplement protocol with brands, dosages and exact timing"})
-                    st.rerun()
-                if st.button(f"🍽️ What should I eat today?", use_container_width=True):
-                    st.session_state.messages.append({"role":"user","content":f"Based on my current cycle phase ({cycle_phase}) and labs, what should I eat today? Specific portions and timing."})
-                    st.rerun()
-            with qc2:
-                if st.button("⚖️ Why am I not losing weight?", use_container_width=True):
-                    st.session_state.messages.append({"role":"user","content":"Why am I not losing weight despite training consistently? What are the specific biological blockers based on my labs?"})
-                    st.rerun()
-                if st.button("😴 How do I fix my sleep?", use_container_width=True):
-                    st.session_state.messages.append({"role":"user","content":"Based on my labs and routine, what specific changes should I make to fix my sleep?"})
-                    st.rerun()
+            # Dynamic quick prompts based on current context
+            st.markdown("<p style='font-family:Inter,sans-serif;font-size:13px;font-weight:500;color:#1C2330;margin-bottom:8px;'>Quick questions</p>", unsafe_allow_html=True)
 
-        for message in st.session_state.messages:
+            # Build dynamic prompts based on cycle phase, check-in data, roadmap status
+            q_supplement = ("💊 My supplement protocol today",
+                f"Give me my complete supplement schedule for today ({date.today().strftime('%A')}), Cycle Day {cycle_day or '?'} ({(cycle_phase or '').split(' (')[0]}). Exact brands, doses, and timing in order.")
+
+            q_nutrition = ("🍽️ What to eat today",
+                f"What should I eat today — {date.today().strftime('%A')}, Cycle Day {cycle_day or '?'}, {(cycle_phase or '').split(' (')[0]} phase. Give me specific meals with portions and timing for my schedule.")
+
+            if cycle_phase and "Luteal" in cycle_phase:
+                q_dynamic = ("🧘 Managing luteal phase symptoms",
+                    f"I'm in Luteal phase, Day {cycle_day}. What should I specifically be doing differently this week for training, nutrition, and lifestyle to manage luteal symptoms and support progesterone?")
+            elif cycle_phase and "Follicular" in cycle_phase:
+                q_dynamic = ("⚡ Maximising follicular phase",
+                    f"I'm in Follicular phase, Day {cycle_day}. What should I be doing differently this week to maximise the energy and anabolic advantage of this phase?")
+            elif cycle_phase and "Ovulation" in cycle_phase:
+                q_dynamic = ("🌸 Ovulation — what to do now",
+                    f"I'm at ovulation, Day {cycle_day}. What are the most important things to do in the next 48-72 hours — training, nutrition, lifestyle, and if relevant, fertility timing?")
+            else:
+                q_dynamic = ("🩸 Managing menstruation",
+                    f"I'm menstruating, Day {cycle_day}. What should I be doing differently this week — training modifications, nutrition priorities, and what to avoid?")
+
+            if last_checkin and last_checkin[0].get("energy") and int(last_checkin[0]["energy"]) <= 4:
+                q_energy = ("⚡ My energy is low — why?",
+                    f"My last check-in showed energy at {last_checkin[0]['energy']}/10. Based on my labs and current cycle phase, what are the most likely biological reasons and what can I do today to address them?")
+            else:
+                q_energy = ("⚖️ Why am I not losing weight?",
+                    "Based on my labs and current health picture, what are the specific biological blockers stopping me from losing weight? Be direct — what needs to change?")
+
+            prompts = [q_supplement, q_nutrition, q_dynamic, q_energy]
+            qc1, qc2 = st.columns(2)
+            for i, (label, content) in enumerate(prompts):
+                col = qc1 if i % 2 == 0 else qc2
+                with col:
+                    if st.button(label, use_container_width=True, key=f"qp_{i}"):
+                        st.session_state.messages.append({"role":"user","content":content})
+                        st.rerun()
+
+        # ── Message history (capped at last 10 exchanges = 20 messages) ──────────
+        MAX_HISTORY = 20
+        display_messages = st.session_state.messages[-MAX_HISTORY:]
+        for message in display_messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        _, clear_col = st.columns([6,1])
-        with clear_col:
-            if st.button("🗑️ Clear"):
+        # ── Controls ─────────────────────────────────────────────────────────────
+        ctrl1, ctrl2 = st.columns([5,1])
+        with ctrl2:
+            if st.button("Clear chat", use_container_width=True, key="clear_chat"):
                 st.session_state.messages = []
                 st.rerun()
 
-        if prompt := st.chat_input("Ask your wellness coach..."):
-            cycle_ctx = f"\n\nCURRENT CYCLE PHASE: {cycle_phase}"
-            if cycle_day:
-                cycle_ctx += f", Day {cycle_day}"
-            if days_to_next:
-                cycle_ctx += f", ~{days_to_next} days until next period"
-            cycle_ctx += ". Factor this into all recommendations."
-
-            full_system = st.session_state.system_prompt + cycle_ctx
-
+        # ── Chat input ────────────────────────────────────────────────────────────
+        if prompt := st.chat_input(f"Ask your Sattva anything..."):
             st.session_state.messages.append({"role":"user","content":prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
             with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
+                with st.spinner(""):
+                    # Send only last 10 exchanges to API to stay within token budget
+                    api_messages = st.session_state.messages[-MAX_HISTORY:]
                     response = ai_client.messages.create(
                         model="claude-sonnet-4-6",
                         max_tokens=4096,
                         system=full_system,
-                        messages=st.session_state.messages
+                        messages=api_messages
                     )
                     reply = response.content[0].text
                     st.markdown(reply)
