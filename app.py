@@ -1765,7 +1765,405 @@ Keep it concise — this is an onboarding summary, not a full consultation."""
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# ENTRY POINT
+# ONBOARDING WIZARD
+# ════════════════════════════════════════════════════════════════════════════════
+
+MARKERS_INFO = """
+**Core panel — get these tested before your first roadmap:**
+
+| Category | Markers |
+|---|---|
+| Thyroid | TSH, Free T3, Free T4, TPO Antibodies |
+| Iron & Blood | Ferritin, Serum Iron, TIBC, Haemoglobin, CBC |
+| Metabolic | Fasting Glucose, HbA1c, Fasting Insulin, HOMA-IR |
+| Inflammation | hs-CRP, ESR |
+| Hormones | Prolactin, Estradiol, Testosterone (total+free), SHBG, LH, FSH, DHEA-S |
+| Vitamins | Vitamin D (25-OH), B12, Folate |
+| Liver & Protein | Total Protein, Albumin, ALT, AST, Alkaline Phosphatase, GGT |
+| Kidney | Creatinine, eGFR, Uric Acid |
+| Lipids | Total Cholesterol, LDL, HDL, Triglycerides, ApoB |
+
+**Extended panel — add if you have a specific concern:**
+Zonulin · Calprotectin · H. pylori antibody · ANA · Morning Cortisol · MTHFR · APOE
+
+In India, Thyrocare's Aarogyam or Wellness packages cover most of the core panel at reasonable cost.
+"""
+
+def get_onboarding_state(user_id):
+    try:
+        res = supabase.table("onboarding").select("*").eq("user_id", user_id).limit(1).execute()
+        return res.data[0] if res.data else None
+    except:
+        return None
+
+def save_onboarding_state(user_id, data):
+    try:
+        data["user_id"] = user_id
+        supabase.table("onboarding").upsert(data).execute()
+    except Exception as e:
+        st.error(f"Save error: {e}")
+
+def calculate_completeness(user_id, ob_state):
+    score = 0
+    if ob_state and ob_state.get("step1_done"): score += 25
+    if ob_state and ob_state.get("step2_done"): score += 25
+    if ob_state and ob_state.get("step3_done"): score += 25
+    labs = db_get("lab_reports", user_id)
+    if labs:
+        score += 25
+    elif ob_state and ob_state.get("lab_upload_acknowledged"):
+        score += 10
+    return score
+
+def show_onboarding(user):
+    user_id = user.id
+
+    ob = get_onboarding_state(user_id)
+    if not ob:
+        save_onboarding_state(user_id, {"current_step": 1})
+        ob = get_onboarding_state(user_id)
+
+    profile = db_get_single("profiles", user_id)
+    current_step = ob.get("current_step", 1) if ob else 1
+
+    # Header
+    st.markdown("""
+    <div style='text-align:center;padding:28px 0 20px;'>
+      <div style='display:inline-flex;align-items:center;gap:10px;margin-bottom:8px;'>
+        <svg width="28" height="28" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <defs><radialGradient id="og" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#FAFAF7"/>
+            <stop offset="62%" stop-color="#B68A3D"/>
+            <stop offset="100%" stop-color="#1C2330" stop-opacity="0"/>
+          </radialGradient></defs>
+          <circle cx="50" cy="50" r="32" fill="url(#og)"/>
+          <circle cx="50" cy="50" r="6" fill="#FAFAF7"/>
+        </svg>
+        <span style="font-family:Newsreader,serif;font-style:italic;font-size:1.6rem;color:#1C2330;">
+          <span style="font-style:normal;opacity:0.45;font-size:0.55em;vertical-align:0.3em;">one</span>Sattva
+        </span>
+      </div>
+      <p style="font-family:Newsreader,serif;font-style:italic;color:#B68A3D;font-size:0.9rem;margin:4px 0 0;">With you. For you.</p>
+      <p style="font-family:Inter,sans-serif;font-size:0.9rem;color:#5B6270;margin-top:10px;">Let's build your health profile — takes about 5 minutes.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Progress
+    steps = ["Basic Info", "Health", "Lifestyle", "Labs", "Ready"]
+    step_html = "<div style='display:flex;gap:5px;margin-bottom:10px;'>"
+    for i, s in enumerate(steps):
+        is_done = (i + 1) < current_step
+        is_current = (i + 1) == current_step
+        bg = "#1C2330" if is_done else ("#B68A3D" if is_current else "#E8E8E4")
+        color = "#F2F3EF" if (is_done or is_current) else "#9B9B92"
+        step_html += f"<div style='flex:1;text-align:center;background:{bg};color:{color};border-radius:8px;padding:8px 2px;font-family:Inter,sans-serif;font-size:11px;font-weight:500;'>{s}</div>"
+    step_html += "</div>"
+    st.markdown(step_html, unsafe_allow_html=True)
+    done_steps = sum([ob.get(f"step{i}_done", False) for i in range(1,5)]) if ob else 0
+    st.progress(max(int((done_steps/4)*100), 5))
+    st.caption(f"Step {current_step} of 5")
+    st.divider()
+
+    col_main, col_r = st.columns([2,1])
+
+    with col_main:
+
+        # ── STEP 1 ──────────────────────────────────────────────────────────────
+        if current_step == 1:
+            st.markdown("### Basic information")
+            with st.form("ob_step1"):
+                c1, c2 = st.columns(2)
+                with c1:
+                    p_name = st.text_input("Full name *", value=profile.get("full_name","") if profile else "")
+                    p_dob = st.date_input("Date of birth *",
+                        value=date.fromisoformat(profile["date_of_birth"]) if profile and profile.get("date_of_birth") else date(1990,1,1),
+                        min_value=date(1940,1,1), max_value=date.today())
+                    p_sex = st.selectbox("Sex assigned at birth *", ["","Female","Male","Intersex"],
+                        index=["","Female","Male","Intersex"].index(profile.get("sex","")) if profile and profile.get("sex","") in ["Female","Male","Intersex"] else 0)
+                    p_blood = st.selectbox("Blood group", ["","A+","A-","B+","B-","O+","O-","AB+","AB-"],
+                        index=["","A+","A-","B+","B-","O+","O-","AB+","AB-"].index(profile.get("blood_group","")) if profile and profile.get("blood_group","") in ["A+","A-","B+","B-","O+","O-","AB+","AB-"] else 0)
+                with c2:
+                    p_height = st.number_input("Height (cm) *", 100, 220, value=int(profile.get("height_cm",165)) if profile and profile.get("height_cm") else 165)
+                    p_weight = st.number_input("Weight (kg) *", 30, 200, value=int(profile.get("weight_kg",60)) if profile and profile.get("weight_kg") else 60)
+                    p_location = st.text_input("City / Location *", value=profile.get("location","") if profile else "")
+                    p_diet = st.selectbox("Diet *", ["Vegetarian (no eggs)","Vegetarian (with eggs)","Non-vegetarian","Vegan","Pescatarian"])
+                lc1, lc2, lc3 = st.columns(3)
+                with lc1:
+                    p_alcohol = st.selectbox("Alcohol", ["None","Occasional","Weekly","Daily"])
+                with lc2:
+                    p_smoking = st.selectbox("Smoking / Vaping", ["None","Occasional","Daily"])
+                with lc3:
+                    p_allergies = st.text_input("Known allergies", placeholder="e.g. gluten, nuts")
+                if st.form_submit_button("Save & Continue →", type="primary", use_container_width=True):
+                    if not p_name or not p_sex or not p_location:
+                        st.error("Please fill in all required fields marked with *")
+                    else:
+                        age = (date.today() - p_dob).days // 365
+                        db_upsert("profiles", {"id": user_id, "full_name": p_name, "age": age,
+                            "date_of_birth": p_dob.isoformat(), "sex": p_sex,
+                            "height_cm": p_height, "weight_kg": p_weight,
+                            "location": p_location, "diet": p_diet, "blood_group": p_blood,
+                            "alcohol": p_alcohol, "smoking": p_smoking, "allergies": p_allergies})
+                        save_onboarding_state(user_id, {"current_step": 2, "step1_done": True})
+                        st.rerun()
+
+        # ── STEP 2 ──────────────────────────────────────────────────────────────
+        elif current_step == 2:
+            st.markdown("### Your health profile")
+            st.caption("Add as little or as much as you're comfortable with. You can update this anytime.")
+
+            st.markdown("##### Medical conditions & challenges")
+            conditions = db_get("medical_history", user_id)
+            for c in conditions:
+                cc1, cc2 = st.columns([5,1])
+                cc1.write(f"**{c['condition']}** — {c.get('notes','')[:60]}")
+                if cc2.button("✕", key=f"dc_{c['id']}"):
+                    db_delete("medical_history", c["id"]); st.rerun()
+            with st.form("add_cond_ob"):
+                nc1, nc2 = st.columns([3,2])
+                with nc1: new_cond = st.text_input("Condition or challenge", placeholder="e.g. Hypothyroidism, PCOS")
+                with nc2: new_notes = st.text_input("Notes", placeholder="e.g. diagnosed 2020")
+                if st.form_submit_button("+ Add") and new_cond:
+                    db_upsert("medical_history", {"user_id": user_id, "condition": new_cond, "notes": new_notes}); st.rerun()
+
+            st.divider()
+            st.markdown("##### Current medications")
+            meds = db_get("medications", user_id)
+            for m in meds:
+                mc1, mc2 = st.columns([5,1])
+                mc1.write(f"**{m['name']}** — {m.get('dose','')} {m.get('frequency','')}")
+                if mc2.button("✕", key=f"dm_{m['id']}"):
+                    db_delete("medications", m["id"]); st.rerun()
+            with st.form("add_med_ob"):
+                mm1, mm2, mm3 = st.columns(3)
+                with mm1: new_med = st.text_input("Medication", placeholder="e.g. Thyronorm")
+                with mm2: new_dose = st.text_input("Dose", placeholder="e.g. 50mcg")
+                with mm3: new_freq = st.text_input("Frequency", placeholder="e.g. Daily on waking")
+                if st.form_submit_button("+ Add medication") and new_med:
+                    db_upsert("medications", {"user_id": user_id, "name": new_med, "dose": new_dose, "frequency": new_freq, "active": True}); st.rerun()
+
+            st.divider()
+            st.markdown("##### Current supplements")
+            supps = db_get("supplements", user_id)
+            for s in supps:
+                sc1, sc2 = st.columns([5,1])
+                sc1.write(f"**{s['name']}** — {s.get('dose','')} ({s.get('timing','')})")
+                if sc2.button("✕", key=f"ds_{s['id']}"):
+                    db_delete("supplements", s["id"]); st.rerun()
+            with st.form("add_supp_ob"):
+                ss1, ss2, ss3 = st.columns(3)
+                with ss1: new_supp = st.text_input("Supplement", placeholder="e.g. Magnesium Glycinate")
+                with ss2: new_sdose = st.text_input("Dose", placeholder="e.g. 400mg")
+                with ss3: new_stiming = st.text_input("Timing", placeholder="e.g. Before bed")
+                if st.form_submit_button("+ Add supplement") and new_supp:
+                    db_upsert("supplements", {"user_id": user_id, "name": new_supp, "dose": new_sdose, "timing": new_stiming, "active": True}); st.rerun()
+
+            st.divider()
+            nav1, nav2 = st.columns(2)
+            with nav1:
+                if st.button("← Back", use_container_width=True, key="b2"):
+                    save_onboarding_state(user_id, {"current_step": 1}); st.rerun()
+            with nav2:
+                if st.button("Save & Continue →", type="primary", use_container_width=True, key="n2"):
+                    save_onboarding_state(user_id, {"current_step": 3, "step2_done": True}); st.rerun()
+
+        # ── STEP 3 ──────────────────────────────────────────────────────────────
+        elif current_step == 3:
+            st.markdown("### Lifestyle & goals")
+
+            with st.form("ob_step3_schedule"):
+                st.markdown("##### Daily schedule")
+                sc1, sc2, sc3 = st.columns(3)
+                with sc1: wake_time = st.text_input("Wake time", value=profile.get("wake_time","7:00 AM") if profile and profile.get("wake_time") else "7:00 AM")
+                with sc2: first_meal = st.text_input("First meal", placeholder="e.g. 9:00 AM")
+                with sc3: sleep_time = st.text_input("Bedtime target", value=profile.get("sleep_time","10:30 PM") if profile and profile.get("sleep_time") else "10:30 PM")
+                st.markdown("##### Exercise")
+                ex1, ex2 = st.columns(2)
+                with ex1:
+                    workout_freq = st.selectbox("How often?", ["Not currently","1-2x per week","3-4x per week","5+ per week"])
+                    workout_types = st.multiselect("Types", ["Strength training","Cardio","Yoga/Pilates","Swimming","Cycling","Team sports","Walking","Other"])
+                with ex2:
+                    workout_time = st.text_input("Preferred time", placeholder="e.g. 7:00 AM")
+                    sleep_hours = st.number_input("Average sleep (hrs)", 3.0, 12.0, 7.0, step=0.5)
+                if st.form_submit_button("Save schedule", use_container_width=True):
+                    notes_val = f"Wake: {wake_time} | First meal: {first_meal} | Bedtime: {sleep_time} | Exercise: {workout_freq}, {', '.join(workout_types)}, at {workout_time} | Sleep: {sleep_hours}hrs"
+                    db_upsert("profiles", {"id": user_id, "wake_time": wake_time, "sleep_time": sleep_time})
+                    db_upsert("profile_notes", {"user_id": user_id, "notes": notes_val})
+                    st.success("Schedule saved!")
+
+            st.markdown("##### Goals")
+            st.caption("Be specific. 'Lose weight' is less useful than 'reach 58kg and reduce belly fat by September.'")
+            goals_list = db_get("goals", user_id)
+            for g in goals_list:
+                gc1, gc2 = st.columns([5,1])
+                gc1.write(f"**{g['goal']}** · _{g.get('timeframe','')}_")
+                if gc2.button("✕", key=f"dg_{g['id']}"):
+                    db_delete("goals", g["id"]); st.rerun()
+            with st.form("add_goal_ob"):
+                gg1, gg2 = st.columns([3,1])
+                with gg1: new_goal = st.text_input("Add a goal", placeholder="e.g. Resolve bloating and digestive issues")
+                with gg2: new_tf = st.selectbox("Timeframe", ["3 months","6 months","12 months","12 months+"])
+                if st.form_submit_button("+ Add goal") and new_goal:
+                    db_upsert("goals", {"user_id": user_id, "goal": new_goal, "timeframe": new_tf}); st.rerun()
+
+            st.markdown("##### Cycle tracking")
+            st.caption("For females — this shapes your protocol around your cycle phases.")
+            ob_cd = db_get_single("cycle_data", user_id)
+            with st.form("cycle_ob"):
+                cyc1, cyc2 = st.columns(2)
+                with cyc1:
+                    lp_date = st.date_input("Last period start", value=date.fromisoformat(ob_cd["last_period_start"]) if ob_cd and ob_cd.get("last_period_start") else date.today())
+                with cyc2:
+                    avg_len = st.number_input("Avg cycle length (days)", 21, 40, value=ob_cd.get("avg_cycle_length",28) if ob_cd else 28)
+                if st.form_submit_button("Save cycle data"):
+                    db_upsert("cycle_data", {"user_id": user_id, "last_period_start": lp_date.isoformat(), "avg_cycle_length": int(avg_len)})
+                    st.success("Saved!")
+
+            st.divider()
+            nav1, nav2 = st.columns(2)
+            with nav1:
+                if st.button("← Back", use_container_width=True, key="b3"):
+                    save_onboarding_state(user_id, {"current_step": 2}); st.rerun()
+            with nav2:
+                if st.button("Save & Continue →", type="primary", use_container_width=True, key="n3"):
+                    save_onboarding_state(user_id, {"current_step": 4, "step3_done": True}); st.rerun()
+
+        # ── STEP 4 ──────────────────────────────────────────────────────────────
+        elif current_step == 4:
+            st.markdown("### Lab reports")
+            st.info("Lab reports are required for a precise treatment roadmap. Upload what you have — even a partial panel helps significantly.")
+
+            with st.expander("📋 Recommended markers — what to get tested", expanded=False):
+                st.markdown(MARKERS_INFO)
+
+            existing_labs = db_get("lab_reports", user_id, order_col="report_date")
+            if existing_labs:
+                st.success(f"✅ {len(existing_labs)} report(s) uploaded.")
+                for lab in existing_labs:
+                    st.markdown(f"- **{lab['report_date']}** · {lab.get('lab_name','')} · {lab.get('summary','')[:80]}")
+                st.divider()
+
+            st.markdown("##### Upload a report")
+            ob_lab_date = st.date_input("Report date", value=date.today(), key="ob_ld")
+            ob_lab_name = st.text_input("Lab name", placeholder="e.g. Thyrocare, SRL, Apollo", key="ob_ln")
+            ob_lab_vals = st.text_area("Paste lab values", height=180, key="ob_lv",
+                placeholder="TSH: 2.1\nFT3: 2.8\nFT4: 1.2\nProlactin: 18.5\nFerritin: 42\nVitamin D: 38\n...")
+
+            if st.button("🔍 Analyse & Save", type="primary", use_container_width=True, key="ob_lab_save"):
+                if ob_lab_vals.strip():
+                    with st.spinner("Analysing against functional medicine ranges..."):
+                        try:
+                            resp = ai_client.messages.create(
+                                model="claude-sonnet-4-6", max_tokens=2000,
+                                system="You are an expert integrative medicine practitioner. Analyse lab values against functional medicine optimal ranges. Be direct, specific, and concise.",
+                                messages=[{"role":"user","content":f"Lab report {ob_lab_date}, lab: {ob_lab_name}\n\nValues:\n{ob_lab_vals}\n\nAnalyse against functional ranges. Format:\n## Key Findings\nTable: Marker | Value | Functional Status | Priority\n\n## Summary\n2-3 sentences on overall picture\n\n## Most Urgent\nTop 2-3 priorities"}]
+                            )
+                            st.divider()
+                            st.markdown(resp.content[0].text)
+                            sum_resp = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=150,
+                                messages=[{"role":"user","content":f"One line summary max 120 chars: {ob_lab_vals}"}])
+                            db_upsert("lab_reports", {"user_id": user_id, "report_date": ob_lab_date.isoformat(),
+                                "lab_name": ob_lab_name, "raw_values": ob_lab_vals, "summary": sum_resp.content[0].text[:500]})
+                            save_onboarding_state(user_id, {"step4_done": True, "lab_upload_acknowledged": True})
+                            st.success("✅ Saved.")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+                else:
+                    st.warning("Paste your lab values above.")
+
+            st.divider()
+            ob_fresh = get_onboarding_state(user_id)
+            has_labs = bool(existing_labs)
+            acknowledged = ob_fresh and ob_fresh.get("lab_upload_acknowledged")
+
+            if not has_labs:
+                st.markdown("**Don't have reports yet?**")
+                st.caption("You can continue — your roadmap will be provisional for 2 weeks while you arrange testing.")
+                if st.button("I'll upload labs within 2 weeks — continue", use_container_width=True, key="ob_lab_ack"):
+                    save_onboarding_state(user_id, {"current_step": 5, "step4_done": True,
+                        "lab_upload_acknowledged": True, "lab_acknowledged_at": datetime.now().isoformat()})
+                    st.rerun()
+
+            nav1, nav2 = st.columns(2)
+            with nav1:
+                if st.button("← Back", use_container_width=True, key="b4"):
+                    save_onboarding_state(user_id, {"current_step": 3}); st.rerun()
+            with nav2:
+                if (has_labs or acknowledged) and st.button("Continue →", type="primary", use_container_width=True, key="n4"):
+                    save_onboarding_state(user_id, {"current_step": 5, "step4_done": True}); st.rerun()
+
+        # ── STEP 5 ──────────────────────────────────────────────────────────────
+        elif current_step == 5:
+            ob_final = get_onboarding_state(user_id)
+            completeness = calculate_completeness(user_id, ob_final)
+            labs_exist = bool(db_get("lab_reports", user_id))
+            acknowledged = ob_final and ob_final.get("lab_upload_acknowledged")
+
+            st.markdown("### You're ready")
+            if completeness >= 70:
+                st.success(f"✅ Profile {completeness}% complete — your roadmap will be precise.")
+            else:
+                st.warning(f"⚠️ Profile {completeness}% complete — go back to add more detail.")
+            st.progress(completeness)
+
+            checks = [
+                ("Basic information", ob_final.get("step1_done", False) if ob_final else False),
+                ("Health profile", ob_final.get("step2_done", False) if ob_final else False),
+                ("Lifestyle & goals", ob_final.get("step3_done", False) if ob_final else False),
+                ("Lab reports", labs_exist),
+            ]
+            for label, done in checks:
+                icon = "✅" if done else ("⏳" if label == "Lab reports" and acknowledged else "⬜")
+                st.markdown(f"{icon} &nbsp; {label}")
+
+            if not labs_exist and acknowledged:
+                ob_ack_time = ob_final.get("lab_acknowledged_at") if ob_final else None
+                days_remaining = 14
+                if ob_ack_time:
+                    try:
+                        ack_dt = datetime.fromisoformat(ob_ack_time.replace("Z",""))
+                        days_remaining = max(0, 14 - (datetime.now() - ack_dt).days)
+                    except: pass
+                st.info(f"📋 {days_remaining} days remaining to upload labs. Roadmap will be provisional until then.")
+
+            st.divider()
+            st.markdown("**What happens next:**")
+            st.markdown("""
+- Your **12-month treatment roadmap** generates now
+- **Monthly protocols** break it into milestones
+- **Weekly protocols** give you the day-by-day detail
+- **Your Sattva** is always there for questions
+""")
+            if completeness >= 50:
+                if st.button("✦ Generate my treatment roadmap", type="primary", use_container_width=True, key="ob_finish"):
+                    save_onboarding_state(user_id, {"completed": True, "completed_at": datetime.now().isoformat()})
+                    db_upsert("profiles", {"id": user_id, "onboarding_complete": True})
+                    st.balloons()
+                    st.rerun()
+            else:
+                st.button("Complete more steps to unlock your roadmap", disabled=True, use_container_width=True)
+
+            if st.button("← Back", key="b5"):
+                save_onboarding_state(user_id, {"current_step": 4}); st.rerun()
+
+    with col_r:
+        tips = {
+            1: ("Why we ask", "Your age, sex, height and weight affect how we interpret your labs and calibrate nutrition and training. Location helps us suggest locally available foods and brands. Alcohol and smoking directly influence hormone metabolism."),
+            2: ("Your data is private", "Only you can see your health information. No one else — including practitioners — can access your data unless you explicitly grant permission. Add as much or as little as you're comfortable with."),
+            3: ("Goals shape everything", "Your roadmap is built around your goals and their timeframes. After each goal is achieved, we build a maintenance guide so you keep the results long-term."),
+            4: ("Why labs matter so much", "Functional medicine reads values differently from conventional medicine. A TSH of 2.5 might look 'normal' but mask a T3 conversion problem. Reports older than 3 months move to trend context only — recent labs always take priority."),
+            5: ("You're in control", "Your roadmap is a living plan — it updates when your labs change, when you hit milestones, or when your goals shift. Nothing is set in stone.")
+        }
+        title, body = tips.get(current_step, ("", ""))
+        if title:
+            st.markdown(f"""
+            <div style='background:#F2F3EF;border-radius:12px;padding:16px;margin-top:48px;'>
+            <p style='font-family:Inter,sans-serif;font-weight:600;color:#1C2330;font-size:13px;margin:0 0 8px;'>{title}</p>
+            <p style='font-family:Inter,sans-serif;color:#5B6270;font-size:13px;margin:0;line-height:1.5;'>{body}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+
 # ════════════════════════════════════════════════════════════════════════════════
 if "user" not in st.session_state:
     show_auth_screen()
