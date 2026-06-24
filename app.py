@@ -586,6 +586,7 @@ def show_auth_screen():
 # MAIN APP (shown when logged in)
 # ════════════════════════════════════════════════════════════════════════════════
 
+
 def show_main_app(user):
     user_id = user.id
     profile = db_get_single("profiles", user_id)
@@ -604,260 +605,230 @@ def show_main_app(user):
 html,body,[class*="css"]{font-family:'Inter',system-ui,sans-serif;}
 .stApp{background:#F2F3EF;}
 h1,h2,h3{font-family:'Newsreader',serif!important;font-weight:500!important;color:#1C2330!important;}
-[data-testid="stSidebar"]{display:none!important;}
-.block-container{padding:0!important;max-width:430px!important;margin:0 auto!important;}
-header[data-testid="stHeader"]{display:none!important;}
-footer{display:none!important;}
-.os-screen{display:none;padding:16px 16px 100px;}
-.os-screen.active{display:block;}
-.os-card{background:#FFFFFF;border-radius:14px;border:0.5px solid rgba(28,35,48,0.10);padding:14px 16px;margin-bottom:10px;}
-.os-mono{font-family:'JetBrains Mono',monospace;}
-.os-serif{font-family:'Newsreader',serif;}
-.os-label{font-size:11px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:#5B6270;}
-.os-big{font-size:28px;font-weight:500;line-height:1;font-family:'JetBrains Mono',monospace;}
-.os-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;}
-.os-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:#FFFFFF;border-top:0.5px solid rgba(28,35,48,0.10);display:flex;z-index:999;padding:6px 0 env(safe-area-inset-bottom,6px);}
-.os-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;cursor:pointer;border:none;background:transparent;color:#5B6270;font-size:10px;font-family:'Inter',sans-serif;transition:color 0.15s;}
-.os-tab i{font-size:22px;}
-.os-tab.active{color:#B68A3D;}
-.os-dark{background:#1C2330;border-radius:14px;padding:14px 16px;margin-bottom:10px;}
-.os-metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
-.os-metric{background:#FFFFFF;border-radius:14px;border:0.5px solid rgba(28,35,48,0.10);padding:12px 14px;}
-.os-sub-tabs{display:flex;gap:6px;margin-bottom:12px;}
-.os-sub-tab{flex:1;padding:8px;border-radius:10px;border:0.5px solid rgba(28,35,48,0.10);background:transparent;color:#5B6270;font-size:12px;font-weight:500;cursor:pointer;font-family:'Inter',sans-serif;transition:all 0.15s;}
-.os-sub-tab.active{background:#1C2330;border-color:#1C2330;color:#F2F3EF;}
-.os-insight{background:#F2F3EF;border-left:2px solid #B68A3D;border-radius:0 10px 10px 0;padding:12px 14px;margin-bottom:12px;}
-.os-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid rgba(28,35,48,0.07);}
-.os-row:last-child{border-bottom:none;}
-.os-status-green{color:#1D9E75;}
-.os-status-amber{color:#B68A3D;}
-.os-status-red{color:#C8384A;}
-.stButton>button{border-radius:10px;border:0.5px solid rgba(28,35,48,0.10);color:#1C2330;background:#FFFFFF;font-weight:500;font-family:'Inter',sans-serif;}
-.stButton>button[kind="primary"]{background:#1C2330;border-color:#1C2330;color:#F2F3EF;}
-[data-testid="stAlert"]{border-radius:10px;}
-[data-testid="stMetric"]{background:#FFFFFF;border-radius:12px;border:0.5px solid rgba(28,35,48,0.10);padding:12px 14px;}
-[data-testid="stMetricValue"]{font-family:'JetBrains Mono',monospace!important;}
-input,textarea,select{font-family:'Inter',sans-serif!important;}
-.stSlider{padding:0!important;}
-hr{border-color:rgba(28,35,48,0.08)!important;}
-</style>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
-""", unsafe_allow_html=True)
-
-    # ── Screen state ─────────────────────────────────────────────────────────────
-    if "screen" not in st.session_state:
-        st.session_state.screen = "home"
-    if "proto_tab" not in st.session_state:
-        st.session_state.proto_tab = "supps"
-    if "profile_section" not in st.session_state:
-        st.session_state.profile_section = "overview"
-
-    screen = st.session_state.screen
-
-    # ── Navigation JS injection ───────────────────────────────────────────────────
-    st.markdown("""
-<script>
-function osNav(s){
-  window.parent.postMessage({type:'streamlit:setComponentValue',value:s},'*');
+h1{font-size:2rem!important;border-bottom:1px solid rgba(28,35,48,0.08);padding-bottom:10px;margin-bottom:1.2rem!important;}
+[data-testid="stSidebar"]{background:#1C2330!important;}
+[data-testid="stSidebar"] *{color:#F2F3EF!important;}
+[data-testid="stSidebar"] hr{border-color:rgba(242,243,239,0.10)!important;}
+[data-testid="stSidebar"] .stButton>button{
+  background:rgba(242,243,239,0.07)!important;
+  border:0.5px solid rgba(242,243,239,0.12)!important;
+  color:#F2F3EF!important;
+  border-radius:8px!important;
+  font-size:13px!important;
+  text-align:left!important;
+  width:100%!important;
 }
-</script>
+[data-testid="stSidebar"] .stButton>button:hover{background:rgba(242,243,239,0.14)!important;}
+.stTabs [data-baseweb="tab-list"]{background:#FAFAF7;border-radius:10px;padding:4px;gap:4px;}
+.stTabs [data-baseweb="tab"]{border-radius:7px;color:#5B6270;font-weight:500;font-size:13px;padding:8px 16px;}
+.stTabs [aria-selected="true"]{background:#FFFFFF!important;color:#1C2330!important;box-shadow:0 1px 3px rgba(28,35,48,0.08)!important;}
+.stButton>button{border-radius:9px;border:0.5px solid rgba(28,35,48,0.12);color:#1C2330;background:#FFFFFF;font-weight:500;font-family:'Inter',sans-serif;}
+.stButton>button[kind="primary"]{background:#1C2330;border-color:#1C2330;color:#F2F3EF;}
+.stButton>button[kind="primary"]:hover{background:#3D5A52;border-color:#3D5A52;}
+[data-testid="stMetric"]{background:#FFFFFF;border-radius:12px;border:0.5px solid rgba(28,35,48,0.10);padding:14px;}
+[data-testid="stMetricValue"]{font-family:'JetBrains Mono',monospace!important;color:#1C2330!important;}
+[data-testid="stMetricLabel"]{color:#5B6270!important;font-size:12px!important;}
+[data-testid="stChatMessage"]{background:#FFFFFF;border-radius:12px;border:0.5px solid rgba(28,35,48,0.08);}
+[data-testid="stAlert"]{border-radius:10px;}
+hr{border-color:rgba(28,35,48,0.08)!important;margin:1.2rem 0!important;}
+.os-card{background:#FFFFFF;border-radius:14px;border:0.5px solid rgba(28,35,48,0.10);padding:18px 20px;margin-bottom:12px;}
+.os-dark{background:#1C2330;border-radius:14px;padding:18px 20px;margin-bottom:12px;}
+.os-insight{background:#F2F3EF;border-left:3px solid #B68A3D;border-radius:0 10px 10px 0;padding:14px 18px;margin-bottom:14px;}
+.os-mono{font-family:'JetBrains Mono',monospace;}
+.os-label{font-size:11px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:#5B6270;}
+.os-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;}
+.os-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:0.5px solid rgba(28,35,48,0.07);}
+.os-row:last-child{border-bottom:none;}
+input,textarea,select{font-family:'Inter',sans-serif!important;}
+.stDataFrame{border:0.5px solid rgba(28,35,48,0.10);border-radius:10px;overflow:hidden;}
+</style>
 """, unsafe_allow_html=True)
 
-    # ── Nav bar ───────────────────────────────────────────────────────────────────
-    nav_items = [
-        ("home","ti-home","Home"),
-        ("protocol","ti-calendar","Protocol"),
-        ("checkin","ti-circle-plus","Check-in"),
-        ("coach","ti-sparkles","Coach"),
-        ("profile","ti-user","Profile"),
-    ]
-    nav_cols = st.columns(5)
-    for i, (sid, icon, label) in enumerate(nav_items):
-        with nav_cols[i]:
-            active_style = "color:#B68A3D;font-weight:600;" if screen == sid else "color:#5B6270;"
-            if st.button(f"{'●' if screen==sid else '○'} {label}", key=f"nav_{sid}_{screen}",
-                         use_container_width=True,
-                         help=label):
-                st.session_state.screen = sid
-                st.session_state.checkin_insight = None
-                st.rerun()
-
-    st.divider()
-
-    # ════════════════════════════════════
-    # HOME SCREEN
-    # ════════════════════════════════════
-    if screen == "home":
-        now = datetime.now()
-        hour = now.hour
-        greeting = "Good morning" if hour < 12 else ("Good afternoon" if hour < 17 else "Good evening")
-
-        # Header
+    # ── Sidebar ───────────────────────────────────────────────────────────────────
+    with st.sidebar:
+        # Brand mark + wordmark
         st.markdown(f"""
-<div style='padding:4px 0 12px;'>
-  <div style='display:flex;align-items:center;gap:7px;margin-bottom:6px;'>
-    <svg width="16" height="16" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-      <defs><radialGradient id="hg" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stop-color="#FAFAF7"/><stop offset="62%" stop-color="#B68A3D"/>
+<div style='padding:16px 0 20px;border-bottom:1px solid rgba(242,243,239,0.10);margin-bottom:20px;'>
+  <div style='display:flex;align-items:center;gap:9px;margin-bottom:12px;'>
+    <svg width="20" height="20" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <defs><radialGradient id="sg" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#F2F3EF"/>
+        <stop offset="62%" stop-color="#B68A3D"/>
         <stop offset="100%" stop-color="#1C2330" stop-opacity="0"/>
       </radialGradient></defs>
-      <circle cx="50" cy="50" r="32" fill="url(#hg)"/><circle cx="50" cy="50" r="6" fill="#FAFAF7"/>
+      <circle cx="50" cy="50" r="32" fill="url(#sg)"/>
+      <circle cx="50" cy="50" r="6" fill="#F2F3EF"/>
     </svg>
-    <span style="font-family:'Newsreader',serif;font-style:italic;font-size:13px;color:#1C2330;">
-      <span style="font-style:normal;opacity:0.45;font-size:0.6em;vertical-align:0.28em;">one</span>Sattva
+    <span style="font-family:'Newsreader',serif;font-style:italic;font-size:18px;color:#F2F3EF;line-height:1;">
+      <span style="font-style:normal;opacity:0.45;font-size:0.55em;vertical-align:0.3em;margin-right:0.02em;">one</span>Sattva
     </span>
   </div>
-  <p style='font-size:22px;font-weight:500;margin:0;font-family:"Newsreader",serif;color:#1C2330;'>{greeting}, {first_name}.</p>
-  <p style='font-size:12px;color:#5B6270;margin:3px 0 0;'>{date.today().strftime('%A, %d %B')} · Cycle Day {cycle_day or '?'} · {(cycle_phase or '').split(' (')[0]}</p>
+  <p style="font-family:'Newsreader',serif;font-style:italic;font-size:0.8rem;color:#B68A3D;margin:0 0 10px;">With you. For you.</p>
+  <p style="font-family:'Inter',sans-serif;font-size:13px;color:#F2F3EF;opacity:0.8;margin:0;">{name}</p>
+  {f"<p style='font-family:Inter,sans-serif;font-size:11px;color:#F2F3EF;opacity:0.4;margin:2px 0 0;'>{profile.get('age','')}yr · {profile.get('location','')}</p>" if profile and profile.get('age') else ""}
 </div>
 """, unsafe_allow_html=True)
 
-        # Check-in prompt or status
-        checkins_today = db_get("checkins", user_id, order_col="checkin_date", limit=1)
-        today_logged = checkins_today and checkins_today[0].get("checkin_date") == date.today().isoformat()
-
-        if not today_logged:
-            st.markdown("""
-<div style='background:#1C2330;border-radius:14px;padding:16px;margin-bottom:10px;'>
-  <div style='display:flex;justify-content:space-between;align-items:center;'>
-    <div>
-      <p style='font-size:11px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:rgba(242,243,239,0.45);margin:0 0 4px;'>Today's check-in</p>
-      <p style='font-size:15px;color:#F2F3EF;margin:0;'>Not logged yet</p>
-      <p style='font-size:11px;color:rgba(242,243,239,0.45);margin:3px 0 0;'>Takes 60 seconds</p>
-    </div>
-    <div style='width:38px;height:38px;border-radius:50%;background:#B68A3D;display:flex;align-items:center;justify-content:center;'>
-      <span style='color:#F2F3EF;font-size:22px;line-height:1;'>+</span>
-    </div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-            if st.button("Log today's check-in", use_container_width=True, type="primary", key="home_checkin_btn"):
-                st.session_state.screen = "checkin"
+        # Cycle tracker
+        st.markdown("<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.08em;color:#F2F3EF;opacity:0.4;margin:0 0 8px;text-transform:uppercase;'>Cycle</p>", unsafe_allow_html=True)
+        if cycle_day:
+            st.markdown(f"""
+<div style='background:rgba(242,243,239,0.07);border-radius:10px;padding:12px 14px;margin-bottom:12px;'>
+  <div style='font-family:"JetBrains Mono",monospace;font-size:24px;color:#F2F3EF;font-weight:500;line-height:1;'>Day {cycle_day}</div>
+  <div style='font-family:Inter,sans-serif;font-size:12px;color:#F2F3EF;opacity:0.55;margin-top:4px;'>{(cycle_phase or '').split(' (')[0]}</div>
+  {f"<div style='font-family:Inter,sans-serif;font-size:11px;color:#B68A3D;margin-top:5px;'>~{days_to_next}d until next period</div>" if days_to_next else ""}
+</div>""", unsafe_allow_html=True)
+            if st.button("New period started today", use_container_width=True, key="new_period_sb"):
+                db_upsert("cycle_data", {"user_id": user_id, "last_period_start": date.today().isoformat()})
+                st.session_state.system_prompt = build_system_prompt(user_id, profile)
                 st.rerun()
         else:
-            row = checkins_today[0]
+            st.caption("Set period date in Profile → Cycle")
+
+        st.divider()
+
+        # Wearable snapshot
+        wr = db_get("wearable_data", user_id, order_col="data_date", limit=1)
+        if wr and wr[0].get("recovery_score"):
+            rec = float(wr[0]["recovery_score"])
+            col = "#1D9E75" if rec >= 67 else ("#B68A3D" if rec >= 34 else "#C8384A")
             st.markdown(f"""
-<div style='background:#F2F3EF;border-radius:14px;padding:12px 16px;margin-bottom:10px;border-left:2px solid #1D9E75;border-radius:0 14px 14px 0;'>
-  <p style='font-size:11px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:#5B6270;margin:0 0 4px;'>Today logged ✓</p>
-  <p style='font-size:13px;color:#1C2330;margin:0;'>Energy {row.get('energy','?')}/10 · Mood {row.get('mood','?')}/10 · Sleep {row.get('sleep_hours','?')}hrs · Bloating: {row.get('bloating','?')}</p>
-</div>
-""", unsafe_allow_html=True)
-
-        # Status cards
-        wearable_rec = db_get("wearable_data", user_id, order_col="data_date", limit=1)
-        rec_score = None
-        hrv_val = None
-        if wearable_rec:
-            rec_score = wearable_rec[0].get("recovery_score")
-            hrv_val = wearable_rec[0].get("hrv")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            if rec_score:
-                rec = float(rec_score)
-                color = "#1D9E75" if rec >= 67 else ("#B68A3D" if rec >= 34 else "#C8384A")
-                st.markdown(f"""
-<div class='os-metric'>
-  <p class='os-label' style='margin:0 0 6px;'>Recovery</p>
-  <p class='os-big' style='color:{color};margin:0 0 2px;'>{rec:.0f}<span style='font-size:14px;opacity:0.5;'>%</span></p>
-  <p style='font-size:11px;color:#5B6270;margin:0;'>HRV {hrv_val or '?'} ms</p>
-</div>""", unsafe_allow_html=True)
-            else:
-                st.markdown("""
-<div class='os-metric' style='border:0.5px dashed rgba(28,35,48,0.15);'>
-  <p class='os-label' style='margin:0 0 6px;'>Recovery</p>
-  <p style='font-size:12px;color:#5B6270;margin:0;'>No WHOOP data</p>
-</div>""", unsafe_allow_html=True)
-        with col2:
-            st.markdown(f"""
-<div class='os-metric'>
-  <p class='os-label' style='margin:0 0 6px;'>Cycle</p>
-  <p class='os-big' style='color:#1C2330;margin:0 0 2px;'>{cycle_day or '?'}</p>
-  <p style='font-size:11px;color:#5B6270;margin:0;'>{(cycle_phase or '').split(' (')[0]}{f' · {days_to_next}d' if days_to_next else ''}</p>
+<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.08em;color:#F2F3EF;opacity:0.4;margin:0 0 8px;text-transform:uppercase;'>Recovery</p>
+<div style='background:rgba(242,243,239,0.07);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px;'>
+  <div style='font-family:"JetBrains Mono",monospace;font-size:22px;font-weight:500;color:{col};'>{rec:.0f}%</div>
+  <div style='font-size:11px;color:#F2F3EF;opacity:0.5;'>HRV {wr[0].get("hrv","?") or "?"} ms</div>
 </div>""", unsafe_allow_html=True)
 
-        # 7-day averages
-        recent_ci = db_get("checkins", user_id, order_col="checkin_date", limit=7)
-        if recent_ci and len(recent_ci) >= 3:
-            df_r = pd.DataFrame(recent_ci)
-            col3, col4 = st.columns(2)
-            with col3:
-                if "energy" in df_r.columns:
-                    avg_e = pd.to_numeric(df_r["energy"], errors="coerce").mean()
-                    st.markdown(f"""
-<div class='os-metric'>
-  <p class='os-label' style='margin:0 0 6px;'>Avg energy · 7d</p>
-  <p class='os-big' style='color:#1C2330;margin:0 0 2px;'>{avg_e:.1f}<span style='font-size:14px;opacity:0.5;'>/10</span></p>
-</div>""", unsafe_allow_html=True)
-            with col4:
-                saved_rm = db_get("roadmaps", user_id, order_col="generated_at", limit=1)
-                if saved_rm and saved_rm[0].get("committed"):
-                    try:
-                        rm_start = datetime.fromisoformat(saved_rm[0]["generated_at"].replace("Z","")).date()
-                        days_in = (date.today() - rm_start).days
-                        week_in = (days_in // 7) + 1
-                        phase_in = "Phase 1" if days_in < 90 else ("Phase 2" if days_in < 180 else "Phase 3")
-                        st.markdown(f"""
-<div class='os-metric' style='cursor:pointer;'>
-  <p class='os-label' style='margin:0 0 6px;'>Roadmap</p>
-  <p class='os-big' style='color:#B68A3D;margin:0 0 2px;'>W{week_in}</p>
-  <p style='font-size:11px;color:#5B6270;margin:0;'>{phase_in} · committed ✓</p>
-</div>""", unsafe_allow_html=True)
-                    except: pass
+        st.divider()
+        st.markdown(f"<p style='font-family:Inter,sans-serif;font-size:11px;color:#F2F3EF;opacity:0.3;margin-bottom:8px;'>{user.email}</p>", unsafe_allow_html=True)
+        if st.button("Sign out", use_container_width=True, key="signout_main"):
+            sign_out()
 
-        # Monthly focus
-        if st.session_state.get("monthly_protocol"):
-            st.markdown("<p style='font-size:13px;font-weight:500;color:#1C2330;margin:14px 0 8px;'>This month's focus</p>", unsafe_allow_html=True)
-            lines = [l.strip() for l in st.session_state.monthly_protocol.split("\n") if l.strip() and not l.startswith("#")][:4]
-            st.markdown(f"""
-<div class='os-card' style='border-left:2px solid #B68A3D;border-radius:0 14px 14px 0;'>
-  <p style='font-size:13px;color:#1C2330;margin:0;line-height:1.6;'>{' '.join(lines[:2])}</p>
-</div>""", unsafe_allow_html=True)
+    # ── Main tabs ─────────────────────────────────────────────────────────────────
+    tab_home, tab_protocol, tab_checkin, tab_coach, tab_profile = st.tabs([
+        "🏡 Home", "📅 Protocol", "📋 Check-in", "✦ Coach", "👤 Profile"
+    ])
 
-        # Goals
-        goals = db_get("goals", user_id)
-        if goals:
-            st.markdown("<p style='font-size:13px;font-weight:500;color:#1C2330;margin:14px 0 8px;'>Goals</p>", unsafe_allow_html=True)
-            for g in goals[:4]:
-                tf = g.get("timeframe","")
-                st.markdown(f"""
-<div style='display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(28,35,48,0.10);margin-bottom:6px;'>
-  <span style='font-size:13px;color:#1C2330;'>{g['goal'][:55]}</span>
-  {f"<span style='font-size:11px;color:#B68A3D;white-space:nowrap;margin-left:8px;'>{tf}</span>" if tf else ""}
+    # ════════════════════════════════════
+    # HOME
+    # ════════════════════════════════════
+    with tab_home:
+        now_h = datetime.now()
+        hour_h = now_h.hour
+        greeting = "Good morning" if hour_h < 12 else ("Good afternoon" if hour_h < 17 else "Good evening")
+
+        st.markdown(f"""
+<div style='padding:4px 0 16px;'>
+  <h1 style='border:none!important;padding:0!important;margin-bottom:4px!important;font-size:2.2rem!important;'>{greeting}, {first_name}.</h1>
+  <p style='font-size:14px;color:#5B6270;margin:0;'>{date.today().strftime('%A, %d %B %Y')} · Cycle Day {cycle_day or '?'} · {(cycle_phase or '').split(' (')[0]}</p>
 </div>""", unsafe_allow_html=True)
 
         # Flags
-        labs_check = db_get("lab_reports", user_id, order_col="report_date", limit=1)
-        if not labs_check:
-            st.warning("No lab reports uploaded. Add them in Profile → Labs for a precise roadmap.")
-        elif labs_check:
+        checkins_h = db_get("checkins", user_id, order_col="checkin_date", limit=1)
+        today_logged_h = checkins_h and checkins_h[0].get("checkin_date") == date.today().isoformat()
+        labs_h = db_get("lab_reports", user_id, order_col="report_date", limit=1)
+
+        if not today_logged_h:
+            st.info("📋 Daily check-in not done yet — go to the Check-in tab.")
+        if not labs_h:
+            st.warning("🧪 No lab reports uploaded — your roadmap will be generic without them. Go to Profile → Labs.")
+        elif labs_h:
             try:
-                lab_age = (date.today() - date.fromisoformat(labs_check[0]["report_date"])).days
+                lab_age = (date.today() - date.fromisoformat(labs_h[0]["report_date"])).days
                 if lab_age > 90:
-                    st.warning(f"Labs are {lab_age} days old — consider retesting.")
+                    st.warning(f"🧪 Labs are {lab_age} days old — consider retesting for current status.")
             except: pass
+        if not st.session_state.get("roadmap_committed"):
+            saved_rm_h = db_get("roadmaps", user_id, order_col="generated_at", limit=1)
+            if not saved_rm_h:
+                st.info("🗺️ No treatment roadmap yet — generate one in Profile → Roadmap.")
+
+        st.divider()
+
+        # Status row
+        hc1, hc2, hc3, hc4 = st.columns(4)
+        with hc1:
+            if today_logged_h:
+                row_h = checkins_h[0]
+                st.metric("Energy today", f"{row_h.get('energy','?')}/10")
+            else:
+                st.metric("Energy today", "—")
+        with hc2:
+            wr_h = db_get("wearable_data", user_id, order_col="data_date", limit=1)
+            if wr_h and wr_h[0].get("recovery_score"):
+                st.metric("Recovery", f"{float(wr_h[0]['recovery_score']):.0f}%")
+            else:
+                st.metric("Recovery", "—")
+        with hc3:
+            st.metric("Cycle day", cycle_day or "—")
+        with hc4:
+            saved_rm_h = db_get("roadmaps", user_id, order_col="generated_at", limit=1)
+            if saved_rm_h and saved_rm_h[0].get("committed"):
+                try:
+                    rm_s = datetime.fromisoformat(saved_rm_h[0]["generated_at"].replace("Z","")).date()
+                    wk = (date.today() - rm_s).days // 7 + 1
+                    ph = "Phase 1" if (date.today()-rm_s).days < 90 else ("Phase 2" if (date.today()-rm_s).days < 180 else "Phase 3")
+                    st.metric("Roadmap", f"Week {wk} · {ph}")
+                except: st.metric("Roadmap", "Active")
+            else:
+                st.metric("Roadmap", "Not started")
+
+        # Monthly focus
+        if st.session_state.get("monthly_protocol"):
+            st.divider()
+            st.markdown("##### This month's focus")
+            st.markdown(f"""
+<div class='os-insight'>
+  <p style='font-size:13px;color:#1C2330;margin:0;line-height:1.7;'>{" ".join([l.strip() for l in st.session_state.monthly_protocol.split(chr(10)) if l.strip() and not l.startswith("#")][:5])}</p>
+</div>""", unsafe_allow_html=True)
+
+        # 7-day trends
+        recent_h = db_get("checkins", user_id, order_col="checkin_date", limit=7)
+        if recent_h and len(recent_h) >= 3:
+            st.divider()
+            st.markdown("##### Last 7 days")
+            df_h = pd.DataFrame(recent_h)
+            tc1, tc2, tc3, tc4 = st.columns(4)
+            for col, field, label in [(tc1,"energy","Avg Energy"),(tc2,"mood","Avg Mood"),(tc3,"sleep_hours","Avg Sleep"),(tc4,"stress","Avg Stress")]:
+                if field in df_h.columns:
+                    val = pd.to_numeric(df_h[field], errors="coerce").mean()
+                    suffix = "/10" if field != "sleep_hours" else "h"
+                    col.metric(label, f"{val:.1f}{suffix}" if not pd.isna(val) else "—")
+
+        # Goals
+        goals_h = db_get("goals", user_id)
+        if goals_h:
+            st.divider()
+            st.markdown("##### Goals")
+            gcols = st.columns(min(len(goals_h), 3))
+            for i, g in enumerate(goals_h[:3]):
+                with gcols[i]:
+                    st.markdown(f"""
+<div class='os-card' style='height:100%;'>
+  <p style='font-size:13px;color:#1C2330;margin:0 0 6px;font-weight:500;'>{g['goal'][:60]}</p>
+  {f"<p class='os-pill' style='background:#F2F3EF;color:#B68A3D;margin:0;'>{g.get('timeframe','')}</p>" if g.get('timeframe') else ""}
+</div>""", unsafe_allow_html=True)
 
     # ════════════════════════════════════
-    # PROTOCOL SCREEN
+    # PROTOCOL
     # ════════════════════════════════════
-    elif screen == "protocol":
-        st.markdown("<p style='font-size:22px;font-weight:500;font-family:\"Newsreader\",serif;color:#1C2330;margin:4px 0 2px;'>Protocol</p>", unsafe_allow_html=True)
+    with tab_protocol:
+        st.title("📅 Protocol")
 
         # Gap detection
-        checkins_gap = db_get("checkins", user_id, order_col="checkin_date", limit=1)
+        gap_ci = db_get("checkins", user_id, order_col="checkin_date", limit=1)
         gap_days = 0
-        if checkins_gap:
-            try:
-                gap_days = (date.today() - date.fromisoformat(checkins_gap[0]["checkin_date"])).days
+        if gap_ci:
+            try: gap_days = (date.today() - date.fromisoformat(gap_ci[0]["checkin_date"])).days
             except: pass
         if gap_days >= 14:
-            st.warning(f"It's been {gap_days} days since your last check-in. Update your coach before viewing your protocol.")
-            note = st.text_area("What's changed?", placeholder="e.g. Travelling, stopped a supplement, energy has been low...", key="gap_note")
-            if st.button("Update and continue", type="primary", use_container_width=True):
-                if note.strip():
-                    existing = db_get_single("profile_notes", user_id)
-                    curr = existing.get("notes","") if existing else ""
-                    db_upsert("profile_notes", {"user_id": user_id, "notes": curr + f"\n\n[Re-entry {date.today()}]: {note}"})
+            st.warning(f"⚠️ {gap_days} days since your last check-in. Update your coach before viewing your protocol.")
+            gap_note = st.text_area("What's changed in the last few weeks?", key="gap_note_p")
+            if st.button("Update and continue", type="primary"):
+                if gap_note.strip():
+                    en = db_get_single("profile_notes", user_id)
+                    curr = en.get("notes","") if en else ""
+                    db_upsert("profile_notes", {"user_id":user_id,"notes":curr+f"\n\n[Re-entry {date.today()}]: {gap_note}"})
                     st.session_state.weekly_protocol = None
                     st.session_state.monthly_protocol = None
                     st.session_state.system_prompt = build_system_prompt(user_id, profile)
@@ -867,32 +838,31 @@ function osNav(s){
             st.info(f"Welcome back — {gap_days} days since last check-in. Has anything changed?")
 
         if not st.session_state.get("treatment_roadmap"):
-            saved = db_get("roadmaps", user_id, order_col="generated_at", limit=1)
-            if saved:
-                st.session_state.treatment_roadmap = saved[0]["roadmap_text"]
-                st.session_state.roadmap_committed = saved[0].get("committed", False)
+            saved_p = db_get("roadmaps", user_id, order_col="generated_at", limit=1)
+            if saved_p:
+                st.session_state.treatment_roadmap = saved_p[0]["roadmap_text"]
+                st.session_state.roadmap_committed = saved_p[0].get("committed", False)
             else:
-                st.info("Generate your Treatment Roadmap first — go to Profile → Roadmap.")
+                st.info("Generate your Treatment Roadmap first — go to Profile → Roadmap tab.")
                 st.stop()
 
-        # Calculate position
-        saved_rm = db_get("roadmaps", user_id, order_col="generated_at", limit=1)
-        roadmap_start = date.today()
-        if saved_rm:
-            try:
-                roadmap_start = datetime.fromisoformat(saved_rm[0]["generated_at"].replace("Z","")).date()
+        # Position
+        saved_rm_p = db_get("roadmaps", user_id, order_col="generated_at", limit=1)
+        rm_start_p = date.today()
+        if saved_rm_p:
+            try: rm_start_p = datetime.fromisoformat(saved_rm_p[0]["generated_at"].replace("Z","")).date()
             except: pass
-        days_in = (date.today() - roadmap_start).days
-        week_num = (days_in // 7) + 1
-        month_num = (days_in // 30) + 1
-        phase = "Phase 1" if days_in < 90 else ("Phase 2" if days_in < 180 else "Phase 3")
-        month_name = date.today().strftime("%B %Y")
+        days_in_p = (date.today() - rm_start_p).days
+        week_num_p = (days_in_p // 7) + 1
+        month_num_p = (days_in_p // 30) + 1
+        phase_p = "Phase 1" if days_in_p < 90 else ("Phase 2" if days_in_p < 180 else "Phase 3")
+        month_name_p = date.today().strftime("%B %Y")
 
-        today_dt = datetime.now()
-        day_names = [(today_dt + timedelta(days=i)).strftime("%A %d %b") for i in range(7)]
-        days_str = ", ".join(day_names)
+        today_dt_p = datetime.now()
+        day_names_p = [(today_dt_p + timedelta(days=i)).strftime("%A %d %b") for i in range(7)]
+        days_str_p = ", ".join(day_names_p)
 
-        st.markdown(f"<p style='font-size:12px;color:#5B6270;margin:0 0 14px;'>Week {week_num} · {day_names[0].split(' ')[0]} {day_names[0].split(' ')[1]} – {day_names[6].split(' ')[0]} {day_names[6].split(' ')[1]} · {phase}</p>", unsafe_allow_html=True)
+        st.caption(f"Week {week_num_p} · {day_names_p[0]} – {day_names_p[6]} · {phase_p} · Cycle Day {cycle_day or '?'}")
 
         # Monthly overview
         if "monthly_protocol" not in st.session_state:
@@ -900,155 +870,160 @@ function osNav(s){
         if "monthly_month" not in st.session_state:
             st.session_state.monthly_month = None
 
-        if not st.session_state.monthly_protocol or st.session_state.monthly_month != month_name:
-            with st.spinner(f"Building {month_name} overview..."):
-                mp = ai_client.messages.create(
-                    model="claude-sonnet-4-6", max_tokens=1000,
-                    system=st.session_state.system_prompt,
-                    messages=[{"role":"user","content":f"""Month {month_num} protocol overview. {phase}. Week {week_num}. Cycle: {cycle_phase}.
+        needs_monthly = not st.session_state.monthly_protocol or st.session_state.monthly_month != month_name_p
+        with st.expander(f"📅 {month_name_p} — Month {month_num_p} overview", expanded=True):
+            if needs_monthly:
+                if st.button("Generate monthly overview", type="primary", key="gen_monthly"):
+                    with st.spinner(f"Building {month_name_p} overview..."):
+                        mp = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=1200,
+                            system=st.session_state.system_prompt,
+                            messages=[{"role":"user","content":f"""Month {month_num_p} protocol overview. {phase_p}. Week {week_num_p}. Cycle: {cycle_phase}.
+Roadmap context: {(st.session_state.treatment_roadmap or '')[:800]}
 
-FORMAT — concise, no fluff:
-**Month {month_num} focus:** [1 sentence]
-**Milestones:** 3 bullet points max
-**Key changes this month:** table — Area | Change (Supplements / Nutrition / Training)
-**Monitor:** 2-3 things to log
-Keep it tight."""}])
-                st.session_state.monthly_protocol = mp.content[0].text
-                st.session_state.monthly_month = month_name
-
-        with st.expander(f"📅 {month_name} — Month {month_num} overview", expanded=True):
-            st.markdown(st.session_state.monthly_protocol)
+FORMAT — concise:
+**Month {month_num_p} focus:** [1 sentence]
+**Milestones this month:** 3 bullets max
+**Key changes:** table — Area | Change (Supplements / Nutrition / Training / Lifestyle)
+**Monitor:** 2-3 things to log daily
+**End of month check:** what to assess"""}])
+                        st.session_state.monthly_protocol = mp.content[0].text
+                        st.session_state.monthly_month = month_name_p
+                        st.rerun()
+            else:
+                mcol1, mcol2 = st.columns([5,1])
+                with mcol1: st.markdown(st.session_state.monthly_protocol)
+                with mcol2:
+                    if st.button("Refresh", key="refresh_month_p"):
+                        st.session_state.monthly_protocol = None
+                        st.rerun()
 
         st.divider()
 
-        # Sub-tab selector
-        proto_tabs = [("supps","Supplements"), ("nutrition","Nutrition"), ("training","Training")]
-        pt_cols = st.columns(3)
-        for i, (tid, tlabel) in enumerate(proto_tabs):
-            with pt_cols[i]:
-                active = st.session_state.proto_tab == tid
-                if st.button(tlabel, key=f"pt_{tid}_{screen}", use_container_width=True,
-                             type="primary" if active else "secondary"):
-                    st.session_state.proto_tab = tid
-                    st.rerun()
-
-        # Generate button
+        # Weekly protocol tabs
         if "weekly_protocol" not in st.session_state:
             st.session_state.weekly_protocol = None
 
+        wp_col1, wp_col2 = st.columns([3,1])
+        with wp_col1:
+            st.markdown(f"**Week {week_num_p} · {day_names_p[0].split(' ')[0]} {day_names_p[0].split(' ')[1]} – {day_names_p[6].split(' ')[0]} {day_names_p[6].split(' ')[1]}**")
+        with wp_col2:
+            if st.session_state.weekly_protocol:
+                all_wp = "\n\n---\n\n".join(st.session_state.weekly_protocol.values())
+                st.download_button("⬇️ Download", data=all_wp, file_name=f"onesattva_week{week_num_p}.txt", use_container_width=True)
+
         if not st.session_state.weekly_protocol:
+            focus = st.selectbox("Priority focus", ["Balanced","Fat loss","Fertility & conception","Gut healing","Energy & thyroid","Sleep & recovery"], key="wp_focus_p")
             if st.button("Generate this week's protocol", type="primary", use_container_width=True):
                 default_phase_idx = 0
+                phases_list = ["Follicular (Day 1–14)","Ovulation (Day 14–16)","Luteal (Day 16–28)","Menstruation (Day 1–5)"]
                 if cycle_phase:
-                    phases = ["Follicular (Day 1–14)","Ovulation (Day 14–16)","Luteal (Day 16–28)","Menstruation (Day 1–5)"]
-                    for i, p in enumerate(phases):
+                    for i, p in enumerate(phases_list):
                         if cycle_phase.startswith(p.split(" (")[0]):
                             default_phase_idx = i; break
-                wp_phase = ["Follicular (Day 1–14)","Ovulation (Day 14–16)","Luteal (Day 16–28)","Menstruation (Day 1–5)"][default_phase_idx]
-                roadmap_ctx = f"\n\nROADMAP — Week {week_num}, {phase}:\n{(st.session_state.treatment_roadmap or '')[:1500]}\nMonthly overview:\n{st.session_state.monthly_protocol or ''}"
-                base = f"""Week {week_num} · {phase} · Cycle Day {cycle_day or '?'} · {wp_phase}
-Days: {days_str}{roadmap_ctx}
-RULES: Complete every table fully. Never cut off. Gut-friendly cooked foods. No eggs. Thyronorm first on waking if prescribed."""
-                with st.spinner("Building supplements & routine..."):
-                    r1 = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=2000, system=st.session_state.system_prompt,
-                        messages=[{"role":"user","content":base+"\n\nGenerate ONLY: ## Daily Routine & Supplement Schedule\nTable: Time | Item | Dose | Notes. Thyronorm first if prescribed. Complete all supplements."}])
+                wp_phase = phases_list[default_phase_idx]
+                roadmap_ctx_p = f"\n\nROADMAP — Week {week_num_p}, {phase_p}:\n{(st.session_state.treatment_roadmap or '')[:1500]}\nMonthly overview:\n{st.session_state.monthly_protocol or ''}"
+                base_p = f"""Week {week_num_p} · {phase_p} · Cycle Day {cycle_day or '?'} · {wp_phase} · Focus: {focus}
+Days: {days_str_p}{roadmap_ctx_p}
+RULES: Complete every table fully. Never cut off. Gut-friendly cooked foods only. No eggs. Thyronorm first on waking if prescribed."""
+
+                with st.spinner("Building supplement & routine schedule..."):
+                    r1 = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=2000,
+                        system=st.session_state.system_prompt,
+                        messages=[{"role":"user","content":base_p+"\n\nGenerate ONLY: ## Daily Routine & Supplement Schedule\nMarkdown table: Time | Item | Dose | Notes\nThyronorm first if prescribed. All supplements with exact timing. Complete fully."}])
                     p1 = r1.content[0].text
-                with st.spinner("Building nutrition plan..."):
-                    r2 = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=4096, system=st.session_state.system_prompt,
-                        messages=[{"role":"user","content":base+f"\n\nGenerate ONLY: ## 7-Day Nutrition Plan\nTable columns: Meal | {days_str}\nRows: Pre-Workout | First Meal (10-11am) | Lunch (2-3pm) | Snack (6-7pm) | Dinner (8-9pm) | Seed Cycling\nOne specific food + portion per cell, max 10 words. Complete all 7 days."}])
+
+                with st.spinner("Building 7-day nutrition plan..."):
+                    r2 = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=4096,
+                        system=st.session_state.system_prompt,
+                        messages=[{"role":"user","content":base_p+f"\n\nGenerate ONLY: ## 7-Day Nutrition Plan\nMarkdown table. Columns: Meal Slot | {days_str_p}\nRows: Pre-Workout | First Meal (10-11am) | Lunch (2-3pm) | Snack (6-7pm) | Dinner (8-9pm) | Seed Cycling\nOne specific food + portion per cell, max 10 words. Complete all 7 days fully."}])
                     p2 = r2.content[0].text
-                with st.spinner("Building training plan..."):
-                    r3 = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=2500, system=st.session_state.system_prompt,
-                        messages=[{"role":"user","content":base+f"\n\nGenerate ONLY:\n## 7-Day Training Plan\nTable: Day | Session | Focus | Key exercises\nDays: {days_str}. Cycle-phase loads. Include rest day.\n\n## This Week\n3 bullets: sleep target, lifestyle practice, thing to monitor.\n**Start today:** [one action]"}])
+
+                with st.spinner("Building training & lifestyle plan..."):
+                    r3 = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=2500,
+                        system=st.session_state.system_prompt,
+                        messages=[{"role":"user","content":base_p+f"\n\nGenerate ONLY:\n## 7-Day Training Plan\nTable: Day | Session | Focus | Key exercises\nDays: {days_str_p}. Cycle-phase appropriate loads. Include rest day.\n\n## This Week's Priorities\n3 bullets: sleep target, lifestyle practice, thing to monitor.\n\n**Start today ({day_names_p[0]}):** [one specific action]\n\nComplete both sections fully."}])
                     p3 = r3.content[0].text
+
                 st.session_state.weekly_protocol = {"supps":p1,"nutrition":p2,"training":p3}
                 st.rerun()
         else:
-            tab = st.session_state.proto_tab
-            content = st.session_state.weekly_protocol.get(tab, "")
-            st.markdown(content)
-            st.divider()
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("Regenerate", use_container_width=True):
-                    st.session_state.weekly_protocol = None; st.rerun()
-            with col2:
-                all_content = "\n\n".join(st.session_state.weekly_protocol.values())
-                st.download_button("Download", data=all_content, file_name=f"onesattva_week{week_num}.txt", use_container_width=True)
+            wt1, wt2, wt3 = st.tabs(["💊 Supplements & Routine","🍽️ Nutrition","🏋️ Training & Lifestyle"])
+            with wt1: st.markdown(st.session_state.weekly_protocol.get("supps",""))
+            with wt2: st.markdown(st.session_state.weekly_protocol.get("nutrition",""))
+            with wt3: st.markdown(st.session_state.weekly_protocol.get("training",""))
+            if st.button("🔄 Regenerate this week", use_container_width=True):
+                st.session_state.weekly_protocol = None; st.rerun()
 
     # ════════════════════════════════════
-    # CHECK-IN SCREEN
+    # CHECK-IN
     # ════════════════════════════════════
-    elif screen == "checkin":
+    with tab_checkin:
         now_ci = datetime.now()
-        hour_ci = now_ci.hour
-        time_str = "Morning" if hour_ci < 12 else ("Afternoon" if hour_ci < 17 else "Evening")
-        st.markdown(f"<p style='font-size:22px;font-weight:500;font-family:\"Newsreader\",serif;color:#1C2330;margin:4px 0 2px;'>Check-in</p>", unsafe_allow_html=True)
-        st.markdown(f"<p style='font-size:12px;color:#5B6270;margin:0 0 14px;'>{time_str} · {date.today().strftime('%A %d %B')} · Day {cycle_day or '?'}</p>", unsafe_allow_html=True)
+        time_str = "Morning" if now_ci.hour < 12 else ("Afternoon" if now_ci.hour < 17 else "Evening")
+        st.title("📋 Daily Check-in")
+        st.caption(f"{time_str} · {date.today().strftime('%A, %d %B')} · Cycle Day {cycle_day or '?'} · {(cycle_phase or '').split(' (')[0]}")
 
-        today_ci = db_get("checkins", user_id, order_col="checkin_date", limit=1)
-        already = today_ci and today_ci[0].get("checkin_date") == date.today().isoformat()
+        today_ci2 = db_get("checkins", user_id, order_col="checkin_date", limit=1)
+        already_ci = today_ci2 and today_ci2[0].get("checkin_date") == date.today().isoformat()
 
-        prev = db_get("checkins", user_id, order_col="checkin_date", limit=2)
-        yest = prev[1] if len(prev) > 1 else None
-        pe = int(yest.get("energy",5)) if yest else 5
-        pm = int(yest.get("mood",5)) if yest else 5
-        ps = int(yest.get("stress",3)) if yest else 3
-        psh = float(yest.get("sleep_hours",7)) if yest else 7.0
-        psq = int(yest.get("sleep_quality",5)) if yest else 5
+        prev_ci = db_get("checkins", user_id, order_col="checkin_date", limit=2)
+        yest_ci = prev_ci[1] if len(prev_ci) > 1 else None
+        pe = int(yest_ci.get("energy",5)) if yest_ci else 5
+        pm = int(yest_ci.get("mood",5)) if yest_ci else 5
+        ps = int(yest_ci.get("stress",3)) if yest_ci else 3
+        psh = float(yest_ci.get("sleep_hours",7)) if yest_ci else 7.0
+        psq = int(yest_ci.get("sleep_quality",5)) if yest_ci else 5
 
-        if already and not st.session_state.get("edit_checkin"):
-            row = today_ci[0]
-            st.markdown(f"""
-<div style='background:#F2F3EF;border-left:2px solid #1D9E75;border-radius:0 14px 14px 0;padding:12px 14px;margin-bottom:12px;'>
-  <p style='font-size:12px;font-weight:600;color:#5B6270;margin:0 0 4px;text-transform:uppercase;letter-spacing:0.06em;'>Logged today ✓</p>
-  <p style='font-size:13px;color:#1C2330;margin:0;'>Energy {row.get('energy','?')} · Mood {row.get('mood','?')} · Sleep {row.get('sleep_hours','?')}h · {row.get('bloating','?')} bloating</p>
-</div>""", unsafe_allow_html=True)
+        if already_ci and not st.session_state.get("edit_checkin"):
+            row_ci = today_ci2[0]
+            st.success("✅ Logged today")
+            c1,c2,c3,c4,c5 = st.columns(5)
+            c1.metric("Energy", f"{row_ci.get('energy','?')}/10")
+            c2.metric("Mood", f"{row_ci.get('mood','?')}/10")
+            c3.metric("Sleep", f"{row_ci.get('sleep_hours','?')}h")
+            c4.metric("Bloating", row_ci.get('bloating','?'))
+            c5.metric("Workout", (row_ci.get('workout','?') or '')[:10])
 
-            if "checkin_insight" not in st.session_state or not st.session_state.checkin_insight:
-                recent_for_insight = db_get("checkins", user_id, order_col="checkin_date", limit=7)
+            if "checkin_insight" not in st.session_state or not st.session_state.get("checkin_insight"):
+                recent_insight = db_get("checkins", user_id, order_col="checkin_date", limit=7)
                 with st.spinner(""):
-                    ir = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=250,
+                    ir = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=300,
                         system=st.session_state.system_prompt,
-                        messages=[{"role":"user","content":f"Today Day {cycle_day}, {cycle_phase}. Energy {row.get('energy')}/10, bloating {row.get('bloating')}, sleep {row.get('sleep_hours')}h. Recent pattern: {', '.join([f'Day {c.get(chr(99)+chr(121)+chr(99)+chr(108)+chr(101)+chr(95)+chr(100)+chr(97)+chr(121),chr(63))}: E{c.get(chr(101)+chr(110)+chr(101)+chr(114)+chr(103)+chr(121),chr(63))}' for c in (recent_for_insight or [])[:4]])}. ONE sharp clinical observation, 2-3 sentences. Direct and specific. End with one action if warranted."}])
+                        messages=[{"role":"user","content":f"Today Day {cycle_day}, {cycle_phase}. Energy {row_ci.get('energy')}/10, bloating {row_ci.get('bloating')}, sleep {row_ci.get('sleep_hours')}h, workout {row_ci.get('workout')}. Pattern (last 5 days): {', '.join([f'E{c.get(chr(101)+chr(110)+chr(101)+chr(114)+chr(103)+chr(121),chr(63))} B{c.get(chr(98)+chr(108)+chr(111)+chr(97)+chr(116)+chr(105)+chr(110)+chr(103),chr(63))}' for c in (recent_insight or [])[:5]])}. ONE sharp clinical observation, 2 sentences max. Direct, specific. One action if warranted."}])
                     st.session_state.checkin_insight = ir.content[0].text
 
             if st.session_state.get("checkin_insight"):
-                st.markdown(f"""
-<div class='os-insight'>
-  <p style='font-size:13px;color:#1C2330;margin:0;line-height:1.6;'>{st.session_state.checkin_insight}</p>
-</div>""", unsafe_allow_html=True)
+                st.markdown(f'<div class="os-insight"><p style="font-size:13px;color:#1C2330;margin:0;line-height:1.7;">{st.session_state.checkin_insight}</p></div>', unsafe_allow_html=True)
 
-            if st.button("Edit today's entry", use_container_width=True):
+            if st.button("✏️ Edit today's entry"):
                 st.session_state.edit_checkin = True; st.rerun()
-
         else:
-            if st.session_state.get("edit_checkin") and already:
-                row = today_ci[0]
-                pe = int(row.get("energy",pe)); pm = int(row.get("mood",pm))
-                ps = int(row.get("stress",ps)); psh = float(row.get("sleep_hours",psh))
-                psq = int(row.get("sleep_quality",psq))
+            if st.session_state.get("edit_checkin") and already_ci:
+                row_ci = today_ci2[0]
+                pe = int(row_ci.get("energy",pe)); pm = int(row_ci.get("mood",pm))
+                ps = int(row_ci.get("stress",ps)); psh = float(row_ci.get("sleep_hours",psh))
+                psq = int(row_ci.get("sleep_quality",psq))
 
-            with st.form("ci_form"):
-                st.markdown("<p style='font-size:13px;font-weight:500;color:#1C2330;margin:0 0 10px;'>How are you feeling?</p>", unsafe_allow_html=True)
-                c_energy = st.slider("Energy", 1, 10, pe)
-                c_mood = st.slider("Mood", 1, 10, pm)
-                c_stress = st.slider("Stress", 1, 10, ps)
-                st.markdown("<p style='font-size:13px;font-weight:500;color:#1C2330;margin:12px 0 8px;'>Sleep</p>", unsafe_allow_html=True)
-                sl1, sl2 = st.columns(2)
-                with sl1: c_sleep = st.number_input("Hours", 0.0, 12.0, psh, step=0.5)
-                with sl2: c_sleepq = st.slider("Quality", 1, 10, psq)
-                st.markdown("<p style='font-size:13px;font-weight:500;color:#1C2330;margin:12px 0 8px;'>Gut</p>", unsafe_allow_html=True)
-                g1, g2 = st.columns(2)
-                with g1: c_bloat = st.selectbox("Bloating", ["None","Mild","Moderate","Severe"])
-                with g2: c_dig = st.selectbox("Digestion", ["Good","Average","Poor"])
-                c_bowel = st.selectbox("Bowel", ["Normal","Loose","Constipated","None today"])
-                st.markdown("<p style='font-size:13px;font-weight:500;color:#1C2330;margin:12px 0 8px;'>Activity</p>", unsafe_allow_html=True)
-                a1, a2 = st.columns(2)
-                with a1: c_work = st.selectbox("Workout", ["Strength Training","Padel","Cardio","Pilates","Walk/Steps only","Rest day","Other"])
-                with a2: c_rum = st.selectbox("Rumination", ["None","Mild (1-2)","Moderate (3-5)","Frequent (5+)"])
-                c_notes = st.text_area("Notes", placeholder="Anything unusual...", height=72)
-                if st.form_submit_button("Save", type="primary", use_container_width=True):
+            with st.form("ci_form_desk"):
+                fc1, fc2 = st.columns(2)
+                with fc1:
+                    st.markdown("**How are you feeling?**")
+                    c_energy = st.slider("Energy", 1, 10, pe)
+                    c_mood = st.slider("Mood", 1, 10, pm)
+                    c_stress = st.slider("Stress", 1, 10, ps)
+                    st.markdown("**Sleep**")
+                    c_sleep = st.number_input("Hours", 0.0, 12.0, psh, step=0.5)
+                    c_sleepq = st.slider("Quality", 1, 10, psq)
+                with fc2:
+                    st.markdown("**Gut & digestion**")
+                    c_bloat = st.selectbox("Bloating", ["None","Mild","Moderate","Severe"])
+                    c_dig = st.selectbox("Digestion", ["Good","Average","Poor"])
+                    c_bowel = st.selectbox("Bowel", ["Normal","Loose","Constipated","None today"])
+                    st.markdown("**Activity**")
+                    c_work = st.selectbox("Workout", ["Strength Training","Padel","Cardio","Pilates","Walk/Steps only","Rest day","Other"])
+                    c_rum = st.selectbox("Rumination", ["None","Mild (1-2)","Moderate (3-5)","Frequent (5+)"])
+                c_notes = st.text_area("Notes", placeholder="Anything unusual today...", height=72)
+                if st.form_submit_button("✅ Save check-in", type="primary"):
                     if cycle_day:
                         cp = "Menstruation" if cycle_day<=5 else ("Follicular" if cycle_day<=13 else ("Ovulation" if cycle_day<=16 else "Luteal"))
                     else: cp = "Unknown"
@@ -1063,183 +1038,160 @@ RULES: Complete every table fully. Never cut off. Gut-friendly cooked foods. No 
                     st.rerun()
 
     # ════════════════════════════════════
-    # COACH SCREEN
+    # COACH
     # ════════════════════════════════════
-    elif screen == "coach":
-        st.markdown("<p style='font-size:22px;font-weight:500;font-family:\"Newsreader\",serif;color:#1C2330;margin:4px 0 2px;'>Your Sattva</p>", unsafe_allow_html=True)
-        st.markdown("<p style='font-size:12px;color:#5B6270;margin:0 0 14px;'>Integrative medicine · Functional labs · Ayurveda · TCM</p>", unsafe_allow_html=True)
+    with tab_coach:
+        st.title("✦ Your Coach")
+        st.caption("Integrative medicine · Functional labs · Ayurveda · TCM")
 
         if "messages" not in st.session_state:
             st.session_state.messages = []
 
-        roadmap_ctx = ""
+        rm_ctx = ""
         if st.session_state.get("treatment_roadmap") and st.session_state.get("roadmap_committed"):
-            roadmap_ctx += f"\n\nCOMMITTED ROADMAP:\n{st.session_state.treatment_roadmap[:1200]}"
+            rm_ctx += f"\n\nCOMMITTED ROADMAP:\n{st.session_state.treatment_roadmap[:1200]}"
         if st.session_state.get("monthly_protocol"):
-            roadmap_ctx += f"\n\nMONTHLY PROTOCOL:\n{st.session_state.monthly_protocol[:600]}"
-        cycle_ctx = f"\n\nTODAY: {date.today().strftime('%A %d %B %Y')} · Cycle Day {cycle_day or '?'} · {cycle_phase or 'Unknown'}"
-        if days_to_next: cycle_ctx += f" · {days_to_next}d until next period"
-        full_system = st.session_state.system_prompt + cycle_ctx + roadmap_ctx
+            rm_ctx += f"\n\nMONTHLY PROTOCOL:\n{st.session_state.monthly_protocol[:600]}"
+        cycle_ctx_c = f"\n\nTODAY: {date.today().strftime('%A %d %B %Y')} · Day {cycle_day or '?'} · {cycle_phase or 'Unknown'}"
+        if days_to_next: cycle_ctx_c += f" · {days_to_next}d until next period"
+        full_system_c = st.session_state.system_prompt + cycle_ctx_c + rm_ctx
 
         if not st.session_state.messages:
-            last_ci = db_get("checkins", user_id, order_col="checkin_date", limit=1)
-            ctx_line = f"Day {cycle_day}, {(cycle_phase or '').split(' (')[0]}"
-            if last_ci and last_ci[0].get("energy") and int(last_ci[0]["energy"]) <= 4:
-                ctx_line += f" · Low energy ({last_ci[0]['energy']}/10) logged"
-            elif last_ci and last_ci[0].get("bloating") in ["Moderate","Severe"]:
-                ctx_line += f" · {last_ci[0]['bloating'].lower()} bloating logged"
-            wr = db_get("wearable_data", user_id, order_col="data_date", limit=1)
-            if wr and wr[0].get("recovery_score") and float(wr[0]["recovery_score"]) < 50:
-                ctx_line += f" · Recovery {float(wr[0]['recovery_score']):.0f}%"
+            last_ci_c = db_get("checkins", user_id, order_col="checkin_date", limit=1)
+            ctx_bits = [f"Day {cycle_day}, {(cycle_phase or '').split(' (')[0]}"]
+            if last_ci_c and last_ci_c[0].get("energy") and int(last_ci_c[0]["energy"]) <= 4:
+                ctx_bits.append(f"Low energy ({last_ci_c[0]['energy']}/10)")
+            if last_ci_c and last_ci_c[0].get("bloating") in ["Moderate","Severe"]:
+                ctx_bits.append(f"{last_ci_c[0]['bloating'].lower()} bloating")
+            wr_c = db_get("wearable_data", user_id, order_col="data_date", limit=1)
+            if wr_c and wr_c[0].get("recovery_score") and float(wr_c[0]["recovery_score"]) < 50:
+                ctx_bits.append(f"Recovery {float(wr_c[0]['recovery_score']):.0f}%")
 
-            st.markdown(f"""
-<div class='os-insight' style='margin-bottom:16px;'>
-  <p style='font-size:13px;color:#1C2330;margin:0 0 4px;font-weight:500;'>Good to see you, {first_name}.</p>
-  <p style='font-size:12px;color:#5B6270;margin:0;'>{ctx_line}</p>
-</div>""", unsafe_allow_html=True)
+            st.markdown(f'<div class="os-insight"><p style="font-size:14px;font-weight:500;color:#1C2330;margin:0 0 4px;">{first_name}\'s context today</p><p style="font-size:13px;color:#5B6270;margin:0;">{" · ".join(ctx_bits)}</p></div>', unsafe_allow_html=True)
 
-            st.markdown("<p style='font-size:12px;font-weight:600;color:#5B6270;margin:0 0 8px;letter-spacing:0.05em;text-transform:uppercase;'>Ask me</p>", unsafe_allow_html=True)
-            quick_prompts = [
-                (f"Supplements today, Day {cycle_day} {(cycle_phase or '').split(' (')[0]} — exact brands, doses, timing in order.",
-                 "Supplements today"),
-                (f"What to eat today — Day {cycle_day}, {(cycle_phase or '').split(' (')[0]} phase. Specific meals with portions and timing.",
-                 "What to eat today"),
-                (f"I'm in {(cycle_phase or '').split(' (')[0]} phase, Day {cycle_day}. What should I do differently this week for training and lifestyle?",
-                 f"{(cycle_phase or '').split(' (')[0]} phase guidance"),
-                ("Based on my labs — prolactin, FT3, ferritin — what are the specific biological blockers stopping me from losing weight?",
-                 "Why am I not losing weight?"),
+            st.markdown("<p style='font-size:12px;font-weight:600;color:#5B6270;margin:0 0 8px;letter-spacing:0.06em;text-transform:uppercase;'>Quick questions</p>", unsafe_allow_html=True)
+            quick = [
+                (f"My supplement schedule today — Day {cycle_day} {(cycle_phase or '').split(' (')[0]}. Exact brands, doses, timing in order.", "Supplements today"),
+                (f"What to eat today — Day {cycle_day}, {(cycle_phase or '').split(' (')[0]} phase. Specific meals with portions and timing for my schedule.", "What to eat today"),
+                (f"I'm in {(cycle_phase or '').split(' (')[0]} phase, Day {cycle_day}. What should I do differently this week for training and lifestyle?", f"{(cycle_phase or '').split(' (')[0]} phase guidance"),
+                ("Based on my labs — prolactin, FT3, ferritin — what are the specific biological blockers stopping me from losing weight? Be direct.", "Why am I not losing weight?"),
             ]
-            for prompt_text, btn_label in quick_prompts:
-                if st.button(f"{btn_label} ↗", use_container_width=True, key=f"qp_{i}_{screen}"):
-                    st.session_state.messages.append({"role":"user","content":prompt_text})
-                    st.rerun()
+            qc1, qc2 = st.columns(2)
+            for i, (pt, bl) in enumerate(quick):
+                col = qc1 if i % 2 == 0 else qc2
+                with col:
+                    if st.button(f"{bl} ↗", use_container_width=True, key=f"qp_desk_{i}"):
+                        st.session_state.messages.append({"role":"user","content":pt}); st.rerun()
 
-        MAX_HIST = 20
-        for msg in st.session_state.messages[-MAX_HIST:]:
+        MAX_H = 20
+        for msg in st.session_state.messages[-MAX_H:]:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
 
-        _, clear_col = st.columns([5,1])
-        with clear_col:
-            if st.button("Clear", key="clear_chat"):
+        _, clr = st.columns([6,1])
+        with clr:
+            if st.button("Clear", key="clear_chat_desk"):
                 st.session_state.messages = []; st.rerun()
 
-        if prompt := st.chat_input("Ask your Sattva anything..."):
-            st.session_state.messages.append({"role":"user","content":prompt})
-            with st.chat_message("user"): st.markdown(prompt)
+        if prompt_c := st.chat_input("Ask your Sattva anything..."):
+            st.session_state.messages.append({"role":"user","content":prompt_c})
+            with st.chat_message("user"): st.markdown(prompt_c)
             with st.chat_message("assistant"):
                 with st.spinner(""):
-                    r = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=4096,
-                        system=full_system, messages=st.session_state.messages[-MAX_HIST:])
-                    reply = r.content[0].text
-                    st.markdown(reply)
-            st.session_state.messages.append({"role":"assistant","content":reply})
+                    r_c = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=4096,
+                        system=full_system_c, messages=st.session_state.messages[-MAX_H:])
+                    reply_c = r_c.content[0].text
+                    st.markdown(reply_c)
+            st.session_state.messages.append({"role":"assistant","content":reply_c})
 
     # ════════════════════════════════════
-    # PROFILE SCREEN
+    # PROFILE
     # ════════════════════════════════════
-    elif screen == "profile":
-        st.markdown("<p style='font-size:22px;font-weight:500;font-family:\"Newsreader\",serif;color:#1C2330;margin:4px 0 2px;'>Profile</p>", unsafe_allow_html=True)
+    with tab_profile:
+        st.title("👤 Profile")
 
-        # Section selector
-        sections = [("overview","Overview"),("edit","Edit details"),("labs","Labs"),("wearable","Wearable"),("roadmap","Roadmap")]
-        sec_cols = st.columns(len(sections))
-        for i, (sid, slabel) in enumerate(sections):
-            with sec_cols[i]:
-                active = st.session_state.profile_section == sid
-                if st.button(slabel, key=f"ps_{sid}_{screen}", use_container_width=True,
-                             type="primary" if active else "secondary"):
-                    st.session_state.profile_section = sid
-                    st.rerun()
+        pt1, pt2, pt3, pt4, pt5 = st.tabs(["Overview","Edit Details","Labs","Wearable","Roadmap"])
 
-        st.divider()
-        psec = st.session_state.profile_section
-
-        # ── OVERVIEW ──────────────────────────────────────────────────────────────
-        if psec == "overview":
+        # ── OVERVIEW ─────────────────────────────────────────────────────────────
+        with pt1:
             if profile:
-                st.markdown(f"""
-<div class='os-card' style='display:flex;align-items:center;gap:12px;'>
-  <div style='width:48px;height:48px;border-radius:50%;background:#1C2330;display:flex;align-items:center;justify-content:center;flex-shrink:0;'>
-    <span style='color:#F2F3EF;font-size:16px;font-weight:500;'>{"".join([w[0] for w in (profile.get("full_name","?? ")).split()[:2]])}</span>
-  </div>
-  <div>
-    <p style='font-size:15px;font-weight:500;margin:0;color:#1C2330;'>{profile.get("full_name","")}</p>
-    <p style='font-size:12px;color:#5B6270;margin:2px 0 0;'>{profile.get("age","?")} · {profile.get("sex","")} · {profile.get("blood_group","")} · {profile.get("location","")}</p>
-    <p style='font-size:12px;color:#5B6270;margin:2px 0 0;'>{profile.get("diet","")}</p>
-  </div>
+                ov1, ov2 = st.columns([2,1])
+                with ov1:
+                    st.markdown(f"""
+<div class='os-card'>
+  <p style='font-family:"Newsreader",serif;font-size:1.3rem;color:#1C2330;margin:0 0 4px;font-weight:500;'>{profile.get("full_name","")}</p>
+  <p style='font-size:13px;color:#5B6270;margin:0;'>{profile.get("age","?")} yr · {profile.get("sex","")} · {profile.get("blood_group","")} · {profile.get("location","")}</p>
+  <p style='font-size:13px;color:#5B6270;margin:3px 0 0;'>{profile.get("diet","")}{f" · Allergies: {profile.get('allergies')}" if profile.get("allergies") else ""}</p>
+  {f"<p style='font-size:12px;color:#5B6270;margin:3px 0 0;'>Alcohol: {profile.get('alcohol')} · Smoking: {profile.get('smoking')}</p>" if profile.get("alcohol") and profile.get("alcohol") != "None" else ""}
+</div>""", unsafe_allow_html=True)
+                with ov2:
+                    st.markdown(f"""
+<div class='os-card' style='text-align:center;'>
+  <p class='os-label' style='margin:0 0 6px;'>Today</p>
+  <p style='font-family:"JetBrains Mono",monospace;font-size:2rem;color:#B68A3D;margin:0;'>Day {cycle_day or '?'}</p>
+  <p style='font-size:12px;color:#5B6270;margin:4px 0 0;'>{(cycle_phase or '').split(' (')[0]}</p>
+  {f"<p style='font-size:11px;color:#B68A3D;margin:4px 0 0;'>~{days_to_next}d until next period</p>" if days_to_next else ""}
 </div>""", unsafe_allow_html=True)
 
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown(f"""
-<div class='os-metric'>
-  <p class='os-label' style='margin:0 0 4px;'>Height</p>
-  <p class='os-big' style='color:#1C2330;margin:0;font-size:22px;'>{profile.get("height_cm","?") if profile else "?"}<span style='font-size:12px;opacity:0.5;'>cm</span></p>
-</div>""", unsafe_allow_html=True)
-            with col2:
-                st.markdown(f"""
-<div class='os-metric'>
-  <p class='os-label' style='margin:0 0 4px;'>Weight</p>
-  <p class='os-big' style='color:#1C2330;margin:0;font-size:22px;'>{profile.get("weight_kg","?") if profile else "?"}<span style='font-size:12px;opacity:0.5;'>kg</span></p>
-</div>""", unsafe_allow_html=True)
+            oc1, oc2 = st.columns(2)
+            with oc1:
+                conds = db_get("medical_history", user_id)
+                if conds:
+                    st.markdown("##### Conditions")
+                    for c in conds:
+                        st.markdown(f"<p style='font-size:13px;color:#1C2330;margin:0 0 4px;'>· **{c['condition']}** — <span style='color:#5B6270;'>{c.get('notes','')[:60]}</span></p>", unsafe_allow_html=True)
+                meds = db_get("medications", user_id)
+                if meds:
+                    st.markdown("##### Medications")
+                    for m in [x for x in meds if x.get("active",True)]:
+                        st.markdown(f"<p style='font-size:13px;color:#1C2330;margin:0 0 4px;'>· **{m['name']}** {m.get('dose','')} — <span style='color:#5B6270;'>{m.get('frequency','')}</span></p>", unsafe_allow_html=True)
+            with oc2:
+                supps = db_get("supplements", user_id)
+                if supps:
+                    st.markdown("##### Supplements")
+                    for s in [x for x in supps if x.get("active",True)]:
+                        st.markdown(f"<p style='font-size:13px;color:#1C2330;margin:0 0 4px;'>· **{s['name']}** {s.get('dose','')} — <span style='color:#5B6270;'>{s.get('timing','')}</span></p>", unsafe_allow_html=True)
+                goals_ov = db_get("goals", user_id)
+                if goals_ov:
+                    st.markdown("##### Goals")
+                    for g in goals_ov:
+                        st.markdown(f"<p style='font-size:13px;color:#1C2330;margin:0 0 4px;'>· {g['goal']} <span style='color:#B68A3D;font-size:11px;'>({g.get('timeframe','')})</span></p>", unsafe_allow_html=True)
 
-            # Conditions, meds, supps
-            conditions = db_get("medical_history", user_id)
-            meds = db_get("medications", user_id)
-            supps = db_get("supplements", user_id)
-            if conditions:
-                st.markdown("<p style='font-size:13px;font-weight:500;color:#1C2330;margin:14px 0 8px;'>Conditions</p>", unsafe_allow_html=True)
-                for c in conditions:
-                    st.markdown(f"<p style='font-size:13px;color:#1C2330;margin:0 0 4px;'>· {c['condition']} — <span style='color:#5B6270;'>{c.get('notes','')[:60]}</span></p>", unsafe_allow_html=True)
-            if meds:
-                st.markdown("<p style='font-size:13px;font-weight:500;color:#1C2330;margin:14px 0 8px;'>Medications</p>", unsafe_allow_html=True)
-                for m in [x for x in meds if x.get("active",True)]:
-                    st.markdown(f"<p style='font-size:13px;color:#1C2330;margin:0 0 4px;'>· {m['name']} {m.get('dose','')} — <span style='color:#5B6270;'>{m.get('frequency','')}</span></p>", unsafe_allow_html=True)
-            if supps:
-                st.markdown("<p style='font-size:13px;font-weight:500;color:#1C2330;margin:14px 0 8px;'>Supplements</p>", unsafe_allow_html=True)
-                for s in [x for x in supps if x.get("active",True)]:
-                    st.markdown(f"<p style='font-size:13px;color:#1C2330;margin:0 0 4px;'>· {s['name']} {s.get('dose','')} — <span style='color:#5B6270;'>{s.get('timing','')}</span></p>", unsafe_allow_html=True)
-
-            # Profile notes
-            notes_rec = db_get_single("profile_notes", user_id)
-            if notes_rec and notes_rec.get("notes"):
-                st.markdown("<p style='font-size:13px;font-weight:500;color:#1C2330;margin:14px 0 8px;'>Notes</p>", unsafe_allow_html=True)
-                st.markdown(f"<p style='font-size:12px;color:#5B6270;line-height:1.6;'>{notes_rec['notes'][:400]}</p>", unsafe_allow_html=True)
-
-            # Cycle
-            st.markdown("<p style='font-size:13px;font-weight:500;color:#1C2330;margin:14px 0 8px;'>Cycle</p>", unsafe_allow_html=True)
-            cd = db_get_single("cycle_data", user_id)
-            with st.form("cycle_quick"):
-                cyc1, cyc2 = st.columns(2)
-                with cyc1:
-                    lp = st.date_input("Last period", value=date.fromisoformat(cd["last_period_start"]) if cd and cd.get("last_period_start") else date.today())
-                with cyc2:
-                    al = st.number_input("Avg length", 21, 40, value=cd.get("avg_cycle_length",27) if cd else 27)
-                if st.form_submit_button("Update cycle"):
-                    db_upsert("cycle_data", {"user_id":user_id,"last_period_start":lp.isoformat(),"avg_cycle_length":int(al)})
+            st.divider()
+            st.markdown("##### Cycle tracking")
+            cd_ov = db_get_single("cycle_data", user_id)
+            with st.form("cycle_ov"):
+                cc1, cc2 = st.columns(2)
+                with cc1:
+                    lp_ov = st.date_input("Last period start", value=date.fromisoformat(cd_ov["last_period_start"]) if cd_ov and cd_ov.get("last_period_start") else date.today())
+                with cc2:
+                    al_ov = st.number_input("Avg cycle length", 21, 40, value=cd_ov.get("avg_cycle_length",27) if cd_ov else 27)
+                if st.form_submit_button("Update cycle data"):
+                    db_upsert("cycle_data",{"user_id":user_id,"last_period_start":lp_ov.isoformat(),"avg_cycle_length":int(al_ov)})
                     st.success("Updated!"); st.rerun()
 
-            # Quick notes update
-            st.markdown("<p style='font-size:13px;font-weight:500;color:#1C2330;margin:14px 0 8px;'>Update your coach</p>", unsafe_allow_html=True)
-            curr_notes = notes_rec.get("notes","") if notes_rec else ""
-            new_n = st.text_area("Notes", value=curr_notes, height=80, placeholder="Medication change, new symptom, anything your coach should know...")
-            if st.button("Save notes", type="primary"):
-                db_upsert("profile_notes", {"user_id":user_id,"notes":new_n})
+            st.divider()
+            st.markdown("##### Update your coach")
+            st.caption("Medication changes, new symptoms, anything your coach should know.")
+            notes_ov = db_get_single("profile_notes", user_id)
+            curr_ov = notes_ov.get("notes","") if notes_ov else ""
+            new_notes_ov = st.text_area("Notes", value=curr_ov, height=100, placeholder="e.g. Started B-Complex on 15 June. Stopped Sampraz.")
+            if st.button("Save notes", type="primary", key="save_notes_ov"):
+                db_upsert("profile_notes",{"user_id":user_id,"notes":new_notes_ov})
                 st.session_state.system_prompt = build_system_prompt(user_id, profile)
                 st.success("Saved.")
 
-        # ── EDIT ──────────────────────────────────────────────────────────────────
-        elif psec == "edit":
-            with st.form("profile_edit_form"):
-                pc1, pc2 = st.columns(2)
-                with pc1:
+        # ── EDIT DETAILS ─────────────────────────────────────────────────────────
+        with pt2:
+            with st.form("profile_edit"):
+                ed1, ed2 = st.columns(2)
+                with ed1:
                     p_name = st.text_input("Full name", value=profile.get("full_name","") if profile else "")
                     p_dob_v = profile.get("date_of_birth") if profile else None
                     p_dob = st.date_input("Date of birth", value=date.fromisoformat(p_dob_v) if p_dob_v else date(1990,1,1), min_value=date(1940,1,1), max_value=date.today())
                     p_sex = st.selectbox("Sex", ["","Female","Male","Intersex"], index=["","Female","Male","Intersex"].index(profile.get("sex","")) if profile and profile.get("sex","") in ["Female","Male","Intersex"] else 0)
                     p_h = st.number_input("Height (cm)", 100, 220, value=int(profile.get("height_cm",165)) if profile and profile.get("height_cm") else 165)
-                with pc2:
+                with ed2:
                     p_w = st.number_input("Weight (kg)", 30, 200, value=int(profile.get("weight_kg",60)) if profile and profile.get("weight_kg") else 60)
                     p_bl = st.selectbox("Blood group", ["","A+","A-","B+","B-","O+","O-","AB+","AB-"], index=["","A+","A-","B+","B-","O+","O-","AB+","AB-"].index(profile.get("blood_group","")) if profile and profile.get("blood_group","") in ["A+","A-","B+","B-","O+","O-","AB+","AB-"] else 0)
                     p_loc = st.text_input("Location", value=profile.get("location","") if profile else "")
@@ -1252,113 +1204,119 @@ RULES: Complete every table fully. Never cut off. Gut-friendly cooked foods. No 
                     st.success("Saved!"); st.rerun()
 
             st.divider()
-            col_l, col_r = st.columns(2)
-            with col_l:
-                st.markdown("**Goals**")
-                goals = db_get("goals", user_id)
-                for g in goals:
+            el1, el2 = st.columns(2)
+            with el1:
+                st.markdown("##### Goals")
+                goals_e = db_get("goals", user_id)
+                for g in goals_e:
                     gc1,gc2 = st.columns([5,1])
-                    gc1.write(f"{g['goal'][:40]} _{g.get('timeframe','')}_")
-                    if gc2.button("✕",key=f"dg_{g['id']}"): db_delete("goals",g["id"]); st.rerun()
-                with st.form("ag"):
-                    ng1,ng2 = st.columns([3,1])
-                    with ng1: ng = st.text_input("Goal")
-                    with ng2: ntf = st.selectbox("",["3mo","6mo","12mo","12mo+"])
+                    gc1.write(f"{g['goal'][:50]} _{g.get('timeframe','')}_")
+                    if gc2.button("✕",key=f"dg_e_{g['id']}"): db_delete("goals",g["id"]); st.rerun()
+                with st.form("ag_e"):
+                    ag1,ag2 = st.columns([3,1])
+                    with ag1: ng = st.text_input("Goal")
+                    with ag2: ntf = st.selectbox("",["3mo","6mo","12mo","12mo+"])
                     if st.form_submit_button("+ Add") and ng:
                         db_upsert("goals",{"user_id":user_id,"goal":ng,"timeframe":ntf}); st.rerun()
 
-                st.markdown("**Conditions**")
-                conds = db_get("medical_history", user_id)
-                for c in conds:
+                st.markdown("##### Conditions")
+                conds_e = db_get("medical_history", user_id)
+                for c in conds_e:
                     cc1,cc2 = st.columns([5,1])
-                    cc1.write(f"**{c['condition']}** {c.get('notes','')[:30]}")
-                    if cc2.button("✕",key=f"dc_{c['id']}"): db_delete("medical_history",c["id"]); st.rerun()
-                with st.form("ac"):
-                    nc1,nc2 = st.columns([3,2])
-                    with nc1: nc = st.text_input("Condition")
-                    with nc2: nn = st.text_input("Notes")
+                    cc1.write(f"**{c['condition']}** {c.get('notes','')[:40]}")
+                    if cc2.button("✕",key=f"dc_e_{c['id']}"): db_delete("medical_history",c["id"]); st.rerun()
+                with st.form("ac_e"):
+                    ac1,ac2 = st.columns([3,2])
+                    with ac1: nc = st.text_input("Condition")
+                    with ac2: nn = st.text_input("Notes")
                     if st.form_submit_button("+ Add") and nc:
                         db_upsert("medical_history",{"user_id":user_id,"condition":nc,"notes":nn}); st.rerun()
 
-            with col_r:
-                st.markdown("**Medications**")
-                meds = db_get("medications", user_id)
-                for m in meds:
+            with el2:
+                st.markdown("##### Medications")
+                meds_e = db_get("medications", user_id)
+                for m in meds_e:
                     mc1,mc2 = st.columns([5,1])
                     mc1.write(f"**{m['name']}** {m.get('dose','')} {m.get('frequency','')}")
-                    if mc2.button("✕",key=f"dm_{m['id']}"): db_delete("medications",m["id"]); st.rerun()
-                with st.form("am"):
-                    mm1,mm2,mm3 = st.columns(3)
-                    with mm1: nm = st.text_input("Med")
-                    with mm2: nd = st.text_input("Dose")
-                    with mm3: nf = st.text_input("Freq")
+                    if mc2.button("✕",key=f"dm_e_{m['id']}"): db_delete("medications",m["id"]); st.rerun()
+                with st.form("am_e"):
+                    am1,am2,am3 = st.columns(3)
+                    with am1: nm = st.text_input("Medication")
+                    with am2: nd = st.text_input("Dose")
+                    with am3: nf = st.text_input("Frequency")
                     if st.form_submit_button("+ Add") and nm:
                         db_upsert("medications",{"user_id":user_id,"name":nm,"dose":nd,"frequency":nf,"active":True}); st.rerun()
 
-                st.markdown("**Supplements**")
-                supps = db_get("supplements", user_id)
-                for s in supps:
+                st.markdown("##### Supplements")
+                supps_e = db_get("supplements", user_id)
+                for s in supps_e:
                     sc1,sc2 = st.columns([5,1])
                     sc1.write(f"**{s['name']}** {s.get('dose','')} ({s.get('timing','')})")
-                    if sc2.button("✕",key=f"ds_{s['id']}"): db_delete("supplements",s["id"]); st.rerun()
-                with st.form("as"):
-                    ss1,ss2,ss3 = st.columns(3)
-                    with ss1: ns = st.text_input("Supp")
-                    with ss2: nsd = st.text_input("Dose")
-                    with ss3: nst = st.text_input("Timing")
+                    if sc2.button("✕",key=f"ds_e_{s['id']}"): db_delete("supplements",s["id"]); st.rerun()
+                with st.form("as_e"):
+                    as1,as2,as3 = st.columns(3)
+                    with as1: ns = st.text_input("Supplement")
+                    with as2: nsd = st.text_input("Dose")
+                    with as3: nst = st.text_input("Timing")
                     if st.form_submit_button("+ Add") and ns:
                         db_upsert("supplements",{"user_id":user_id,"name":ns,"dose":nsd,"timing":nst,"active":True}); st.rerun()
 
-        # ── LABS ──────────────────────────────────────────────────────────────────
-        elif psec == "labs":
+        # ── LABS ─────────────────────────────────────────────────────────────────
+        with pt3:
             all_labs = db_get("lab_reports", user_id, order_col="report_date")
             if all_labs:
                 try:
-                    latest = all_labs[-1]
-                    age = (date.today()-date.fromisoformat(latest["report_date"])).days
-                    color = "#1D9E75" if age<=90 else ("#B68A3D" if age<=180 else "#C8384A")
-                    st.markdown(f"<p style='font-size:12px;color:{color};margin:0 0 12px;'>{'✅ Current' if age<=90 else '⚠️ Stale'} · Last: {latest['report_date']} ({age} days ago)</p>", unsafe_allow_html=True)
+                    latest_l = all_labs[-1]
+                    age_l = (date.today()-date.fromisoformat(latest_l["report_date"])).days
+                    col_l = "#1D9E75" if age_l<=90 else ("#B68A3D" if age_l<=180 else "#C8384A")
+                    tag_l = "✅ Current" if age_l<=90 else ("⚠️ Stale" if age_l<=180 else "🚨 Outdated")
+                    st.markdown(f"<p style='font-size:13px;color:{col_l};margin:0 0 12px;'>{tag_l} · Last: {latest_l['report_date']} ({age_l} days ago)</p>", unsafe_allow_html=True)
                 except: pass
 
-            with st.expander("Upload new report", expanded=not bool(all_labs)):
-                ld = st.date_input("Report date", value=date.today(), key="lab_d")
-                ln = st.text_input("Lab name", placeholder="Thyrocare, SRL...", key="lab_n")
-                lv = st.text_area("Paste values", height=160, key="lab_v", placeholder="TSH: 1.83\nFT3: 2.2\nProlactin: 43.6\n...")
-                if st.button("Analyse & save", type="primary", use_container_width=True, key="lab_save"):
+            with st.expander("📤 Upload new report", expanded=not bool(all_labs)):
+                ld = st.date_input("Report date", value=date.today(), key="lab_d_d")
+                ln = st.text_input("Lab name", placeholder="Thyrocare, SRL, Apollo...", key="lab_n_d")
+                lv = st.text_area("Paste lab values", height=180, key="lab_v_d",
+                    placeholder="TSH: 1.83\nFT3: 2.2\nFT4: 1.31\nProlactin: 43.6\nFerritin: 35\nVitamin D: 46\n...")
+                if st.button("Analyse & Save", type="primary", use_container_width=True, key="lab_save_d"):
                     if lv.strip():
-                        prev_ctx = ""
+                        prev_ctx_l = ""
                         if all_labs:
-                            prev = all_labs[-1]
-                            prev_ctx = f"\n\nPREVIOUS ({prev['report_date']}):\n{prev.get('raw_values','')[:600]}"
-                        with st.spinner("Analysing..."):
-                            r = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=4096,
+                            prev_l = all_labs[-1]
+                            prev_ctx_l = f"\n\nPREVIOUS ({prev_l['report_date']} · {prev_l.get('lab_name','')}):\n{prev_l.get('raw_values','')[:600]}"
+                        with st.spinner("Analysing against functional medicine ranges..."):
+                            r_l = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=4096,
                                 system=st.session_state.system_prompt,
-                                messages=[{"role":"user","content":f"Lab report {ld}, {ln}:\n{lv}{prev_ctx}\n\nAnalyse vs functional ranges. Format:\n## Key Findings\nTable: Marker | Value | Functional Range | Status (✅⚠️🚨) | vs Previous (↑↓→—)\n\n## Clinical picture\n2-3 sentences\n\n## Priority actions\n3-5 numbered, specific\n\n## Retest\nWhat and when\n\n**Start today:** [one action]\n\nComplete everything."}])
-                            st.markdown(r.content[0].text)
-                            sr = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=120,
-                                messages=[{"role":"user","content":f"One line summary max 120 chars: {lv}"}])
-                            db_upsert("lab_reports",{"user_id":user_id,"report_date":ld.isoformat(),"lab_name":ln,"raw_values":lv,"summary":sr.content[0].text[:500]})
-                            st.success("Saved.")
+                                messages=[{"role":"user","content":f"Lab report {ld}, {ln}:\n{lv}{prev_ctx_l}\n\nAnalyse vs functional ranges. Complete all sections:\n\n## Key Findings\nTable: Marker | Value | Functional Range | Status (✅⚠️🚨) | vs Previous (↑↓→—)\n\n## Clinical picture\n2-3 sentences\n\n## Priority actions\n3-5 numbered, specific actions\n\n## Retest\nWhich markers and when\n\n**Start today:** [one action]"}])
+                            st.divider()
+                            st.markdown(r_l.content[0].text)
+                            sr_l = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=120,
+                                messages=[{"role":"user","content":f"One line, max 120 chars: {lv}"}])
+                            db_upsert("lab_reports",{"user_id":user_id,"report_date":ld.isoformat(),"lab_name":ln,"raw_values":lv,"summary":sr_l.content[0].text[:500]})
+                            st.success("✅ Saved.")
                             st.session_state.system_prompt = build_system_prompt(user_id, profile)
                             st.rerun()
-                    else: st.warning("Paste lab values.")
+                    else: st.warning("Paste lab values above.")
 
             if all_labs:
-                st.markdown(f"<p style='font-size:13px;font-weight:500;color:#1C2330;margin:14px 0 8px;'>{len(all_labs)} report(s)</p>", unsafe_allow_html=True)
+                st.markdown(f"##### {len(all_labs)} report(s)")
+                if st.button("🗑️ Clear all lab history", key="clear_labs_d"):
+                    for l in all_labs: db_delete("lab_reports",l["id"])
+                    st.rerun()
                 for lab in reversed(all_labs):
                     try:
-                        age = (date.today()-date.fromisoformat(lab["report_date"])).days
-                        tag = "🟢" if age<=90 else ("🟡" if age<=180 else "⚪")
-                    except: tag = ""
-                    with st.expander(f"{tag} {lab['report_date']} · {lab.get('lab_name','')}"):
+                        age_t = (date.today()-date.fromisoformat(lab["report_date"])).days
+                        tag_t = "🟢" if age_t<=90 else ("🟡" if age_t<=180 else "⚪")
+                    except: tag_t = ""
+                    with st.expander(f"{tag_t} {lab['report_date']} · {lab.get('lab_name','')}"):
                         st.caption(lab.get("summary",""))
-                        st.text_area("Values", value=lab.get("raw_values",""), key=f"lrv_{lab['id']}", height=100)
-                        if st.button("Delete", key=f"dl_{lab['id']}"):
+                        st.text_area("Values", value=lab.get("raw_values",""), key=f"lrv_d_{lab['id']}", height=100)
+                        if st.button("🗑️ Delete", key=f"dl_d_{lab['id']}"):
                             db_delete("lab_reports",lab["id"]); st.rerun()
 
-        # ── WEARABLE ──────────────────────────────────────────────────────────────
-        elif psec == "wearable":
-            COL_MAP = {
+        # ── WEARABLE ─────────────────────────────────────────────────────────────
+        with pt4:
+            COL_MAP_W = {
                 "date":["Cycle start time","Cycle Start Time","Wake onset","Date","date"],
                 "recovery_score":["Recovery score %","Recovery Score %","Recovery Score","recovery_score"],
                 "hrv":["Heart rate variability (ms)","HRV (ms)","Heart Rate Variability (ms)","hrv"],
@@ -1370,182 +1328,190 @@ RULES: Complete every table fully. Never cut off. Gut-friendly cooked foods. No 
                 "workout_name":["Activity name","Activity Name","Sport","workout_name"],
                 "workout_strain":["Activity Strain","Workout Strain","workout_strain"],
             }
-            def find_col_w(cols, cands):
+            def fcw(cols, cands):
                 cl = {c.lower():c for c in cols}
                 for c in cands:
                     if c in cols: return c
                     if c.lower() in cl: return cl[c.lower()]
                 return None
 
-            imp = st.radio("Import", ["Upload WHOOP CSVs","Manual entry"], horizontal=True)
-            if imp == "Upload WHOOP CSVs":
-                wc1,wc2 = st.columns(2)
-                with wc1:
-                    cf = st.file_uploader("cycles.csv",type=["csv"],key="wu_cycles")
-                    sf = st.file_uploader("sleep.csv",type=["csv"],key="wu_sleep")
-                with wc2:
-                    wf = st.file_uploader("workout.csv",type=["csv"],key="wu_workout")
-                if st.button("Process & save", type="primary", use_container_width=True):
-                    merged = {}
-                    for f, fields in [(cf,["recovery_score","hrv","resting_hr","strain"]),(sf,["sleep_performance","sleep_efficiency","sleep_duration"])]:
-                        if f:
+            st.caption("Export from WHOOP app → Profile → App Settings → Export Data")
+            imp_w = st.radio("", ["Upload WHOOP CSVs","Manual entry"], horizontal=True, key="imp_w_d")
+            if imp_w == "Upload WHOOP CSVs":
+                wc1_d,wc2_d = st.columns(2)
+                with wc1_d:
+                    cf_d = st.file_uploader("cycles.csv",type=["csv"],key="wu_c_d")
+                    sf_d = st.file_uploader("sleep.csv",type=["csv"],key="wu_s_d")
+                with wc2_d:
+                    wf_d = st.file_uploader("workout.csv",type=["csv"],key="wu_w_d")
+                if st.button("Process & Save WHOOP Data", type="primary", use_container_width=True, key="whoop_save_d"):
+                    merged_w = {}
+                    for f_w, flds in [(cf_d,["recovery_score","hrv","resting_hr","strain"]),(sf_d,["sleep_performance","sleep_efficiency","sleep_duration"])]:
+                        if f_w:
                             try:
-                                df = pd.read_csv(f)
-                                dc = find_col_w(df.columns.tolist(), COL_MAP["date"])
-                                if not dc: st.warning(f"{f.name}: no date column"); continue
-                                dates = pd.to_datetime(df[dc],errors="coerce").dt.strftime("%Y-%m-%d")
-                                for field in fields:
-                                    col = find_col_w(df.columns.tolist(), COL_MAP[field])
-                                    if col:
-                                        for d,v in zip(dates,df[col]):
-                                            if pd.notna(d) and pd.notna(v):
-                                                try: merged.setdefault(d,{})[field]=float(v)
-                                                except: merged.setdefault(d,{})[field]=v
-                                st.success(f"✅ {f.name}: {len(df)} rows")
-                            except Exception as e: st.error(f"{f.name}: {e}")
-                    if wf:
+                                df_w = pd.read_csv(f_w)
+                                dc_w = fcw(df_w.columns.tolist(), COL_MAP_W["date"])
+                                if not dc_w: st.warning(f"{f_w.name}: no date col. Found: {', '.join(df_w.columns.tolist()[:6])}"); continue
+                                dts_w = pd.to_datetime(df_w[dc_w],errors="coerce").dt.strftime("%Y-%m-%d")
+                                found_f = []
+                                for fld in flds:
+                                    col_w = fcw(df_w.columns.tolist(), COL_MAP_W[fld])
+                                    if col_w:
+                                        found_f.append(fld)
+                                        for d_w,v_w in zip(dts_w,df_w[col_w]):
+                                            if pd.notna(d_w) and pd.notna(v_w):
+                                                try: merged_w.setdefault(d_w,{})[fld]=float(v_w)
+                                                except: merged_w.setdefault(d_w,{})[fld]=v_w
+                                st.success(f"✅ {f_w.name}: {len(df_w)} rows · {', '.join(found_f)}")
+                            except Exception as e: st.error(f"{f_w.name}: {e}")
+                    if wf_d:
                         try:
-                            wdf2 = pd.read_csv(wf)
-                            dc = find_col_w(wdf2.columns.tolist(), COL_MAP["date"])
-                            if dc:
-                                dates = pd.to_datetime(wdf2[dc],errors="coerce").dt.strftime("%Y-%m-%d")
-                                nc = find_col_w(wdf2.columns.tolist(), COL_MAP["workout_name"])
-                                sc_col = find_col_w(wdf2.columns.tolist(), COL_MAP["workout_strain"])
-                                for i,d in enumerate(dates):
-                                    if pd.notna(d):
-                                        if nc: merged.setdefault(d,{})["workout_name"]=str(wdf2[nc].iloc[i])
-                                        if sc_col:
-                                            try: merged.setdefault(d,{})["workout_strain"]=float(wdf2[sc_col].iloc[i])
+                            wdf_d = pd.read_csv(wf_d)
+                            dc_wd = fcw(wdf_d.columns.tolist(), COL_MAP_W["date"])
+                            if dc_wd:
+                                dts_wd = pd.to_datetime(wdf_d[dc_wd],errors="coerce").dt.strftime("%Y-%m-%d")
+                                nc_w = fcw(wdf_d.columns.tolist(), COL_MAP_W["workout_name"])
+                                sc_w = fcw(wdf_d.columns.tolist(), COL_MAP_W["workout_strain"])
+                                for i_w,d_wd in enumerate(dts_wd):
+                                    if pd.notna(d_wd):
+                                        if nc_w: merged_w.setdefault(d_wd,{})["workout_name"]=str(wdf_d[nc_w].iloc[i_w])
+                                        if sc_w:
+                                            try: merged_w.setdefault(d_wd,{})["workout_strain"]=float(wdf_d[sc_w].iloc[i_w])
                                             except: pass
-                                st.success(f"✅ workout.csv: {len(wdf2)} rows")
+                                st.success(f"✅ workout.csv: {len(wdf_d)} rows")
                         except Exception as e: st.error(f"workout.csv: {e}")
-                    if merged:
-                        for d,vals in merged.items():
-                            db_upsert("wearable_data",{"user_id":user_id,"data_date":d,**vals})
-                        st.success(f"Saved {len(merged)} days.")
+                    if merged_w:
+                        for d_mw,vals_mw in merged_w.items():
+                            db_upsert("wearable_data",{"user_id":user_id,"data_date":d_mw,**vals_mw})
+                        st.success(f"✅ Saved {len(merged_w)} days.")
                         st.session_state.system_prompt = build_system_prompt(user_id, profile)
                         st.rerun()
             else:
-                with st.form("mw"):
-                    mc1,mc2 = st.columns(2)
-                    with mc1:
-                        wd = st.date_input("Date",value=date.today())
-                        wr2 = st.number_input("Recovery (%)",0,100,50)
-                        wh = st.number_input("HRV (ms)",0,200,40)
-                    with mc2:
-                        ws = st.number_input("Sleep perf (%)",0,100,70)
-                        wst = st.number_input("Strain",0.0,21.0,10.0,step=0.1)
-                        wrhr = st.number_input("RHR (bpm)",30,120,65)
+                with st.form("mw_d"):
+                    mwc1,mwc2 = st.columns(2)
+                    with mwc1:
+                        wd_d = st.date_input("Date",value=date.today())
+                        wr2_d = st.number_input("Recovery (%)",0,100,50)
+                        wh_d = st.number_input("HRV (ms)",0,200,40)
+                    with mwc2:
+                        ws_d = st.number_input("Sleep perf (%)",0,100,70)
+                        wst_d = st.number_input("Strain",0.0,21.0,10.0,step=0.1)
+                        wrhr_d = st.number_input("RHR (bpm)",30,120,65)
                     if st.form_submit_button("Save",type="primary"):
-                        db_upsert("wearable_data",{"user_id":user_id,"data_date":wd.isoformat(),"recovery_score":wr2,"hrv":wh,"sleep_performance":ws,"strain":wst,"resting_hr":wrhr})
+                        db_upsert("wearable_data",{"user_id":user_id,"data_date":wd_d.isoformat(),"recovery_score":wr2_d,"hrv":wh_d,"sleep_performance":ws_d,"strain":wst_d,"resting_hr":wrhr_d})
                         st.success("Saved!"); st.rerun()
 
-            # Trends
-            wall = db_get("wearable_data", user_id, order_col="data_date")
-            if wall:
-                wdf3 = pd.DataFrame(wall)
-                wdf3["data_date"] = pd.to_datetime(wdf3["data_date"])
-                wdf3 = wdf3.sort_values("data_date")
-                r7 = wdf3.tail(7); r30 = wdf3.tail(30)
-                metrics_w = [("recovery_score","Recovery %"),("hrv","HRV ms"),("resting_hr","RHR"),("sleep_performance","Sleep %"),("strain","Strain")]
-                avail = [(f,l) for f,l in metrics_w if f in wdf3.columns]
-                if avail:
-                    st.markdown("<p style='font-size:13px;font-weight:500;color:#1C2330;margin:14px 0 8px;'>This week vs 30-day avg</p>", unsafe_allow_html=True)
-                    mc = st.columns(min(len(avail),2))
-                    for i,(field,label) in enumerate(avail[:4]):
-                        wv = pd.to_numeric(r7[field],errors="coerce").mean()
-                        mv = pd.to_numeric(r30[field],errors="coerce").mean()
-                        if not pd.isna(wv):
-                            d = round(wv-mv,1) if not pd.isna(mv) else None
-                            mc[i%2].metric(label,f"{wv:.1f}",delta=f"{d:+.1f}" if d else None)
+            wall_d = db_get("wearable_data", user_id, order_col="data_date")
+            if wall_d:
+                wdf_da = pd.DataFrame(wall_d)
+                wdf_da["data_date"] = pd.to_datetime(wdf_da["data_date"])
+                wdf_da = wdf_da.sort_values("data_date")
+                latest_wd = wdf_da["data_date"].max().date()
+                w_age_d = (date.today()-latest_wd).days
+                st.markdown(f"<p style='font-size:13px;color:{'#1D9E75' if w_age_d<=2 else '#B68A3D'};margin:12px 0;'>{'✅' if w_age_d<=2 else '⚠️'} Last sync: {latest_wd} ({w_age_d} days ago)</p>", unsafe_allow_html=True)
 
-                ct1,ct2 = st.tabs(["Recovery & HRV","Sleep & Strain"])
-                with ct1:
-                    rf = [f for f in ["recovery_score","hrv"] if f in wdf3.columns]
-                    if rf: st.line_chart(wdf3[["data_date"]+rf].set_index("data_date"))
-                with ct2:
-                    sf2 = [f for f in ["sleep_performance","strain"] if f in wdf3.columns]
-                    if sf2: st.line_chart(wdf3[["data_date"]+sf2].set_index("data_date"))
+                r7_d = wdf_da.tail(7); r30_d = wdf_da.tail(30)
+                mets_d = [("recovery_score","Recovery %"),("hrv","HRV ms"),("resting_hr","RHR"),("sleep_performance","Sleep %"),("strain","Strain")]
+                avail_d = [(f,l) for f,l in mets_d if f in wdf_da.columns]
+                if avail_d:
+                    st.markdown("##### This week vs 30-day average")
+                    wcols_d = st.columns(len(avail_d))
+                    for i_d,(f_d,l_d) in enumerate(avail_d):
+                        wv_d = pd.to_numeric(r7_d[f_d],errors="coerce").mean()
+                        mv_d = pd.to_numeric(r30_d[f_d],errors="coerce").mean()
+                        if not pd.isna(wv_d):
+                            delta_d = round(wv_d-mv_d,1) if not pd.isna(mv_d) else None
+                            wcols_d[i_d].metric(l_d,f"{wv_d:.1f}",delta=f"{delta_d:+.1f}" if delta_d else None)
 
-                dl1,dl2 = st.columns(2)
-                with dl1:
-                    dl = wdf3["data_date"].dt.strftime("%Y-%m-%d").tolist()
-                    dd = st.selectbox("Delete date",["—"]+list(reversed(dl)),key="del_w_d")
-                    if dd != "—" and st.button("Delete",key="del_w_b"):
-                        [db_delete("wearable_data",w["id"]) for w in wall if w["data_date"]==dd]
+                ct_d1,ct_d2 = st.tabs(["Recovery & HRV","Sleep & Strain"])
+                with ct_d1:
+                    rf_d = [f for f in ["recovery_score","hrv"] if f in wdf_da.columns]
+                    if rf_d: st.line_chart(wdf_da[["data_date"]+rf_d].set_index("data_date"))
+                with ct_d2:
+                    sf_d2 = [f for f in ["sleep_performance","strain"] if f in wdf_da.columns]
+                    if sf_d2: st.line_chart(wdf_da[["data_date"]+sf_d2].set_index("data_date"))
+
+                dl_d1,dl_d2 = st.columns(2)
+                with dl_d1:
+                    dts_list_d = wdf_da["data_date"].dt.strftime("%Y-%m-%d").tolist()
+                    dd_d = st.selectbox("Delete date",["—"]+list(reversed(dts_list_d)),key="del_wd_d")
+                    if dd_d != "—" and st.button("Delete",key="del_wb_d"):
+                        [db_delete("wearable_data",w["id"]) for w in wall_d if w["data_date"]==dd_d]
                         st.rerun()
-                with dl2:
-                    if st.button("Clear all wearable data"):
-                        [db_delete("wearable_data",w["id"]) for w in wall]
+                with dl_d2:
+                    if st.button("Clear all wearable data",key="clear_wd_d"):
+                        [db_delete("wearable_data",w["id"]) for w in wall_d]
                         st.rerun()
 
         # ── ROADMAP ───────────────────────────────────────────────────────────────
-        elif psec == "roadmap":
+        with pt5:
             if "treatment_roadmap" not in st.session_state:
                 st.session_state.treatment_roadmap = None
             if "roadmap_committed" not in st.session_state:
                 st.session_state.roadmap_committed = False
 
             if not st.session_state.treatment_roadmap:
-                saved = db_get("roadmaps", user_id, order_col="generated_at", limit=1)
-                if saved:
-                    st.session_state.treatment_roadmap = saved[0]["roadmap_text"]
-                    st.session_state.roadmap_committed = saved[0].get("committed", False)
-                    try:
-                        st.session_state.roadmap_date = datetime.fromisoformat(saved[0]["generated_at"].replace("Z","")).strftime("%d %b %Y")
+                saved_r = db_get("roadmaps", user_id, order_col="generated_at", limit=1)
+                if saved_r:
+                    st.session_state.treatment_roadmap = saved_r[0]["roadmap_text"]
+                    st.session_state.roadmap_committed = saved_r[0].get("committed",False)
+                    try: st.session_state.roadmap_date = datetime.fromisoformat(saved_r[0]["generated_at"].replace("Z","")).strftime("%d %b %Y")
                     except: st.session_state.roadmap_date = "Previously"
 
             if st.session_state.treatment_roadmap and st.session_state.roadmap_committed:
-                st.success(f"Committed roadmap · {st.session_state.get('roadmap_date','')}")
+                st.success(f"✅ Committed roadmap · {st.session_state.get('roadmap_date','')}")
                 st.markdown(st.session_state.treatment_roadmap)
                 st.divider()
-                st.download_button("Download roadmap", data=st.session_state.treatment_roadmap, file_name=f"onesattva_roadmap_{date.today()}.txt", use_container_width=True)
-                with st.expander("Update roadmap — significant change only"):
-                    st.warning("Describe what changed before regenerating.")
-                    reason = st.text_area("What has changed?")
-                    if st.button("Regenerate roadmap", type="primary") and reason.strip():
+                dl_r1, dl_r2 = st.columns(2)
+                with dl_r1:
+                    st.download_button("⬇️ Download roadmap", data=st.session_state.treatment_roadmap, file_name=f"onesattva_roadmap_{date.today()}.txt", use_container_width=True)
+                with st.expander("⚠️ Update roadmap — significant change only"):
+                    st.warning("Only update if something major has changed — new labs, new diagnosis, achieved a major goal.")
+                    reason_r = st.text_area("What has changed?", key="rm_reason_d")
+                    if st.button("Generate updated roadmap", type="primary", key="regen_rm_d") and reason_r.strip():
                         st.session_state.roadmap_committed = False
                         st.session_state.treatment_roadmap = None
-                        st.session_state.roadmap_change_reason = reason
+                        st.session_state.roadmap_change_reason = reason_r
                         st.rerun()
 
             elif st.session_state.treatment_roadmap:
-                st.info("Review your roadmap below, then commit to it.")
+                st.info("Review your roadmap below. Commit when ready — this becomes your active plan.")
                 st.markdown(st.session_state.treatment_roadmap)
                 st.divider()
-                col1,col2 = st.columns(2)
-                with col1:
-                    if st.button("Commit to this roadmap", type="primary", use_container_width=True):
+                rm_c1, rm_c2 = st.columns(2)
+                with rm_c1:
+                    if st.button("✅ Commit to this roadmap", type="primary", use_container_width=True, key="commit_rm_d"):
                         db_upsert("roadmaps",{"user_id":user_id,"roadmap_text":st.session_state.treatment_roadmap,"committed":True,"priority_focus":"","intensity":""})
                         st.session_state.roadmap_committed = True; st.rerun()
-                with col2:
-                    if st.button("Regenerate", use_container_width=True):
+                with rm_c2:
+                    if st.button("🔄 Regenerate", use_container_width=True, key="regen_rm_d2"):
                         st.session_state.treatment_roadmap = None; st.rerun()
-
             else:
-                rm1,rm2 = st.columns(2)
-                with rm1: rp = st.selectbox("Priority",["Balanced","Fastest path to conception","Fastest path to fat loss","Gut first"])
-                with rm2: ri = st.selectbox("Intensity",["Moderate","Aggressive"])
-                if st.button("Generate my treatment roadmap", type="primary", use_container_width=True):
-                    change_ctx = f"\n\nSIGNIFICANT CHANGE: {st.session_state.get('roadmap_change_reason','')}" if st.session_state.get("roadmap_change_reason") else ""
-                    with st.spinner("Building your 12-month roadmap..."):
-                        r = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=4096,
+                st.caption("Generate once, commit to it. Updates only when something significant changes.")
+                rp_d = st.selectbox("Priority", ["Balanced — all areas","Fastest path to conception","Fastest path to fat loss","Gut/digestion first"], key="rp_d")
+                ri_d = st.selectbox("Intensity", ["Moderate — sustainable","Aggressive — bigger changes faster"], key="ri_d")
+                if st.button("🗺️ Generate my treatment roadmap", type="primary", use_container_width=True, key="gen_rm_d"):
+                    chg = f"\n\nSIGNIFICANT CHANGE: {st.session_state.get('roadmap_change_reason','')}" if st.session_state.get("roadmap_change_reason") else ""
+                    with st.spinner("Building your 12-month roadmap — takes 30-40 seconds..."):
+                        r_rm = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=4096,
                             system=st.session_state.system_prompt,
-                            messages=[{"role":"user","content":f"""Generate a 12-month treatment roadmap.
-Priority: {rp} · Intensity: {ri}{change_ctx}
+                            messages=[{"role":"user","content":f"""Generate a comprehensive 12-month treatment roadmap.
+Priority: {rp_d} · Intensity: {ri_d}{chg}
+
+Use the full patient profile, labs, check-ins, and wearable data from your context.
 
 FORMAT — complete every section:
 
 ## Where Things Stand
-3-4 sentences: core blockers, why current approach is insufficient.
+3-4 sentences: core biological blockers right now and why the current approach is insufficient.
 
 ## Phase 1 — Months 0-3: [title]
-Table: Change | Current → New | Clinical Reason (5-7 rows)
-**Retest at 3 months:** [4-5 markers]
+Table: Change | Current → New | Clinical Reason (5-7 rows — supplements, diet, training, routine)
+**Retest at 3 months:** [4-5 specific markers]
 **Success looks like:** [2-3 measurable outcomes]
 
 ## Phase 2 — Months 3-6: [title]
-Same table, 4-5 rows
+Same table format, 4-5 rows
 **Retest:** [markers] · **Success:** [outcomes]
 
 ## Phase 3 — Months 6-12: [title]
@@ -1553,20 +1519,16 @@ Same table, 3-4 rows
 **Retest:** [markers] · **Success:** [outcomes]
 
 ## If Phase 1 shows no progress
-2-3 sentences: escalation path
+2-3 sentences: what it means and escalation path
 
 ## After goals are achieved
 Maintenance guidance
 
-**Start today:** [immediate action]"""}])
-                        st.session_state.treatment_roadmap = r.content[0].text
+**Start today:** [one specific immediate action]"""}])
+                        st.session_state.treatment_roadmap = r_rm.content[0].text
                         st.session_state.roadmap_date = date.today().strftime("%d %b %Y")
-                        db_upsert("roadmaps",{"user_id":user_id,"roadmap_text":st.session_state.treatment_roadmap,"committed":False,"priority_focus":rp,"intensity":ri})
+                        db_upsert("roadmaps",{"user_id":user_id,"roadmap_text":st.session_state.treatment_roadmap,"committed":False,"priority_focus":rp_d,"intensity":ri_d})
                         st.rerun()
-
-        st.divider()
-        if st.button("Sign out", key="signout"):
-            sign_out()
 
 
 
