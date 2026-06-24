@@ -1136,87 +1136,154 @@ Has the priority order changed?
     # ════════════════════════════
     with tab4b:
         st.title("🗺️ Treatment Roadmap")
-        st.caption("Strategic 3-6-12 month plan based on your labs, data, and goals.")
-
-        rm_col1, rm_col2 = st.columns(2)
-        with rm_col1:
-            rm_priority = st.selectbox("Priority focus", ["Balanced — all areas","Fastest path to natural conception","Fastest path to fat loss","Fastest path off thyroid medication","Gut/digestion first"], key="rm_priority")
-        with rm_col2:
-            rm_intensity = st.selectbox("Change intensity", ["Moderate — sustainable, gradual","Aggressive — willing to make bigger changes faster"], key="rm_intensity")
+        st.caption("Your 12-month strategic plan — generated once, committed to, updated only when significant new information warrants it.")
 
         if "treatment_roadmap" not in st.session_state:
             st.session_state.treatment_roadmap = None
         if "roadmap_date" not in st.session_state:
             st.session_state.roadmap_date = None
+        if "roadmap_committed" not in st.session_state:
+            st.session_state.roadmap_committed = False
 
-        if st.session_state.treatment_roadmap:
-            st.success(f"🗺️ Roadmap generated {st.session_state.roadmap_date}")
-
-        if st.button("🗺️ Generate Treatment Roadmap", type="primary", use_container_width=True):
-            roadmap_prompt = f"""Generate a strategic 3-6-12 month treatment roadmap.
-
-Priority: {rm_priority}
-Intensity: {rm_intensity}
-
-Use the patient's full profile, labs, check-ins, and wearable data already in your context.
-
-FORMAT — use this exact structure:
-
-## Where Things Stand
-2-3 sentences: what is NOT working and why incremental tweaks alone won't be enough.
-
-## Phase 1 — Months 0-3: [title]
-Markdown table: Change | From → To | Why It Matters (4-6 rows, concise)
-**Retest at end of Phase 1:** [3-4 specific markers]
-**Success looks like:** [1-2 sentences, measurable]
-
-## Phase 2 — Months 3-6: [title]
-Same table format, 3-5 rows
-**Retest:** [markers]
-**Success:** [sentences]
-
-## Phase 3 — Months 6-12: [title]
-Same table format
-**Retest:** [markers]
-**Success:** [sentences]
-
-## If Things Aren't Moving
-2-3 sentences: what it means if Phase 1 shows no improvement and what the next escalation would be.
-
-**Start today:** [one specific action]"""
-
-            with st.spinner("Mapping your treatment roadmap..."):
-                response = ai_client.messages.create(
-                    model="claude-sonnet-4-6",
-                    max_tokens=4096,
-                    system=st.session_state.system_prompt,
-                    messages=[{"role": "user", "content": roadmap_prompt}]
-                )
-                st.session_state.treatment_roadmap = response.content[0].text
-                st.session_state.roadmap_date = date.today().strftime("%d %b %Y")
-                # Save to DB
-                db_upsert("roadmaps", {"user_id": user_id, "priority_focus": rm_priority, "intensity": rm_intensity, "roadmap_text": st.session_state.treatment_roadmap})
-
-        if st.session_state.treatment_roadmap:
-            st.divider()
-            st.markdown(st.session_state.treatment_roadmap)
-            st.divider()
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("🔄 Regenerate", use_container_width=True):
-                    st.session_state.treatment_roadmap = None
-                    st.rerun()
-            with col2:
-                st.download_button("⬇️ Download", data=st.session_state.treatment_roadmap, file_name=f"roadmap_{date.today()}.txt", use_container_width=True)
-
-        # Load saved roadmap if none in session
+        # Load from DB on first load
         if not st.session_state.treatment_roadmap:
             saved = db_get("roadmaps", user_id, order_col="generated_at", limit=1)
             if saved:
-                st.info("You have a previously generated roadmap. Click Generate to create a new one, or it will be used automatically in your Weekly Protocol.")
-                if st.button("📂 Load Previous Roadmap"):
-                    st.session_state.treatment_roadmap = saved[0]["roadmap_text"]
-                    st.rerun()
+                st.session_state.treatment_roadmap = saved[0]["roadmap_text"]
+                st.session_state.roadmap_committed = saved[0].get("committed", False)
+                try:
+                    gen_dt = datetime.fromisoformat(saved[0]["generated_at"].replace("Z",""))
+                    st.session_state.roadmap_date = gen_dt.strftime("%d %b %Y")
+                except:
+                    st.session_state.roadmap_date = "Previously"
+
+        # ── COMMITTED STATE — locked roadmap ─────────────────────────────────────
+        if st.session_state.treatment_roadmap and st.session_state.roadmap_committed:
+            st.success(f"✅ Committed roadmap — generated {st.session_state.roadmap_date} · This is your active plan.")
+
+            st.markdown(st.session_state.treatment_roadmap)
+            st.divider()
+
+            st.download_button("⬇️ Download roadmap", data=st.session_state.treatment_roadmap,
+                file_name=f"onesattva_roadmap_{date.today()}.txt", use_container_width=True)
+
+            with st.expander("⚠️ I have significant new information and need to update my roadmap"):
+                st.warning("Your roadmap is your committed plan. Update it only if something significant has changed — new lab results, a medication change, a major health event, or a goal shift. Small week-to-week variations are handled by the weekly protocol, not the roadmap.")
+                st.markdown("**What qualifies as a significant change?**")
+                st.markdown("- New lab report showing a major shift in key markers\n- New diagnosis or medication added/removed\n- Achieved a major goal and ready to move to the next phase\n- A health event that changes your baseline (surgery, illness, pregnancy)")
+                change_reason = st.text_area("Describe what has changed:", placeholder="e.g. New Thyrocare panel shows prolactin has normalised. Starting Cabergoline. Ready to update Phase 2.")
+                if st.button("🔄 Generate Updated Roadmap", type="primary", use_container_width=True):
+                    if change_reason.strip():
+                        st.session_state.roadmap_committed = False
+                        st.session_state.treatment_roadmap = None
+                        st.session_state.roadmap_change_reason = change_reason
+                        st.rerun()
+                    else:
+                        st.error("Please describe what has changed before regenerating.")
+
+        # ── UNCOMMITTED STATE — generate or review ────────────────────────────────
+        else:
+            if st.session_state.treatment_roadmap:
+                # Has a roadmap but not yet committed — review and commit
+                st.info("📋 Review your roadmap below. When you're ready, commit to it — this becomes your fixed plan that your weekly protocols are built from.")
+                st.markdown(st.session_state.treatment_roadmap)
+                st.divider()
+
+                st.markdown("##### Ready to commit to this plan?")
+                st.caption("Committing means this becomes your active roadmap. Your weekly protocols will be built from it. You can update it later if something significant changes.")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Commit to this roadmap", type="primary", use_container_width=True):
+                        db_upsert("roadmaps", {
+                            "user_id": user_id,
+                            "roadmap_text": st.session_state.treatment_roadmap,
+                            "committed": True,
+                            "priority_focus": st.session_state.get("rm_priority_saved",""),
+                            "intensity": st.session_state.get("rm_intensity_saved","")
+                        })
+                        st.session_state.roadmap_committed = True
+                        st.success("Roadmap committed. Your weekly protocols will now be built from this plan.")
+                        st.rerun()
+                with col2:
+                    if st.button("🔄 Regenerate instead", use_container_width=True):
+                        st.session_state.treatment_roadmap = None
+                        st.rerun()
+            else:
+                # No roadmap yet — generate
+                st.markdown("##### Generate your treatment roadmap")
+                st.caption("This is generated once based on your full profile, labs, and goals. Take time to review it before committing.")
+
+                rm_col1, rm_col2 = st.columns(2)
+                with rm_col1:
+                    rm_priority = st.selectbox("Priority focus", ["Balanced — all areas","Fastest path to natural conception","Fastest path to fat loss","Fastest path off thyroid medication","Gut/digestion first"], key="rm_priority")
+                with rm_col2:
+                    rm_intensity = st.selectbox("Change intensity", ["Moderate — sustainable, gradual","Aggressive — willing to make bigger changes faster"], key="rm_intensity")
+
+                if st.button("🗺️ Generate My Treatment Roadmap", type="primary", use_container_width=True):
+                    change_context = ""
+                    if st.session_state.get("roadmap_change_reason"):
+                        change_context = f"\n\nIMPORTANT — This is an UPDATE. The patient has reported the following significant change that warrants a new roadmap:\n{st.session_state.roadmap_change_reason}\nAdjust the new roadmap to account for this change specifically."
+
+                    roadmap_prompt = f"""Generate a comprehensive 12-month treatment roadmap for this patient.
+
+Priority: {rm_priority}
+Intensity: {rm_intensity}
+{change_context}
+
+Use the patient's full profile, labs (current and historical), check-ins, and wearable data from your context. Be direct — state what is NOT working and what needs to change, not just a description of what they already do.
+
+FORMAT — use this exact structure, completing every section fully:
+
+## Where Things Stand
+3-4 sentences: the core biological blockers right now, why the current approach is insufficient, and what the priority order should be. Be direct.
+
+## Phase 1 — Months 0-3: [give this phase a clear title]
+Markdown table with columns: Change | Current → New | Clinical Reason
+Include 5-7 rows covering: supplement changes, dietary shifts, routine changes, training adjustments. Be specific — exact doses, exact timing, exact foods.
+**Retest at 3 months:** [list 4-5 specific markers]
+**What success looks like:** [2-3 measurable outcomes]
+
+## Phase 2 — Months 3-6: [title]
+Same table format, 4-5 rows — builds on Phase 1 results
+**Retest at 6 months:** [markers]
+**What success looks like:** [outcomes]
+
+## Phase 3 — Months 6-12: [title]
+Same table format, 3-4 rows — longer-term goals, medication conversations, maintenance
+**Retest at 12 months:** [markers]
+**What success looks like:** [outcomes]
+
+## If Phase 1 Shows No Progress
+2-3 sentences: what it means, what the escalation would be, what additional testing or specialist input would be needed.
+
+## Maintenance — After Goals Are Achieved
+2-3 sentences: what the patient should continue doing long-term, what to watch for, when to return for guidance.
+
+**Start today:** [one specific, immediate action]
+
+Complete every section fully. Never cut off."""
+
+                    with st.spinner("Building your 12-month treatment roadmap — this takes 30-40 seconds..."):
+                        response = ai_client.messages.create(
+                            model="claude-sonnet-4-6",
+                            max_tokens=4096,
+                            system=st.session_state.system_prompt,
+                            messages=[{"role": "user", "content": roadmap_prompt}]
+                        )
+                        st.session_state.treatment_roadmap = response.content[0].text
+                        st.session_state.roadmap_date = date.today().strftime("%d %b %Y")
+                        st.session_state.rm_priority_saved = rm_priority
+                        st.session_state.rm_intensity_saved = rm_intensity
+                        # Save as uncommitted draft
+                        db_upsert("roadmaps", {
+                            "user_id": user_id,
+                            "roadmap_text": st.session_state.treatment_roadmap,
+                            "committed": False,
+                            "priority_focus": rm_priority,
+                            "intensity": rm_intensity
+                        })
+                        st.rerun()
+
 
     # ════════════════════════════
     # WEEKLY PROTOCOL
@@ -1255,7 +1322,8 @@ Same table format
 
         if st.button("🔄 Generate Weekly Protocol", type="primary", use_container_width=True):
             today_dt = datetime.now()
-            day_names = [(today_dt + timedelta(days=i)).strftime("%A") for i in range(7)]
+            today_date_str = today_dt.strftime("%A %d %B %Y")
+            day_names = [(today_dt + timedelta(days=i)).strftime("%A %d %b") for i in range(7)]
             days_str = ", ".join(day_names)
 
             roadmap_ctx = ""
@@ -1396,7 +1464,7 @@ Thyronorm always first on waking with plain water, nothing else for 45-60 mins."
                 with st.spinner("Thinking..."):
                     response = ai_client.messages.create(
                         model="claude-sonnet-4-6",
-                        max_tokens=2000,
+                        max_tokens=4096,
                         system=full_system,
                         messages=st.session_state.messages
                     )
