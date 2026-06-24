@@ -1019,123 +1019,182 @@ def show_main_app(user):
     # ════════════════════════════
     with tab5:
         st.title("🧪 Lab Reports")
-        st.caption("Upload new lab results — the AI compares against your history and flags changes.")
+        st.caption("Upload results — AI analyses against functional ranges and compares to your history.")
 
-        report_date = st.date_input("Report Date", value=date.today())
-        lab_name = st.text_input("Lab name (e.g. Thyrocare, SRL)")
-        raw_values = st.text_area("Paste lab values here", height=180, placeholder="TSH: 1.83\nFT3: 2.2\nProlactin: 43.6\n...")
+        all_labs = db_get("lab_reports", user_id, order_col="report_date")
+        three_months_ago_l = date.today() - timedelta(days=90)
 
-        if st.button("🔍 Analyse This Report", type="primary"):
-            if raw_values.strip():
-                existing_labs = db_get("lab_reports", user_id, order_col="report_date", limit=5)
-                history_context = ""
-                if existing_labs:
-                    history_context = "\n\nPREVIOUS LAB REPORTS FOR CONTEXT:\n" + "\n".join([f"- {l['report_date']}: {l.get('summary','')}" for l in existing_labs])
-
-                analysis_prompt = f"""New lab report uploaded — date: {report_date.isoformat()}, lab: {lab_name}
-
-NEW VALUES:
-{raw_values}
-{history_context}
-
-Compare against functional medicine optimal ranges (not just conventional). Structure your response as:
-
-## What Changed
-Table: Marker | Previous | New | Direction | Functional Status
-
-## Key Wins
-What's improving and why
-
-## Still Needs Attention
-What's still off and what to adjust
-
-## Updated Priority
-Has the priority order changed?
-
-**Start today:** [one specific action]"""
-
-                with st.spinner("Analysing your labs..."):
-                    response = ai_client.messages.create(
-                        model="claude-sonnet-4-6",
-                        max_tokens=3000,
-                        system=st.session_state.system_prompt,
-                        messages=[{"role": "user", "content": analysis_prompt}]
-                    )
-                    analysis = response.content[0].text
-
-                st.divider()
-                st.markdown(analysis)
-
-                # Save summary
-                summary_res = ai_client.messages.create(
-                    model="claude-sonnet-4-6",
-                    max_tokens=200,
-                    messages=[{"role": "user", "content": f"Summarise in one dense line (max 150 chars): {raw_values}"}]
-                )
-                summary = summary_res.content[0].text[:500]
-                db_upsert("lab_reports", {"user_id": user_id, "report_date": report_date.isoformat(), "lab_name": lab_name, "raw_values": raw_values, "summary": summary})
-                st.success("✅ Report saved.")
-                st.session_state.system_prompt = build_system_prompt(user_id, profile)
-            else:
-                st.warning("Paste some lab values to analyse.")
+        # ── Freshness status ─────────────────────────────────────────────────────
+        if all_labs:
+            latest_lab = all_labs[-1]
+            try:
+                latest_lab_date = date.fromisoformat(latest_lab["report_date"])
+                lab_age_days = (date.today() - latest_lab_date).days
+                if lab_age_days <= 90:
+                    st.success(f"✅ Current labs: {latest_lab['report_date']} ({lab_age_days} days ago) — within 3-month active window")
+                elif lab_age_days <= 180:
+                    st.warning(f"⚠️ Last labs: {latest_lab['report_date']} ({lab_age_days} days ago) — consider retesting for current status")
+                else:
+                    st.error(f"🚨 Last labs: {latest_lab['report_date']} ({lab_age_days} days ago) — too old for current recommendations. Retest needed.")
+            except:
+                pass
 
         st.divider()
-        st.subheader("📚 Lab Report History")
-        labs = db_get("lab_reports", user_id, order_col="report_date")
-        if not labs:
-            st.info("No reports uploaded yet.")
+
+        # ── Upload new report ────────────────────────────────────────────────────
+        with st.expander("📤 Upload new lab report", expanded=not bool(all_labs)):
+            report_date_l = st.date_input("Report date", value=date.today(), key="lab_report_date")
+            lab_name_l = st.text_input("Lab name", placeholder="e.g. Thyrocare, SRL, Apollo", key="lab_name")
+            raw_values_l = st.text_area("Paste lab values", height=200, key="lab_raw_vals",
+                placeholder="TSH: 1.83\nFT3: 2.2\nFT4: 1.31\nProlactin: 43.6\nFerritin: 35\nVitamin D: 46\nHaemoglobin: 11.3\n...")
+
+            if st.button("🔍 Analyse & Save Report", type="primary", use_container_width=True, key="lab_analyse_btn"):
+                if raw_values_l.strip():
+                    # Get previous report for comparison
+                    prev_lab_context = ""
+                    if all_labs:
+                        prev = all_labs[-1]
+                        prev_lab_context = f"\n\nMOST RECENT PREVIOUS REPORT ({prev['report_date']} · {prev.get('lab_name','')}):\n{prev.get('raw_values','')[:800]}"
+
+                    analysis_prompt = f"""New lab report — date: {report_date_l.isoformat()}, lab: {lab_name_l}
+
+NEW VALUES:
+{raw_values_l}
+{prev_lab_context}
+
+Analyse against functional medicine optimal ranges (not just conventional lab reference ranges).
+
+FORMAT — complete all sections fully:
+
+## Key Findings
+Markdown table: Marker | Value | Functional Range | Status | Trend vs Previous
+Use status labels: ✅ Optimal · ⚠️ Suboptimal · 🚨 Needs attention
+Include trend: ↑ Rising · ↓ Falling · → Stable · — No previous data
+
+## What This Report Tells Us
+2-3 sentences on the overall clinical picture from this panel.
+
+## Priority Actions
+Numbered list of 3-5 specific changes to make based on these results — exact supplements, doses, dietary changes, or medical conversations to initiate.
+
+## What to Retest Next Time
+Which markers need follow-up and in how many weeks/months.
+
+**Start today:** [one immediate action]
+
+Complete every section. Never cut off."""
+
+                    with st.spinner("Analysing against functional medicine ranges..."):
+                        response = ai_client.messages.create(
+                            model="claude-sonnet-4-6",
+                            max_tokens=4096,
+                            system=st.session_state.system_prompt,
+                            messages=[{"role":"user","content":analysis_prompt}]
+                        )
+                        analysis = response.content[0].text
+
+                    st.divider()
+                    st.markdown(analysis)
+
+                    # Save
+                    sum_resp = ai_client.messages.create(
+                        model="claude-sonnet-4-6", max_tokens=150,
+                        messages=[{"role":"user","content":f"One dense line summary, max 150 chars: {raw_values_l}"}]
+                    )
+                    db_upsert("lab_reports", {
+                        "user_id": user_id,
+                        "report_date": report_date_l.isoformat(),
+                        "lab_name": lab_name_l,
+                        "raw_values": raw_values_l,
+                        "summary": sum_resp.content[0].text[:500]
+                    })
+                    st.success("✅ Report saved.")
+                    st.session_state.system_prompt = build_system_prompt(user_id, profile)
+                    st.rerun()
+                else:
+                    st.warning("Paste your lab values above.")
+
+        st.divider()
+
+        # ── Lab history with freshness tags ──────────────────────────────────────
+        if not all_labs:
+            st.info("No reports uploaded yet. Upload your first report above.")
         else:
-            if st.button("🗑️ Clear All Lab History"):
-                for l in labs:
+            st.markdown(f"##### Lab history · {len(all_labs)} report(s)")
+
+            # Clear all
+            if st.button("🗑️ Clear all lab history", key="clear_labs_btn"):
+                for l in all_labs:
                     db_delete("lab_reports", l["id"])
                 st.rerun()
-            for lab in labs:
-                with st.expander(f"📅 {lab['report_date']} — {lab.get('lab_name','')}"):
-                    st.write(lab.get("summary",""))
-                    st.text_area("Raw values", value=lab.get("raw_values",""), key=f"lab_raw_{lab['id']}", height=100)
-                    if st.button("🗑️ Delete", key=f"del_lab_{lab['id']}"):
+
+            for lab in reversed(all_labs):
+                try:
+                    lab_date = date.fromisoformat(lab["report_date"])
+                    age_days = (date.today() - lab_date).days
+                    if age_days <= 90:
+                        freshness_tag = "🟢 Current"
+                    elif age_days <= 180:
+                        freshness_tag = "🟡 Recent"
+                    else:
+                        freshness_tag = "⚪ Historical"
+                except:
+                    freshness_tag = ""
+
+                with st.expander(f"{freshness_tag} · {lab['report_date']} · {lab.get('lab_name','')}"):
+                    st.caption(lab.get("summary",""))
+                    st.text_area("Raw values", value=lab.get("raw_values",""),
+                        key=f"lab_raw_{lab['id']}", height=120)
+                    if st.button("🗑️ Delete this report", key=f"del_lab_{lab['id']}"):
                         db_delete("lab_reports", lab["id"])
                         st.rerun()
+
+
 
     # ════════════════════════════
     # WEARABLE DATA
     # ════════════════════════════
     with tab6:
         st.title("⌚ Wearable Data")
-        st.caption("Import WHOOP exports — all 4 CSV files supported.")
-
-        import_method = st.radio("Import method", ["Upload WHOOP CSVs", "Manual entry for today"], horizontal=True)
+        st.caption("WHOOP data — recovery, HRV, sleep, and strain feed directly into your coach and protocols.")
 
         COL_MAP = {
-            "date": ["Cycle start time","Cycle Start Time","Wake onset","Date"],
-            "recovery_score": ["Recovery score %","Recovery Score %"],
-            "hrv": ["Heart rate variability (ms)","HRV (ms)"],
-            "resting_hr": ["Resting heart rate (bpm)","Resting Heart Rate (bpm)"],
-            "strain": ["Day Strain","Strain"],
-            "sleep_performance": ["Sleep performance %","Sleep Performance %"],
-            "sleep_efficiency": ["Sleep efficiency %","Sleep Efficiency %"],
-            "sleep_duration": ["Asleep duration (min)","Total sleep duration (min)"],
-            "workout_name": ["Activity name","Activity Name","Sport"],
-            "workout_strain": ["Activity Strain","Workout Strain"],
+            "date": ["Cycle start time","Cycle Start Time","Wake onset","Date","date"],
+            "recovery_score": ["Recovery score %","Recovery Score %","Recovery Score","recovery_score"],
+            "hrv": ["Heart rate variability (ms)","HRV (ms)","Heart Rate Variability (ms)","hrv"],
+            "resting_hr": ["Resting heart rate (bpm)","Resting Heart Rate (bpm)","resting_hr"],
+            "strain": ["Day Strain","Strain","Day strain","strain"],
+            "sleep_performance": ["Sleep performance %","Sleep Performance %","Sleep Performance","sleep_performance"],
+            "sleep_efficiency": ["Sleep efficiency %","Sleep Efficiency %","sleep_efficiency"],
+            "sleep_duration": ["Asleep duration (min)","Total sleep duration (min)","Sleep duration (min)","sleep_duration"],
+            "workout_name": ["Activity name","Activity Name","Sport","workout_name"],
+            "workout_strain": ["Activity Strain","Workout Strain","workout_strain"],
         }
 
         def find_col(cols, candidates):
+            cols_lower = {c.lower(): c for c in cols}
             for c in candidates:
                 if c in cols:
                     return c
+                if c.lower() in cols_lower:
+                    return cols_lower[c.lower()]
             return None
 
+        import_method = st.radio("Import method", ["Upload WHOOP CSVs", "Manual entry"], horizontal=True)
+
         if import_method == "Upload WHOOP CSVs":
+            st.caption("Export from WHOOP app → Profile → App Settings → Export Data (you'll receive a zip with 4 CSVs)")
             wc1, wc2 = st.columns(2)
             with wc1:
-                cycles_file = st.file_uploader("📊 cycles.csv", type=["csv"], key="cycles_up")
-                sleep_file = st.file_uploader("😴 sleep.csv", type=["csv"], key="sleep_up")
+                cycles_file = st.file_uploader("📊 cycles.csv — recovery, HRV, RHR, strain", type=["csv"], key="cycles_up")
+                sleep_file = st.file_uploader("😴 sleep.csv — sleep performance and stages", type=["csv"], key="sleep_up")
             with wc2:
-                workout_file = st.file_uploader("🏋️ workout.csv", type=["csv"], key="workout_up")
-                journal_file = st.file_uploader("📓 journal_entries.csv", type=["csv"], key="journal_up")
+                workout_file = st.file_uploader("🏋️ workout.csv — workout type and strain", type=["csv"], key="workout_up")
+                st.file_uploader("📓 journal_entries.csv (optional)", type=["csv"], key="journal_up")
 
-            if st.button("💾 Process & Save WHOOP Data", type="primary"):
+            if st.button("💾 Process & Save WHOOP Data", type="primary", use_container_width=True):
                 merged = {}
+                files_processed = 0
 
                 for f, fields in [
                     (cycles_file, ["recovery_score","hrv","resting_hr","strain"]),
@@ -1144,18 +1203,27 @@ Has the priority order changed?
                     if f:
                         try:
                             df = pd.read_csv(f)
+                            # Show detected columns for debugging
                             date_col = find_col(df.columns.tolist(), COL_MAP["date"])
-                            if date_col:
-                                dates = pd.to_datetime(df[date_col], errors="coerce").dt.strftime("%Y-%m-%d")
-                                for field in fields:
-                                    col = find_col(df.columns.tolist(), COL_MAP[field])
-                                    if col:
-                                        for d, v in zip(dates, df[col]):
-                                            if pd.notna(d):
+                            if not date_col:
+                                st.warning(f"⚠️ {f.name}: couldn't find date column. Columns found: {', '.join(df.columns.tolist()[:8])}")
+                                continue
+                            dates = pd.to_datetime(df[date_col], errors="coerce").dt.strftime("%Y-%m-%d")
+                            found_fields = []
+                            for field in fields:
+                                col = find_col(df.columns.tolist(), COL_MAP[field])
+                                if col:
+                                    found_fields.append(field)
+                                    for d, v in zip(dates, df[col]):
+                                        if pd.notna(d) and pd.notna(v):
+                                            try:
+                                                merged.setdefault(d, {})[field] = float(v)
+                                            except:
                                                 merged.setdefault(d, {})[field] = v
-                                st.success(f"✅ {f.name}: {len(df)} rows processed")
+                            st.success(f"✅ {f.name}: {len(df)} rows · fields found: {', '.join(found_fields)}")
+                            files_processed += 1
                         except Exception as e:
-                            st.error(f"{f.name} error: {e}")
+                            st.error(f"❌ {f.name}: {e}")
 
                 if workout_file:
                     try:
@@ -1168,65 +1236,131 @@ Has the priority order changed?
                             for i, d in enumerate(dates):
                                 if pd.notna(d):
                                     if name_col:
-                                        merged.setdefault(d, {})["workout_name"] = str(wdf[name_col].iloc[i])
+                                        existing = merged.get(d, {}).get("workout_name","")
+                                        new_name = str(wdf[name_col].iloc[i])
+                                        merged.setdefault(d, {})["workout_name"] = f"{existing}+{new_name}".strip("+") if existing else new_name
                                     if strain_col:
-                                        merged.setdefault(d, {})["workout_strain"] = wdf[strain_col].iloc[i]
+                                        try:
+                                            merged.setdefault(d, {})["workout_strain"] = float(wdf[strain_col].iloc[i])
+                                        except: pass
                             st.success(f"✅ workout.csv: {len(wdf)} rows processed")
+                            files_processed += 1
                     except Exception as e:
-                        st.error(f"workout.csv error: {e}")
+                        st.error(f"❌ workout.csv: {e}")
 
                 if merged:
+                    saved_count = 0
                     for d, vals in merged.items():
                         row = {"user_id": user_id, "data_date": d}
                         row.update(vals)
-                        db_upsert("wearable_data", row)
-                    st.success(f"✅ Saved {len(merged)} days of data.")
+                        if db_upsert("wearable_data", row):
+                            saved_count += 1
+                    st.success(f"✅ Saved {saved_count} days of data across {files_processed} file(s).")
                     st.session_state.system_prompt = build_system_prompt(user_id, profile)
                     st.rerun()
+                elif files_processed == 0:
+                    st.warning("No files uploaded yet. Upload at least one CSV above.")
 
         else:
             with st.form("manual_wearable"):
                 wc1, wc2 = st.columns(2)
                 with wc1:
                     w_date = st.date_input("Date", value=date.today())
-                    w_recovery = st.number_input("Recovery Score (%)", 0, 100, 50)
+                    w_recovery = st.number_input("Recovery (%)", 0, 100, 50)
                     w_hrv = st.number_input("HRV (ms)", 0, 200, 40)
                 with wc2:
                     w_sleep = st.number_input("Sleep Performance (%)", 0, 100, 70)
                     w_strain = st.number_input("Strain", 0.0, 21.0, 10.0, step=0.1)
                     w_rhr = st.number_input("Resting HR (bpm)", 30, 120, 65)
                 if st.form_submit_button("💾 Save", type="primary"):
-                    db_upsert("wearable_data", {"user_id": user_id, "data_date": w_date.isoformat(), "recovery_score": w_recovery, "hrv": w_hrv, "sleep_performance": w_sleep, "strain": w_strain, "resting_hr": w_rhr})
+                    db_upsert("wearable_data", {
+                        "user_id": user_id, "data_date": w_date.isoformat(),
+                        "recovery_score": w_recovery, "hrv": w_hrv,
+                        "sleep_performance": w_sleep, "strain": w_strain, "resting_hr": w_rhr
+                    })
                     st.success("Saved!")
                     st.rerun()
 
         st.divider()
-        st.subheader("📈 Wearable Trends")
+
+        # ── Wearable trends display ───────────────────────────────────────────────
         wearable_all = db_get("wearable_data", user_id, order_col="data_date")
         if not wearable_all:
-            st.info("No wearable data yet.")
+            st.info("No wearable data yet. Upload your WHOOP export above.")
         else:
-            if st.button("🗑️ Clear All Wearable Data"):
-                for w in wearable_all:
-                    db_delete("wearable_data", w["id"])
-                st.rerun()
-            wdf = pd.DataFrame(wearable_all)
-            wdf["data_date"] = pd.to_datetime(wdf["data_date"])
-            wdf = wdf.sort_values("data_date")
-            recent_w = wdf.tail(7)
-            metrics = [c for c in ["recovery_score","hrv","sleep_performance","strain","resting_hr"] if c in wdf.columns]
-            if metrics:
-                wcols = st.columns(len(metrics))
-                for i, m in enumerate(metrics):
-                    valid = pd.to_numeric(recent_w[m], errors="coerce").dropna()
-                    if len(valid):
-                        wcols[i].metric(m.replace("_"," ").title(), f"{valid.mean():.1f}")
-            plot_cols = [c for c in ["recovery_score","sleep_performance","strain"] if c in wdf.columns]
-            if plot_cols:
-                st.line_chart(wdf[["data_date"] + plot_cols].set_index("data_date"))
-            if "hrv" in wdf.columns:
-                st.subheader("HRV")
-                st.line_chart(wdf[["data_date","hrv"]].set_index("data_date"))
+            wdf_all = pd.DataFrame(wearable_all)
+            wdf_all["data_date"] = pd.to_datetime(wdf_all["data_date"])
+            wdf_all = wdf_all.sort_values("data_date")
+
+            # Freshness check
+            latest_w_date = wdf_all["data_date"].max().date()
+            w_age = (date.today() - latest_w_date).days
+            if w_age <= 2:
+                st.success(f"✅ Wearable data current — last sync {latest_w_date}")
+            elif w_age <= 7:
+                st.info(f"ℹ️ Last sync {latest_w_date} ({w_age} days ago)")
+            else:
+                st.warning(f"⚠️ Last sync {latest_w_date} ({w_age} days ago) — consider re-importing your WHOOP data")
+
+            # ── Current week vs 30-day average ──────────────────────────────────
+            recent_7 = wdf_all.tail(7)
+            recent_30 = wdf_all.tail(30)
+
+            st.markdown("##### This week vs 30-day average")
+            metrics_w = [
+                ("recovery_score","Recovery %"),
+                ("hrv","HRV ms"),
+                ("resting_hr","RHR bpm"),
+                ("sleep_performance","Sleep %"),
+                ("strain","Strain"),
+            ]
+            available = [(f,l) for f,l in metrics_w if f in wdf_all.columns]
+            if available:
+                wcols = st.columns(len(available))
+                for i, (field, label) in enumerate(available):
+                    week_val = pd.to_numeric(recent_7[field], errors="coerce").mean()
+                    month_val = pd.to_numeric(recent_30[field], errors="coerce").mean()
+                    if not pd.isna(week_val):
+                        delta = round(week_val - month_val, 1) if not pd.isna(month_val) else None
+                        wcols[i].metric(
+                            label,
+                            f"{week_val:.1f}",
+                            delta=f"{delta:+.1f} vs 30d avg" if delta is not None else None
+                        )
+
+            # ── Charts ───────────────────────────────────────────────────────────
+            chart_w1, chart_w2 = st.tabs(["Recovery & HRV", "Sleep & Strain"])
+            with chart_w1:
+                rc_fields = [f for f in ["recovery_score","hrv"] if f in wdf_all.columns]
+                if rc_fields:
+                    st.line_chart(wdf_all[["data_date"]+rc_fields].set_index("data_date"))
+            with chart_w2:
+                sl_fields = [f for f in ["sleep_performance","strain"] if f in wdf_all.columns]
+                if sl_fields:
+                    st.line_chart(wdf_all[["data_date"]+sl_fields].set_index("data_date"))
+
+            # ── Data management ───────────────────────────────────────────────────
+            st.divider()
+            del1, del2 = st.columns(2)
+            with del1:
+                dates_list = wdf_all["data_date"].dt.strftime("%Y-%m-%d").tolist()
+                del_date = st.selectbox("Delete a specific date", ["— select —"] + list(reversed(dates_list)), key="del_w_date")
+                if del_date != "— select —":
+                    if st.button(f"🗑️ Delete {del_date}", key="del_w_btn"):
+                        matches = [w for w in wearable_all if w["data_date"] == del_date]
+                        for w in matches:
+                            db_delete("wearable_data", w["id"])
+                        st.rerun()
+            with del2:
+                if st.button("🗑️ Clear all wearable data", key="clear_w_btn"):
+                    for w in wearable_all:
+                        db_delete("wearable_data", w["id"])
+                    st.rerun()
+
+            # Full table
+            with st.expander("Full data table"):
+                display_cols = ["data_date"] + [f for f,_ in metrics_w if f in wdf_all.columns]
+                st.dataframe(wdf_all[display_cols].sort_values("data_date", ascending=False), use_container_width=True, hide_index=True)
 
             # Delete by date
             dates_list = wdf["data_date"].dt.strftime("%Y-%m-%d").tolist()
