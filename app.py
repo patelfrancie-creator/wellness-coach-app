@@ -1289,14 +1289,155 @@ Complete every section fully. Never cut off."""
     # WEEKLY PROTOCOL
     # ════════════════════════════
     with tab4:
-        st.title("📅 Weekly Protocol")
-        st.caption("Your personalised week — synced to your roadmap and cycle phase.")
+        st.title("📅 Protocol")
+        st.caption("Monthly overview · Weekly execution · Built from your committed roadmap.")
 
-        if st.session_state.get("treatment_roadmap"):
-            st.success(f"🗺️ Synced with Treatment Roadmap ({st.session_state.get('roadmap_date','')})")
+        # ── Check for gap detection ──────────────────────────────────────────────
+        checkins_recent = db_get("checkins", user_id, order_col="checkin_date", limit=1)
+        gap_days = 0
+        if checkins_recent:
+            try:
+                last_ci = date.fromisoformat(checkins_recent[0]["checkin_date"])
+                gap_days = (date.today() - last_ci).days
+            except:
+                gap_days = 0
+
+        if gap_days >= 14:
+            st.warning(f"⚠️ It's been {gap_days} days since your last check-in. Before viewing your protocol, tell your coach what's changed — your protocol may need to be refreshed.")
+            reentry_note = st.text_area("What's changed in the last few weeks?",
+                placeholder="e.g. Been travelling, energy has been low, stopped taking some supplements, had a stressful period...",
+                key="reentry_note")
+            if st.button("📋 Update my coach and continue", type="primary", use_container_width=True):
+                if reentry_note.strip():
+                    # Save as a note and clear the weekly protocol so it regenerates
+                    existing_notes = db_get_single("profile_notes", user_id)
+                    current_notes = existing_notes.get("notes","") if existing_notes else ""
+                    updated_notes = current_notes + f"\n\n[Re-entry note {date.today()}]: {reentry_note}"
+                    db_upsert("profile_notes", {"user_id": user_id, "notes": updated_notes})
+                    st.session_state.weekly_protocol = None
+                    st.session_state.monthly_protocol = None
+                    st.session_state.system_prompt = build_system_prompt(user_id, profile)
+                    st.success("Updated. Your protocol will be refreshed with this context.")
+                    st.rerun()
+                else:
+                    st.error("Please share what's changed before continuing.")
+            st.stop()
+
+        elif gap_days >= 7:
+            st.info(f"👋 Welcome back — it's been {gap_days} days. Has anything changed? If so, update your profile notes before generating this week's protocol.")
+
+        # ── No roadmap state ─────────────────────────────────────────────────────
+        if not st.session_state.get("treatment_roadmap"):
+            st.info("💡 Generate and commit your Treatment Roadmap first — your monthly and weekly protocols are built from it.")
+            st.stop()
+
+        # ── Calculate roadmap position ───────────────────────────────────────────
+        roadmap_start = None
+        saved_roadmaps = db_get("roadmaps", user_id, order_col="generated_at", limit=1)
+        if saved_roadmaps and saved_roadmaps[0].get("committed"):
+            try:
+                roadmap_start = datetime.fromisoformat(
+                    saved_roadmaps[0]["generated_at"].replace("Z","")).date()
+            except:
+                roadmap_start = date.today()
         else:
-            st.info("💡 Generate a Treatment Roadmap first for a plan that builds toward your 3-6-12 month goals.")
+            roadmap_start = date.today()
 
+        days_into_roadmap = (date.today() - roadmap_start).days
+        current_week_num = (days_into_roadmap // 7) + 1
+        current_month_num = (days_into_roadmap // 30) + 1
+        current_month_name = date.today().strftime("%B %Y")
+
+        if days_into_roadmap < 90:
+            roadmap_phase = "Phase 1"
+        elif days_into_roadmap < 180:
+            roadmap_phase = "Phase 2"
+        else:
+            roadmap_phase = "Phase 3"
+
+        # ── MONTHLY OVERVIEW ─────────────────────────────────────────────────────
+        if "monthly_protocol" not in st.session_state:
+            st.session_state.monthly_protocol = None
+        if "monthly_protocol_month" not in st.session_state:
+            st.session_state.monthly_protocol_month = None
+
+        # Auto-generate monthly if it's a new month or doesn't exist
+        needs_monthly = (
+            not st.session_state.monthly_protocol or
+            st.session_state.monthly_protocol_month != current_month_name
+        )
+
+        with st.container():
+            month_header_col, month_btn_col = st.columns([3,1])
+            with month_header_col:
+                st.markdown(f"""
+                <div style='background:var(--mist,#F2F3EF);border-left:3px solid #B68A3D;border-radius:0 10px 10px 0;padding:14px 18px;margin-bottom:4px;'>
+                <p style='font-family:Newsreader,serif;font-size:1.1rem;color:#1C2330;margin:0;font-weight:500;'>
+                  {current_month_name} · Month {current_month_num} · {roadmap_phase} · Week {current_week_num} overall
+                </p>
+                </div>
+                """, unsafe_allow_html=True)
+            with month_btn_col:
+                if st.button("↻ Refresh month", use_container_width=True, key="refresh_month"):
+                    st.session_state.monthly_protocol = None
+
+            if needs_monthly:
+                with st.spinner(f"Building {current_month_name} overview..."):
+                    monthly_prompt = f"""Generate the monthly protocol overview for Month {current_month_num} of this patient's treatment roadmap.
+
+Today: {date.today().strftime("%d %B %Y")}
+Roadmap phase: {roadmap_phase} (Week {current_week_num} of the roadmap)
+Cycle phase today: {cycle_phase or 'Unknown'}
+
+Use the committed roadmap from your context to extract what Phase this month falls in and what the priorities are.
+
+FORMAT — concise, no fluff:
+
+## Month {current_month_num} — {current_month_name}
+**Roadmap phase:** {roadmap_phase}
+**This month's focus:** [1-2 sentences — what is the primary clinical focus this month based on the roadmap]
+
+**Milestones to hit this month:**
+- [3-4 specific, measurable milestones]
+
+**What changes this month:**
+| Area | Change |
+|---|---|
+| Supplements | [specific changes] |
+| Nutrition | [specific focus] |
+| Training | [specific focus] |
+| Lifestyle | [specific focus] |
+
+**What to monitor:**
+- [2-3 specific things to watch and log]
+
+**End of month check:** [what to assess at month end to know if Phase is working]
+
+Keep it tight — this is the map for the month, not an essay."""
+
+                    monthly_resp = ai_client.messages.create(
+                        model="claude-sonnet-4-6",
+                        max_tokens=1500,
+                        system=st.session_state.system_prompt,
+                        messages=[{"role":"user","content":monthly_prompt}]
+                    )
+                    st.session_state.monthly_protocol = monthly_resp.content[0].text
+                    st.session_state.monthly_protocol_month = current_month_name
+
+            if st.session_state.monthly_protocol:
+                with st.expander(f"📅 {current_month_name} — Monthly Overview", expanded=True):
+                    st.markdown(st.session_state.monthly_protocol)
+
+        st.divider()
+
+        # ── WEEKLY PROTOCOL ───────────────────────────────────────────────────────
+        today_dt = datetime.now()
+        day_names = [(today_dt + timedelta(days=i)).strftime("%A %d %b") for i in range(7)]
+        days_str = ", ".join(day_names)
+        week_start = day_names[0]
+        week_end = day_names[6]
+
+        # Cycle phase selector (auto-filled, overridable)
         wp1, wp2, wp3 = st.columns(3)
         with wp1:
             default_phase_idx = 0
@@ -1306,65 +1447,72 @@ Complete every section fully. Never cut off."""
                     if cycle_phase.startswith(p.split(" (")[0]):
                         default_phase_idx = i
                         break
-            wp_phase = st.selectbox("Cycle phase", ["Follicular (Day 1–14)","Ovulation (Day 14–16)","Luteal (Day 16–28)","Menstruation (Day 1–5)"], index=default_phase_idx)
+            wp_phase = st.selectbox("Cycle phase", phases, index=default_phase_idx, key="wp_phase")
         with wp2:
             st.metric("Cycle Day", cycle_day if cycle_day else "?")
         with wp3:
-            wp_focus = st.selectbox("Priority focus", ["Balanced","Fat loss","Fertility & conception","Gut healing","Energy & thyroid","Sleep & recovery"])
-
-        if st.session_state.get("treatment_roadmap"):
-            wp_week = st.selectbox("Which week of the roadmap?", ["Phase 1 — Week 1","Phase 1 — Week 2","Phase 1 — Week 3","Phase 1 — Week 4","Phase 2 — Week 5","Phase 2 — Week 6","Phase 2 — Week 7","Phase 2 — Week 8","Phase 3 — Later"])
-        else:
-            wp_week = "Week 1"
+            wp_focus = st.selectbox("Priority focus", ["Balanced","Fat loss","Fertility & conception","Gut healing","Energy & thyroid","Sleep & recovery"], key="wp_focus")
 
         if "weekly_protocol" not in st.session_state:
             st.session_state.weekly_protocol = None
+        if "weekly_protocol_week" not in st.session_state:
+            st.session_state.weekly_protocol_week = None
 
-        if st.button("🔄 Generate Weekly Protocol", type="primary", use_container_width=True):
-            today_dt = datetime.now()
-            today_date_str = today_dt.strftime("%A %d %B %Y")
-            day_names = [(today_dt + timedelta(days=i)).strftime("%A %d %b") for i in range(7)]
-            days_str = ", ".join(day_names)
+        week_label = f"Week {current_week_num} · {week_start} – {week_end}"
+        st.markdown(f"**{week_label}**")
 
-            roadmap_ctx = ""
-            if st.session_state.get("treatment_roadmap"):
-                roadmap_ctx = f"\n\nROADMAP CONTEXT — this is {wp_week}. Implement the relevant phase changes as the new baseline:\n{st.session_state.treatment_roadmap[:2000]}"
+        gen_col, dl_col = st.columns([3,1])
+        with gen_col:
+            gen_btn = st.button("🔄 Generate This Week's Protocol", type="primary", use_container_width=True)
+        with dl_col:
+            if st.session_state.weekly_protocol:
+                st.download_button("⬇️", data=st.session_state.weekly_protocol,
+                    file_name=f"onesattva_week{current_week_num}_{date.today()}.txt",
+                    use_container_width=True)
 
-            base_ctx = f"""Weekly protocol for cycle day {cycle_day or '?'}, phase {wp_phase}, focus: {wp_focus}.
-Days in order: {days_str}{roadmap_ctx}
+        if gen_btn:
+            roadmap_ctx = f"\n\nCOMMITTED ROADMAP — this is Week {current_week_num} of the roadmap ({roadmap_phase}). Implement the changes relevant to this phase. The monthly overview for this month is:\n{st.session_state.monthly_protocol or 'Not yet generated'}\n\nFull roadmap:\n{(st.session_state.treatment_roadmap or '')[:2000]}"
 
-CRITICAL: Output ONLY markdown tables. No explanations. Never cut off — complete all tables fully.
-Never include eggs. Gut-friendly foods only (cooked, warm).
-Thyronorm always first on waking with plain water, nothing else for 45-60 mins."""
+            base_ctx = f"""Weekly protocol — Week {current_week_num} of roadmap · {roadmap_phase} · {week_label}
+Cycle: Day {cycle_day or '?'} · {wp_phase} · Focus: {wp_focus}
+Days to plan: {days_str}
+{roadmap_ctx}
 
-            with st.spinner("Building supplement schedule..."):
-                r1 = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=2000, system=st.session_state.system_prompt,
-                    messages=[{"role":"user","content":base_ctx+"\n\nGenerate ONLY: Daily Routine & Supplement Schedule as a markdown table (Time | Item | Dose | Notes). Thyronorm first row."}])
+RULES: Output ONLY markdown tables. Complete all tables fully — never cut off.
+Respect diet (no eggs, gut-friendly, cooked/warm foods).
+If medication includes Thyronorm — always first on waking, plain water only, 45-60 min gap before anything else."""
+
+            with st.spinner("Building supplement & routine schedule..."):
+                r1 = ai_client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=2000,
+                    system=st.session_state.system_prompt,
+                    messages=[{"role":"user","content":base_ctx+"\n\nGenerate ONLY: ## Daily Routine & Supplement Schedule\nMarkdown table: Time | Item | Dose | Notes\nThyronorm as first row if prescribed. Include all supplements with exact timing. Complete fully."}])
                 part1 = r1.content[0].text
 
-            with st.spinner("Building nutrition plan..."):
-                r2 = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=4096, system=st.session_state.system_prompt,
-                    messages=[{"role":"user","content":base_ctx+f"\n\nGenerate ONLY: 7-Day Nutrition Plan as a markdown table. Rows: Pre-Workout | First Meal (10-11am) | Lunch (2-3pm) | Evening Snack (6-7pm) | Dinner (8-9pm) | Seed Cycling. Columns: Meal | {days_str}. One specific food per cell, max 8 words, vary slightly day to day. Complete the full table."}])
+            with st.spinner("Building 7-day nutrition plan..."):
+                r2 = ai_client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=4096,
+                    system=st.session_state.system_prompt,
+                    messages=[{"role":"user","content":base_ctx+f"\n\nGenerate ONLY: ## 7-Day Nutrition Plan\nMarkdown table. Columns: Meal Slot | {days_str}\nRows: Pre-Workout Snack | First Meal | Lunch | Evening Snack | Dinner | Seed Cycling\nOne specific food + portion per cell, max 10 words. Gut-friendly, cooked/warm. Vary day to day. Complete all 7 days fully."}])
                 part2 = r2.content[0].text
 
-            with st.spinner("Building training and lifestyle plan..."):
-                r3 = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=2500, system=st.session_state.system_prompt,
-                    messages=[{"role":"user","content":base_ctx+f"\n\nGenerate ONLY: (1) 7-Day Training Plan table (Day | Session | Focus), days starting from {day_names[0]}. Include Padel Tue/Thu, Gym 11:30am, Pilates, rest day, 10k steps. (2) This Week's Focus — exactly 3 bullets (sleep target, lifestyle practice, thing to monitor). End with bold: **Start today:** [action]"}])
+            with st.spinner("Building training & lifestyle plan..."):
+                r3 = ai_client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=3000,
+                    system=st.session_state.system_prompt,
+                    messages=[{"role":"user","content":base_ctx+f"\n\nGenerate ONLY:\n## 7-Day Training Plan\nTable: Day | Session Type | Specific Focus | Key Exercises\nUse actual day+date names: {days_str}\nInclude: rest day, recovery-aware sessions (check wearable data if available), cycle-phase appropriate loads.\n\n## This Week's Priorities\nExactly 3 bullets: (1) sleep/recovery target (2) one lifestyle or gut-healing practice (3) one thing to monitor and log\n\n**Start today ({day_names[0]}):** [one specific immediate action]\n\nComplete both sections fully."}])
                 part3 = r3.content[0].text
 
             st.session_state.weekly_protocol = part1 + "\n\n---\n\n" + part2 + "\n\n---\n\n" + part3
+            st.session_state.weekly_protocol_week = current_week_num
+            st.rerun()
 
         if st.session_state.weekly_protocol:
-            st.divider()
             st.markdown(st.session_state.weekly_protocol)
-            st.divider()
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("🔄 Regenerate", use_container_width=True):
-                    st.session_state.weekly_protocol = None
-                    st.rerun()
-            with col2:
-                st.download_button("⬇️ Download", data=st.session_state.weekly_protocol, file_name=f"protocol_{date.today()}.txt", use_container_width=True)
+            if st.button("🔄 Regenerate this week", use_container_width=True, key="regen_weekly"):
+                st.session_state.weekly_protocol = None
+                st.rerun()
+
 
     # ════════════════════════════
     # TRENDS
