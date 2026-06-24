@@ -666,194 +666,353 @@ def show_main_app(user):
     # HOME
     # ════════════════════════════
     with tab0:
+        # ── Header ──────────────────────────────────────────────────────────────
+        now_h = datetime.now()
+        hour_h = now_h.hour
+        if hour_h < 12: greeting = "Good morning"
+        elif hour_h < 17: greeting = "Good afternoon"
+        else: greeting = "Good evening"
+
         st.markdown(f"""
-        <div style='padding:8px 0 4px;'>
-        <h1 style='border:none; margin-bottom:4px !important; padding-bottom:0 !important; font-family:Newsreader,serif;'>Good to see you, {name}.</h1>
-        <p style='color:#8A9485; font-size:1.05rem; margin-top:0;'>Here's where things stand today.</p>
+        <div style='padding:8px 0 16px;'>
+          <h1 style='border:none;margin-bottom:2px !important;padding-bottom:0 !important;
+                     font-family:Newsreader,serif;font-size:2rem;'>
+            {greeting}, {name.split()[0] if name else 'there'}.
+          </h1>
+          <p style='color:#5B6270;font-family:Inter,sans-serif;font-size:0.9rem;margin:0;'>
+            {date.today().strftime('%A, %d %B %Y')} · Cycle Day {cycle_day or '?'} · {(cycle_phase or '').split(' (')[0]}
+          </p>
         </div>
         """, unsafe_allow_html=True)
 
-        checkins_today = db_get("checkins", user_id, order_col="checkin_date", limit=1)
-        today_logged = checkins_today and checkins_today[0].get("checkin_date") == date.today().isoformat()
+        # ── Flags — show any urgent attention items first ────────────────────────
+        checkins_home = db_get("checkins", user_id, order_col="checkin_date", limit=1)
+        today_logged_h = checkins_home and checkins_home[0].get("checkin_date") == date.today().isoformat()
+        labs_home = db_get("lab_reports", user_id, order_col="report_date", limit=1)
+        wearable_home = db_get("wearable_data", user_id, order_col="data_date", limit=1)
 
-        hcol1, hcol2, hcol3 = st.columns(3)
-        with hcol1:
-            st.markdown("##### 📅 Today")
-            st.write(date.today().strftime("%A, %d %B %Y"))
-            st.write(f"Cycle phase: **{cycle_phase.split(' (')[0]}**")
-        with hcol2:
-            st.markdown("##### ✅ Check-In")
-            if today_logged:
-                st.success("Logged for today")
-            else:
-                st.warning("Not logged yet")
-        with hcol3:
-            wearable_recent = db_get("wearable_data", user_id, order_col="data_date", limit=1)
-            st.markdown("##### ⌚ Recovery")
-            if wearable_recent and wearable_recent[0].get("recovery_score"):
-                st.metric("", f"{wearable_recent[0]['recovery_score']:.0f}%")
-            else:
-                st.info("No wearable data yet")
+        from datetime import date as _d2
+        three_months_ago_h = date.today() - timedelta(days=90)
 
-        st.divider()
-        st.markdown("##### 🎯 Your Goals")
-        goals = db_get("goals", user_id)
-        if goals:
-            gcols = st.columns(min(len(goals), 5))
-            for i, g in enumerate(goals[:5]):
-                with gcols[i]:
-                    st.markdown(f"""
-                    <div style='background:#FFFFFF;border:1px solid #E8DFD0;border-radius:12px;padding:16px;text-align:center;'>
-                    <div style='font-size:0.85rem;color:#6B7A65;'>{g['goal'][:50]}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-        else:
-            st.info("Add your goals in the 👤 Profile tab to see them here.")
+        flags_h = []
+        if not today_logged_h:
+            flags_h.append(("📋 Daily check-in not done yet", "info"))
+        if not labs_home:
+            flags_h.append(("🧪 No lab reports uploaded — your roadmap will be generic without them", "warning"))
+        elif labs_home:
+            try:
+                lab_age = (date.today() - date.fromisoformat(labs_home[0]["report_date"])).days
+                if lab_age > 90:
+                    flags_h.append((f"🧪 Your most recent labs are {lab_age} days old — consider retesting for current status", "warning"))
+            except: pass
+        if not st.session_state.get("roadmap_committed"):
+            flags_h.append(("🗺️ No committed roadmap — generate one in the Treatment Roadmap tab", "info"))
+        if wearable_home and wearable_home[0].get("recovery_score"):
+            rec = float(wearable_home[0]["recovery_score"])
+            if rec < 34:
+                flags_h.append((f"⌚ WHOOP recovery {rec:.0f}% — very low. Consider a rest or recovery day today", "warning"))
+
+        if flags_h:
+            for msg, kind in flags_h:
+                if kind == "warning":
+                    st.warning(msg)
+                else:
+                    st.info(msg)
 
         st.divider()
-        st.markdown("##### ⚡ Quick Actions")
-        qcol1, qcol2, qcol3 = st.columns(3)
-        with qcol1:
-            st.button("💬 Ask your coach", use_container_width=True)
-        with qcol2:
-            st.button("📋 Today's check-in", use_container_width=True)
-        with qcol3:
-            st.button("📅 View weekly protocol", use_container_width=True)
 
-        recent_checkins = db_get("checkins", user_id, order_col="checkin_date", limit=7)
-        if recent_checkins:
+        # ── Status row ───────────────────────────────────────────────────────────
+        sc1, sc2, sc3, sc4 = st.columns(4)
+
+        with sc1:
+            st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;
+                letter-spacing:0.08em;color:#5B6270;text-transform:uppercase;margin-bottom:6px;'>
+                Check-in</p>""", unsafe_allow_html=True)
+            if today_logged_h:
+                row_h = checkins_home[0]
+                st.markdown(f"""
+                <div style='background:#F2F3EF;border-radius:10px;padding:12px;'>
+                  <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;color:#1C2330;'>
+                    {row_h.get('energy','?')}<span style='font-size:0.7rem;opacity:0.5;'>/10</span>
+                  </div>
+                  <div style='font-family:Inter,sans-serif;font-size:11px;color:#5B6270;margin-top:2px;'>Energy · logged ✓</div>
+                </div>""", unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div style='background:#F2F3EF;border-radius:10px;padding:12px;border:1px dashed #C8C4BC;'>
+                  <div style='font-family:Inter,sans-serif;font-size:12px;color:#5B6270;'>Not logged yet</div>
+                </div>""", unsafe_allow_html=True)
+
+        with sc2:
+            st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;
+                letter-spacing:0.08em;color:#5B6270;text-transform:uppercase;margin-bottom:6px;'>
+                Recovery</p>""", unsafe_allow_html=True)
+            if wearable_home and wearable_home[0].get("recovery_score"):
+                rec = float(wearable_home[0]["recovery_score"])
+                rec_color = "#1D9E75" if rec >= 67 else ("#B68A3D" if rec >= 34 else "#C8384A")
+                st.markdown(f"""
+                <div style='background:#F2F3EF;border-radius:10px;padding:12px;'>
+                  <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;color:{rec_color};'>
+                    {rec:.0f}<span style='font-size:0.7rem;opacity:0.5;'>%</span>
+                  </div>
+                  <div style='font-family:Inter,sans-serif;font-size:11px;color:#5B6270;margin-top:2px;'>
+                    WHOOP · HRV {wearable_home[0].get('hrv','?')} ms
+                  </div>
+                </div>""", unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div style='background:#F2F3EF;border-radius:10px;padding:12px;border:1px dashed #C8C4BC;'>
+                  <div style='font-family:Inter,sans-serif;font-size:12px;color:#5B6270;'>No wearable data</div>
+                </div>""", unsafe_allow_html=True)
+
+        with sc3:
+            st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;
+                letter-spacing:0.08em;color:#5B6270;text-transform:uppercase;margin-bottom:6px;'>
+                Cycle</p>""", unsafe_allow_html=True)
+            st.markdown(f"""
+            <div style='background:#F2F3EF;border-radius:10px;padding:12px;'>
+              <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;color:#1C2330;'>
+                {cycle_day or '?'}
+              </div>
+              <div style='font-family:Inter,sans-serif;font-size:11px;color:#5B6270;margin-top:2px;'>
+                {(cycle_phase or 'Unknown').split(' (')[0]}{f' · {days_to_next}d to next' if days_to_next else ''}
+              </div>
+            </div>""", unsafe_allow_html=True)
+
+        with sc4:
+            st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;
+                letter-spacing:0.08em;color:#5B6270;text-transform:uppercase;margin-bottom:6px;'>
+                Roadmap</p>""", unsafe_allow_html=True)
+            if st.session_state.get("roadmap_committed"):
+                saved_rm = db_get("roadmaps", user_id, order_col="generated_at", limit=1)
+                rm_start = None
+                if saved_rm:
+                    try:
+                        rm_start = datetime.fromisoformat(saved_rm[0]["generated_at"].replace("Z","")).date()
+                    except: pass
+                days_in = (date.today() - rm_start).days if rm_start else 0
+                week_in = (days_in // 7) + 1
+                phase_in = "Phase 1" if days_in < 90 else ("Phase 2" if days_in < 180 else "Phase 3")
+                st.markdown(f"""
+                <div style='background:#F2F3EF;border-radius:10px;padding:12px;'>
+                  <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;color:#1C2330;'>W{week_in}</div>
+                  <div style='font-family:Inter,sans-serif;font-size:11px;color:#5B6270;margin-top:2px;'>{phase_in} · committed ✓</div>
+                </div>""", unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div style='background:#F2F3EF;border-radius:10px;padding:12px;border:1px dashed #C8C4BC;'>
+                  <div style='font-family:Inter,sans-serif;font-size:12px;color:#5B6270;'>No roadmap yet</div>
+                </div>""", unsafe_allow_html=True)
+
+        st.divider()
+
+        # ── This week's focus (from monthly protocol) ────────────────────────────
+        if st.session_state.get("monthly_protocol"):
+            with st.expander("📅 This month's focus", expanded=True):
+                # Show just the first section of monthly protocol
+                monthly_lines = st.session_state.monthly_protocol.split("\n")
+                focus_lines = [l for l in monthly_lines if l.strip() and not l.startswith("#")][:6]
+                st.markdown("\n".join(focus_lines))
+
+        # ── 7-day trend mini-chart ───────────────────────────────────────────────
+        recent_checkins_h = db_get("checkins", user_id, order_col="checkin_date", limit=7)
+        if recent_checkins_h and len(recent_checkins_h) >= 3:
+            st.markdown("##### Last 7 days")
+            df_h = pd.DataFrame(recent_checkins_h)
+            hm1, hm2, hm3 = st.columns(3)
+            if "energy" in df_h.columns:
+                avg_e = pd.to_numeric(df_h["energy"], errors="coerce").mean()
+                hm1.metric("Avg Energy", f"{avg_e:.1f}/10")
+            if "sleep_hours" in df_h.columns:
+                avg_s = pd.to_numeric(df_h["sleep_hours"], errors="coerce").mean()
+                hm2.metric("Avg Sleep", f"{avg_s:.1f} hrs")
+            if "mood" in df_h.columns:
+                avg_m = pd.to_numeric(df_h["mood"], errors="coerce").mean()
+                hm3.metric("Avg Mood", f"{avg_m:.1f}/10")
+
+        # ── Goals ────────────────────────────────────────────────────────────────
+        goals_h = db_get("goals", user_id)
+        if goals_h:
             st.divider()
-            st.markdown("##### 📊 Last 7 Days")
-            df_r = pd.DataFrame(recent_checkins)
-            mcol1, mcol2, mcol3 = st.columns(3)
-            if "energy" in df_r.columns:
-                mcol1.metric("Avg Energy", f"{df_r['energy'].mean():.1f}/10")
-            if "sleep_hours" in df_r.columns:
-                mcol2.metric("Avg Sleep", f"{df_r['sleep_hours'].mean():.1f} hrs")
-            if "mood" in df_r.columns:
-                mcol3.metric("Avg Mood", f"{df_r['mood'].mean():.1f}/10")
+            st.markdown("##### Your goals")
+            for g in goals_h[:4]:
+                tf = g.get("timeframe","")
+                st.markdown(f"""
+                <div style='display:flex;justify-content:space-between;align-items:center;
+                            padding:10px 14px;background:#F2F3EF;border-radius:8px;margin-bottom:6px;'>
+                  <span style='font-family:Inter,sans-serif;font-size:13px;color:#1C2330;'>{g['goal']}</span>
+                  {f"<span style='font-family:Inter,sans-serif;font-size:11px;color:#B68A3D;white-space:nowrap;margin-left:12px;'>{tf}</span>" if tf else ""}
+                </div>""", unsafe_allow_html=True)
 
     # ════════════════════════════
     # PROFILE
     # ════════════════════════════
     with tab_profile:
         st.title("👤 My Profile")
-        st.caption("Your health profile — the foundation your coach reasons from.")
+        st.caption("Your complete health record — the foundation your coach reasons from.")
 
-        with st.expander("✏️ Personal Details", expanded=not bool(profile and profile.get("age"))):
+        # ── Personal info card ───────────────────────────────────────────────────
+        if profile:
+            pcol1, pcol2 = st.columns([2,1])
+            with pcol1:
+                st.markdown(f"""
+                <div style='background:#F2F3EF;border-radius:12px;padding:20px;margin-bottom:8px;'>
+                  <p style='font-family:Newsreader,serif;font-size:1.3rem;color:#1C2330;margin:0 0 4px;'>{profile.get('full_name','')}</p>
+                  <p style='font-family:Inter,sans-serif;font-size:13px;color:#5B6270;margin:0;'>
+                    {profile.get('age','?')} years · {profile.get('sex','')} · {profile.get('height_cm','?')}cm · {profile.get('weight_kg','?')}kg · {profile.get('blood_group','')}
+                  </p>
+                  <p style='font-family:Inter,sans-serif;font-size:13px;color:#5B6270;margin:4px 0 0;'>
+                    {profile.get('location','')} · {profile.get('diet','')}
+                  </p>
+                  {f"<p style='font-family:Inter,sans-serif;font-size:12px;color:#9B9B92;margin:4px 0 0;'>Allergies: {profile.get('allergies')}</p>" if profile.get('allergies') else ""}
+                </div>
+                """, unsafe_allow_html=True)
+            with pcol2:
+                st.markdown(f"""
+                <div style='background:#F2F3EF;border-radius:12px;padding:20px;text-align:center;'>
+                  <div style='font-family:JetBrains Mono,monospace;font-size:1.6rem;color:#B68A3D;'>Day {cycle_day or '?'}</div>
+                  <div style='font-family:Inter,sans-serif;font-size:12px;color:#5B6270;margin-top:4px;'>{(cycle_phase or '').split(' (')[0]}</div>
+                  {f"<div style='font-family:Inter,sans-serif;font-size:11px;color:#9B9B92;margin-top:2px;'>~{days_to_next}d until next period</div>" if days_to_next else ""}
+                </div>
+                """, unsafe_allow_html=True)
+
+        # ── Edit personal details ────────────────────────────────────────────────
+        with st.expander("✏️ Edit personal details"):
             with st.form("profile_form"):
                 pc1, pc2 = st.columns(2)
                 with pc1:
                     p_name = st.text_input("Full Name", value=profile.get("full_name","") if profile else "")
-                    p_age = st.number_input("Age", min_value=0, max_value=120, value=int(profile.get("age",0)) if profile and profile.get("age") else 0)
-                    p_height = st.number_input("Height (cm)", value=float(profile.get("height_cm",0)) if profile and profile.get("height_cm") else 0.0)
+                    p_dob_val = profile.get("date_of_birth") if profile else None
+                    p_dob = st.date_input("Date of birth",
+                        value=date.fromisoformat(p_dob_val) if p_dob_val else date(1990,1,1),
+                        min_value=date(1940,1,1), max_value=date.today())
+                    p_sex = st.selectbox("Sex", ["","Female","Male","Intersex"],
+                        index=["","Female","Male","Intersex"].index(profile.get("sex","")) if profile and profile.get("sex","") in ["Female","Male","Intersex"] else 0)
+                    p_height = st.number_input("Height (cm)", 100, 220, value=int(profile.get("height_cm",165)) if profile and profile.get("height_cm") else 165)
                 with pc2:
-                    p_weight = st.number_input("Weight (kg)", value=float(profile.get("weight_kg",0)) if profile and profile.get("weight_kg") else 0.0)
+                    p_weight = st.number_input("Weight (kg)", 30, 200, value=int(profile.get("weight_kg",60)) if profile and profile.get("weight_kg") else 60)
                     p_blood = st.selectbox("Blood Group", ["","A+","A-","B+","B-","O+","O-","AB+","AB-"],
-                        index=["","A+","A-","B+","B-","O+","O-","AB+","AB-"].index(profile.get("blood_group","")) if profile and profile.get("blood_group") in ["A+","A-","B+","B-","O+","O-","AB+","AB-"] else 0)
+                        index=["","A+","A-","B+","B-","O+","O-","AB+","AB-"].index(profile.get("blood_group","")) if profile and profile.get("blood_group","") in ["A+","A-","B+","B-","O+","O-","AB+","AB-"] else 0)
                     p_location = st.text_input("Location", value=profile.get("location","") if profile else "")
-                p_diet = st.text_input("Diet (e.g. Vegetarian, no eggs)", value=profile.get("diet","Vegetarian, no eggs") if profile else "Vegetarian, no eggs")
-                if st.form_submit_button("💾 Save Personal Details", type="primary"):
-                    success = db_upsert("profiles", {"id": user_id, "full_name": p_name, "age": p_age, "height_cm": p_height, "weight_kg": p_weight, "blood_group": p_blood, "location": p_location, "diet": p_diet})
+                    p_diet = st.selectbox("Diet", ["Vegetarian (no eggs)","Vegetarian (with eggs)","Non-vegetarian","Vegan","Pescatarian"])
+                p_allergies = st.text_input("Allergies", value=profile.get("allergies","") if profile else "")
+                if st.form_submit_button("💾 Save", type="primary"):
+                    age = (date.today() - p_dob).days // 365
+                    success = db_upsert("profiles", {"id": user_id, "full_name": p_name, "age": age,
+                        "date_of_birth": p_dob.isoformat(), "sex": p_sex,
+                        "height_cm": p_height, "weight_kg": p_weight,
+                        "blood_group": p_blood, "location": p_location,
+                        "diet": p_diet, "allergies": p_allergies})
                     if success:
                         st.success("Saved!")
-                        st.session_state.system_prompt = build_system_prompt(user_id, {"full_name":p_name,"age":p_age,"height_cm":p_height,"weight_kg":p_weight,"blood_group":p_blood,"location":p_location,"diet":p_diet})
+                        st.session_state.system_prompt = build_system_prompt(user_id, profile)
                         st.rerun()
 
         st.divider()
-        st.markdown("##### 🔄 Cycle Tracking")
+
+        # ── Cycle tracking ───────────────────────────────────────────────────────
+        st.markdown("##### 🔄 Cycle")
         cd = db_get_single("cycle_data", user_id)
-        cyc1, cyc2, cyc3 = st.columns(3)
-        with cyc1:
-            default_date = date.fromisoformat(cd["last_period_start"]) if cd and cd.get("last_period_start") else date.today()
-            new_period_date = st.date_input("Last period start", value=default_date, key="profile_cycle_date")
-        with cyc2:
-            new_avg_len = st.number_input("Avg cycle length (days)", min_value=21, max_value=40, value=cd.get("avg_cycle_length",27) if cd else 27, key="profile_avg_len")
-        with cyc3:
-            if cycle_day:
-                st.metric("Today", f"Day {cycle_day}")
-                st.caption(cycle_phase.split(" (")[0])
-        if st.button("💾 Update Cycle Data"):
-            db_upsert("cycle_data", {"user_id": user_id, "last_period_start": new_period_date.isoformat(), "avg_cycle_length": new_avg_len})
-            st.success("Cycle data updated!")
-            st.rerun()
+        with st.form("cycle_profile_form"):
+            cyc1, cyc2, cyc3 = st.columns(3)
+            with cyc1:
+                default_date = date.fromisoformat(cd["last_period_start"]) if cd and cd.get("last_period_start") else date.today()
+                new_period_date = st.date_input("Last period start", value=default_date, key="profile_cycle_date")
+            with cyc2:
+                new_avg_len = st.number_input("Avg cycle length", min_value=21, max_value=40, value=cd.get("avg_cycle_length",27) if cd else 27, key="profile_avg_len")
+            with cyc3:
+                if cycle_day:
+                    st.metric("Today", f"Day {cycle_day}")
+            if st.form_submit_button("Update cycle data"):
+                db_upsert("cycle_data", {"user_id": user_id, "last_period_start": new_period_date.isoformat(), "avg_cycle_length": new_avg_len})
+                st.success("Updated!")
+                st.rerun()
 
         st.divider()
 
         col_left, col_right = st.columns(2)
 
         with col_left:
+            # Goals
             st.markdown("##### 🎯 Goals")
             goals = db_get("goals", user_id)
             for g in goals:
-                gcol1, gcol2 = st.columns([4,1])
-                gcol1.write(g["goal"])
-                if gcol2.button("🗑️", key=f"del_goal_{g['id']}"):
-                    db_delete("goals", g["id"])
-                    st.rerun()
-            new_goal = st.text_input("Add a goal", key="new_goal_input")
-            if st.button("+ Add Goal") and new_goal:
-                db_upsert("goals", {"user_id": user_id, "goal": new_goal})
-                st.rerun()
+                gc1, gc2 = st.columns([5,1])
+                gc1.markdown(f"**{g['goal']}** · _{g.get('timeframe','')}_")
+                if gc2.button("✕", key=f"del_goal_{g['id']}"):
+                    db_delete("goals", g["id"]); st.rerun()
+            with st.form("add_goal_profile"):
+                gg1, gg2 = st.columns([3,1])
+                with gg1: new_goal = st.text_input("New goal", placeholder="e.g. Reach 52kg by December")
+                with gg2: new_tf = st.selectbox("Timeframe", ["3 months","6 months","12 months","12 months+"])
+                if st.form_submit_button("+ Add") and new_goal:
+                    db_upsert("goals", {"user_id": user_id, "goal": new_goal, "timeframe": new_tf}); st.rerun()
 
-            st.markdown("##### 🩺 Medical Conditions")
+            st.divider()
+
+            # Medical conditions
+            st.markdown("##### 🩺 Medical conditions")
             conditions = db_get("medical_history", user_id)
             for c in conditions:
-                ccol1, ccol2 = st.columns([4,1])
-                ccol1.write(f"**{c['condition']}** — {c.get('notes','')[:60]}")
-                if ccol2.button("🗑️", key=f"del_cond_{c['id']}"):
-                    db_delete("medical_history", c["id"])
-                    st.rerun()
-            with st.form("add_condition_form"):
-                new_cond = st.text_input("Condition name")
-                new_cond_notes = st.text_input("Notes (optional)")
-                if st.form_submit_button("+ Add Condition") and new_cond:
-                    db_upsert("medical_history", {"user_id": user_id, "condition": new_cond, "notes": new_cond_notes})
-                    st.rerun()
+                cc1, cc2 = st.columns([5,1])
+                cc1.write(f"**{c['condition']}** — {c.get('notes','')[:50]}")
+                if cc2.button("✕", key=f"del_cond_{c['id']}"):
+                    db_delete("medical_history", c["id"]); st.rerun()
+            with st.form("add_cond_profile"):
+                nc1, nc2 = st.columns([3,2])
+                with nc1: new_cond = st.text_input("Condition", placeholder="e.g. Hypothyroidism")
+                with nc2: new_notes = st.text_input("Notes", placeholder="e.g. since 2020")
+                if st.form_submit_button("+ Add") and new_cond:
+                    db_upsert("medical_history", {"user_id": user_id, "condition": new_cond, "notes": new_notes}); st.rerun()
 
         with col_right:
+            # Medications
             st.markdown("##### 💊 Medications")
             meds = db_get("medications", user_id)
             for m in meds:
-                mcol1, mcol2 = st.columns([4,1])
-                mcol1.write(f"**{m['name']}** — {m.get('dose','')} {m.get('frequency','')}")
-                if mcol2.button("🗑️", key=f"del_med_{m['id']}"):
-                    db_delete("medications", m["id"])
-                    st.rerun()
-            with st.form("add_med_form"):
-                m_name = st.text_input("Medication name")
-                m_dose = st.text_input("Dose")
-                m_freq = st.text_input("Frequency")
-                if st.form_submit_button("+ Add Medication") and m_name:
-                    db_upsert("medications", {"user_id": user_id, "name": m_name, "dose": m_dose, "frequency": m_freq})
-                    st.rerun()
+                mc1, mc2 = st.columns([5,1])
+                mc1.write(f"**{m['name']}** — {m.get('dose','')} {m.get('frequency','')}")
+                if mc2.button("✕", key=f"del_med_{m['id']}"):
+                    db_delete("medications", m["id"]); st.rerun()
+            with st.form("add_med_profile"):
+                mm1, mm2, mm3 = st.columns(3)
+                with mm1: new_med = st.text_input("Medication")
+                with mm2: new_dose = st.text_input("Dose")
+                with mm3: new_freq = st.text_input("Frequency")
+                if st.form_submit_button("+ Add") and new_med:
+                    db_upsert("medications", {"user_id": user_id, "name": new_med, "dose": new_dose, "frequency": new_freq, "active": True}); st.rerun()
 
+            st.divider()
+
+            # Supplements
             st.markdown("##### 🌿 Supplements")
             supps = db_get("supplements", user_id)
             for s in supps:
-                scol1, scol2 = st.columns([4,1])
-                scol1.write(f"**{s['name']}** — {s.get('dose','')} ({s.get('timing','')})")
-                if scol2.button("🗑️", key=f"del_supp_{s['id']}"):
-                    db_delete("supplements", s["id"])
-                    st.rerun()
-            with st.form("add_supp_form"):
-                s_name = st.text_input("Supplement name")
-                s_dose = st.text_input("Dose")
-                s_timing = st.text_input("Timing (e.g. with breakfast)")
-                if st.form_submit_button("+ Add Supplement") and s_name:
-                    db_upsert("supplements", {"user_id": user_id, "name": s_name, "dose": s_dose, "timing": s_timing})
-                    st.rerun()
+                sc1, sc2 = st.columns([5,1])
+                sc1.write(f"**{s['name']}** — {s.get('dose','')} ({s.get('timing','')})")
+                if sc2.button("✕", key=f"del_supp_{s['id']}"):
+                    db_delete("supplements", s["id"]); st.rerun()
+            with st.form("add_supp_profile"):
+                ss1, ss2, ss3 = st.columns(3)
+                with ss1: new_supp = st.text_input("Supplement")
+                with ss2: new_sdose = st.text_input("Dose")
+                with ss3: new_stiming = st.text_input("Timing")
+                if st.form_submit_button("+ Add") and new_supp:
+                    db_upsert("supplements", {"user_id": user_id, "name": new_supp, "dose": new_sdose, "timing": new_stiming, "active": True}); st.rerun()
 
         st.divider()
-        st.markdown("##### ✏️ Profile Notes & Updates")
-        st.caption("New medication, stopped something, new symptom — your coach will factor this in.")
+        st.markdown("##### ✏️ Profile notes")
+        st.caption("Medication changes, new symptoms, anything your coach should know.")
         notes_rec = db_get_single("profile_notes", user_id)
         current_notes = notes_rec.get("notes","") if notes_rec else ""
-        new_notes = st.text_area("Notes", value=current_notes, height=120, placeholder="e.g. Started Thorne B-Complex on 15 June. Stopped Sampraz last week.")
-        if st.button("💾 Save Notes", type="primary"):
+        new_notes = st.text_area("Notes", value=current_notes, height=100,
+            placeholder="e.g. Started Thorne B-Complex on 15 June. Energy has been better since adding Magnesium.")
+        if st.button("💾 Save notes", type="primary"):
             db_upsert("profile_notes", {"user_id": user_id, "notes": new_notes})
             st.session_state.system_prompt = build_system_prompt(user_id, profile)
-            st.success("Saved — your coach will use this in future responses.")
+            st.success("Saved.")
+
+
 
     # ════════════════════════════
     # LAB REPORTS
