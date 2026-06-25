@@ -8,7 +8,7 @@ from supabase import create_client, Client
 
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="OneSattva",
+    page_title="OneSattva — Health, understood.",
     page_icon="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%23B68A3D'/></svg>",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -20,13 +20,20 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  --mist: #F2F3EF;
-  --ink: #1C2330;
-  --gold: #B68A3D;
-  --signal: #3D5A52;
-  --paper: #FAFAF7;
-  --mid: #5B6270;
-  --line: rgba(28,35,48,0.10);
+  --bone:       #F7F5F2;   /* primary background */
+  --graphite:   #111214;   /* text, structure, dark surfaces */
+  --copper:     #B6744A;   /* signature accent — use sparingly */
+  --stone:      #E6E3DF;   /* support surfaces */
+  --forest:     #1F2F2A;   /* deep dark — 2% use only */
+  --paper:      #FAFAF7;   /* white card surfaces */
+  --mid:        #6B6864;   /* secondary text */
+  --line:       rgba(17,18,20,0.10);  /* dividers and borders */
+
+  /* Legacy aliases for any remaining references */
+  --mist:   #F7F5F2;
+  --ink:    #111214;
+  --gold:   #B6744A;
+  --signal: #1F2F2A;
 }
 
 html, body, [class*="css"] { font-family: 'Inter', -apple-system, sans-serif; }
@@ -43,36 +50,36 @@ h1 {
   margin-bottom: 1.2rem !important;
 }
 
-.stApp { background-color: var(--mist); }
+.stApp { background-color: var(--bone); }
 
-[data-testid="stSidebar"] { background-color: var(--ink); }
-[data-testid="stSidebar"] * { color: var(--mist) !important; }
+[data-testid="stSidebar"] { background-color: var(--graphite); }
+[data-testid="stSidebar"] * { color: var(--bone) !important; }
 [data-testid="stSidebar"] h1,
 [data-testid="stSidebar"] h2,
 [data-testid="stSidebar"] h3 {
-  color: var(--mist) !important;
+  color: var(--bone) !important;
   font-family: 'Newsreader', serif !important;
 }
-[data-testid="stSidebar"] hr { border-color: rgba(242,243,239,0.10) !important; }
+[data-testid="stSidebar"] hr { border-color: rgba(247,245,242,0.10) !important; }
 
 [data-testid="stSidebar"] .stButton > button {
-  background-color: rgba(242,243,239,0.08) !important;
-  border: 1px solid rgba(242,243,239,0.15) !important;
-  color: #F2F3EF !important;
+  background-color: rgba(247,245,242,0.08) !important;
+  border: 1px solid rgba(247,245,242,0.15) !important;
+  color: #F7F5F2 !important;
   font-family: Inter, sans-serif !important;
   font-size: 12px !important;
   font-weight: 400 !important;
   border-radius: 8px !important;
 }
 [data-testid="stSidebar"] .stButton > button:hover {
-  background-color: rgba(242,243,239,0.15) !important;
-  border-color: rgba(242,243,239,0.25) !important;
-  color: #F2F3EF !important;
+  background-color: rgba(247,245,242,0.15) !important;
+  border-color: rgba(247,245,242,0.25) !important;
+  color: #F7F5F2 !important;
 }
 
 .stTabs [data-baseweb="tab-list"] {
   gap: 4px;
-  background-color: var(--paper);
+  background-color: var(--stone);
   padding: 6px;
   border-radius: 12px;
 }
@@ -85,7 +92,7 @@ h1 {
 }
 .stTabs [aria-selected="true"] {
   background-color: var(--paper) !important;
-  color: var(--ink) !important;
+  color: var(--graphite) !important;
   box-shadow: 0 1px 3px rgba(28,35,48,0.08);
 }
 
@@ -99,18 +106,18 @@ h1 {
   transition: all 0.15s ease;
 }
 .stButton > button:hover {
-  background-color: var(--ink);
-  color: var(--mist);
+  background-color: var(--graphite);
+  color: var(--bone);
   border-color: var(--ink);
 }
 .stButton > button[kind="primary"] {
-  background-color: var(--ink);
-  border-color: var(--ink);
-  color: var(--mist);
+  background-color: var(--graphite);
+  border-color: var(--graphite);
+  color: var(--bone);
 }
 .stButton > button[kind="primary"]:hover {
-  background-color: var(--signal);
-  border-color: var(--signal);
+  background-color: var(--forest);
+  border-color: var(--forest);
 }
 
 [data-testid="stAlert"] { border-radius: 10px; border-left-width: 3px; }
@@ -133,8 +140,8 @@ h1 {
 hr { border-color: var(--line) !important; margin: 1.5rem 0 !important; }
 
 .triage-now {
-  background: rgba(61,90,82,0.10);
-  color: #3D5A52;
+  background: rgba(31,47,42,0.10);
+  color: #1F2F2A;
   border-radius: 20px;
   padding: 6px 14px;
   font-size: 12.5px;
@@ -528,22 +535,19 @@ def show_auth_screen():
     st.markdown("""
     <div style='max-width:380px;margin:40px auto 24px;text-align:center;'>
       <div style='display:inline-flex;align-items:center;justify-content:center;gap:10px;margin-bottom:8px;'>
-        <svg width="36" height="36" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <radialGradient id="glow-login" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="#FAFAF7"/>
-              <stop offset="62%" stop-color="#B68A3D"/>
-              <stop offset="100%" stop-color="#1C2330" stop-opacity="0"/>
-            </radialGradient>
-          </defs>
-          <circle cx="50" cy="50" r="32" fill="url(#glow-login)"/>
-          <circle cx="50" cy="50" r="6" fill="#FAFAF7"/>
+        <svg width="36" height="36" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+          <g fill="none" stroke="#111214" stroke-width="1.6">
+            <circle cx="40" cy="40" r="34"/>
+            <circle cx="40" cy="40" r="24"/>
+            <circle cx="40" cy="40" r="14"/>
+          </g>
+          <circle cx="40" cy="40" r="5" fill="#B6744A"/>
         </svg>
-        <span style='font-family:Newsreader,serif;font-style:italic;font-size:2.2rem;color:#1C2330;line-height:1;'>
+        <span style='font-family:Newsreader,serif;font-style:italic;font-size:2.2rem;color:#111214;line-height:1;'>
           <span style='font-style:normal;opacity:0.45;font-size:0.55em;vertical-align:0.3em;margin-right:0.02em;'>one</span>Sattva
         </span>
       </div>
-      <p style='font-family:Newsreader,serif;font-style:italic;color:#B68A3D;font-size:0.95rem;margin:0 0 28px;letter-spacing:0.01em;'>With you. For you.</p>
+      <p style='font-family:Newsreader,serif;font-style:italic;color:#B6744A;font-size:0.95rem;margin:0 0 28px;letter-spacing:0.01em;'>Health, understood.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -553,10 +557,9 @@ def show_auth_screen():
         st.divider()
 
         if auth_mode == "Sign In":
-            # Forgot password state
             if st.session_state.get("show_forgot_password"):
                 st.markdown("##### Reset your password")
-                st.caption("Enter your email and we'll send you a reset link.")
+                st.caption("Enter your email and we'll send a reset link.")
                 reset_email = st.text_input("Email address", key="reset_email_input")
                 rc1, rc2 = st.columns(2)
                 with rc1:
@@ -567,7 +570,7 @@ def show_auth_screen():
                                     reset_email,
                                     options={"redirect_to": "https://wellness-coach-app-f2ssjkdxdey8vm2c287mnz.streamlit.app"}
                                 )
-                                st.success("Reset link sent — check your email. Link expires in 1 hour.")
+                                st.success("Reset link sent — check your email. Expires in 1 hour.")
                                 st.session_state.show_forgot_password = False
                             except Exception as e:
                                 st.error(f"Error: {e}")
@@ -578,7 +581,6 @@ def show_auth_screen():
                         st.session_state.show_forgot_password = False
                         st.rerun()
             else:
-                # Normal sign in
                 email = st.text_input("Email", key="signin_email")
                 password = st.text_input("Password", type="password", key="signin_password")
                 if st.button("Sign In", use_container_width=True, type="primary", key="signin_btn"):
@@ -593,7 +595,6 @@ def show_auth_screen():
                             st.rerun()
                     else:
                         st.warning("Please enter your email and password.")
-                # Forgot password link
                 if st.button("Forgot your password?", key="forgot_pw_btn"):
                     st.session_state.show_forgot_password = True
                     st.rerun()
@@ -602,44 +603,37 @@ def show_auth_screen():
             full_name = st.text_input("Full Name", key="signup_name")
             email = st.text_input("Email", key="signup_email")
             password = st.text_input("Password (min 6 characters)", type="password", key="signup_password")
-
             st.divider()
-
-            # Disclaimer
             st.markdown("""
-<div style='background:#F2F3EF;border-radius:10px;padding:14px 16px;margin-bottom:12px;font-size:12px;color:#5B6270;line-height:1.6;'>
-<strong style='color:#1C2330;display:block;margin-bottom:6px;'>OneSattva is a pilot wellness tool — not a medical device</strong>
+<div style='background:#E6E3DF;border-radius:10px;padding:14px 16px;margin-bottom:12px;font-size:12px;color:#6B6864;line-height:1.6;'>
+<strong style='color:#111214;display:block;margin-bottom:6px;'>OneSattva is a pilot wellness tool — not a medical device</strong>
 OneSattva provides AI-generated health guidance to support, not replace, qualified medical professionals.
 This product is in closed pilot testing and under active development. Do not use it as the sole basis for medical decisions.
 Always consult your doctor before changing medications, supplements, or treatment plans.
 </div>
 """, unsafe_allow_html=True)
-
             consent1 = st.checkbox(
                 "I agree to OneSattva collecting and storing my personal health information "
                 "(medical history, lab results, lifestyle data, wearable metrics) to generate "
                 "personalised wellness guidance. My data is stored securely, not shared with "
-                "third parties, and I can request deletion at any time by emailing "
-                "patel.francie@gmail.com.",
+                "third parties, and I can request deletion at any time.",
                 key="consent_general"
             )
             consent2 = st.checkbox(
                 "I explicitly consent to OneSattva collecting and processing my sensitive health "
                 "data — including medical conditions, medications, lab reports, and biometric "
                 "information — for personalised wellness recommendations. I understand I am "
-                "participating in a closed pilot and the product is under active development.",
+                "participating in a closed pilot under active development.",
                 key="consent_health"
             )
-
             st.divider()
-
             if st.button("Create Account", use_container_width=True, type="primary", key="signup_btn"):
                 if not full_name or not email or not password:
                     st.warning("Please fill in all fields.")
                 elif not consent1:
                     st.error("Please agree to the data collection terms to continue.")
                 elif not consent2:
-                    st.error("Please provide explicit consent for health data processing to continue.")
+                    st.error("Please provide explicit consent for health data processing.")
                 else:
                     user, err = sign_up(email, password, full_name)
                     if err:
@@ -669,32 +663,30 @@ def show_main_app(user):
         st.markdown(f"""
         <div style='padding:20px 4px 16px;border-bottom:1px solid rgba(242,243,239,0.12);margin-bottom:20px;'>
           <div style='display:flex;align-items:center;gap:9px;margin-bottom:12px;'>
-            <svg width="20" height="20" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-              <defs><radialGradient id="sg" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stop-color="#F2F3EF"/>
-                <stop offset="62%" stop-color="#B68A3D"/>
-                <stop offset="100%" stop-color="#1C2330" stop-opacity="0"/>
-              </radialGradient></defs>
-              <circle cx="50" cy="50" r="32" fill="url(#sg)"/>
-              <circle cx="50" cy="50" r="6" fill="#F2F3EF"/>
+            <svg width="20" height="20" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+              <g fill="none" stroke="#F7F5F2" stroke-width="2">
+                <circle cx="40" cy="40" r="34"/>
+                <circle cx="40" cy="40" r="22"/>
+              </g>
+              <circle cx="40" cy="40" r="7" fill="#B6744A"/>
             </svg>
-            <span style="font-family:Newsreader,serif;font-style:italic;font-size:18px;color:#F2F3EF;line-height:1;">
+            <span style="font-family:Newsreader,serif;font-style:italic;font-size:18px;color:#F7F5F2;line-height:1;">
               <span style="font-style:normal;opacity:0.45;font-size:0.55em;vertical-align:0.3em;margin-right:0.02em;">one</span>Sattva
             </span>
           </div>
-          <div style="font-family:Inter,sans-serif;font-size:13px;color:#F2F3EF;opacity:0.7;">{name}</div>
-          {f"<div style='font-family:Inter,sans-serif;font-size:11px;color:#F2F3EF;opacity:0.45;margin-top:2px;'>{profile.get('age','')}{'yr' if profile.get('age') else ''} · {profile.get('location','')}</div>" if profile else ""}
+          <div style="font-family:Inter,sans-serif;font-size:13px;color:#F7F5F2;opacity:0.7;">{name}</div>
+          {f"<div style='font-family:Inter,sans-serif;font-size:11px;color:#F7F5F2;opacity:0.45;margin-top:2px;'>{profile.get('age','')}{'yr' if profile.get('age') else ''} · {profile.get('location','')}</div>" if profile else ""}
         </div>
         """, unsafe_allow_html=True)
 
         # ── Cycle status ──
-        st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.08em;color:#F2F3EF;opacity:0.45;margin:0 0 8px;text-transform:uppercase;'>Cycle</p>""", unsafe_allow_html=True)
+        st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.08em;color:#F7F5F2;opacity:0.45;margin:0 0 8px;text-transform:uppercase;'>Cycle</p>""", unsafe_allow_html=True)
         if cycle_day:
             st.markdown(f"""
             <div style='background:rgba(242,243,239,0.07);border-radius:10px;padding:12px 14px;margin-bottom:8px;'>
-              <div style='font-family:JetBrains Mono,monospace;font-size:22px;color:#F2F3EF;font-weight:500;line-height:1;'>Day {cycle_day}</div>
-              <div style='font-family:Inter,sans-serif;font-size:12px;color:#F2F3EF;opacity:0.6;margin-top:4px;'>{cycle_phase.split(' (')[0]}</div>
-              {f"<div style='font-family:Inter,sans-serif;font-size:11px;color:#B68A3D;margin-top:6px;'>~{days_to_next}d until next period</div>" if days_to_next else ""}
+              <div style='font-family:JetBrains Mono,monospace;font-size:22px;color:#F7F5F2;font-weight:500;line-height:1;'>Day {cycle_day}</div>
+              <div style='font-family:Inter,sans-serif;font-size:12px;color:#F7F5F2;opacity:0.6;margin-top:4px;'>{cycle_phase.split(' (')[0]}</div>
+              {f"<div style='font-family:Inter,sans-serif;font-size:11px;color:#B6744A;margin-top:6px;'>~{days_to_next}d until next period</div>" if days_to_next else ""}
             </div>
             """, unsafe_allow_html=True)
             if st.button("New period started today", use_container_width=True, key="new_period"):
@@ -702,21 +694,21 @@ def show_main_app(user):
                 st.session_state.system_prompt = build_system_prompt(user_id, profile)
                 st.rerun()
         else:
-            st.markdown("""<div style='font-family:Inter,sans-serif;font-size:12px;color:#F2F3EF;opacity:0.5;'>Set period date in Profile tab</div>""", unsafe_allow_html=True)
+            st.markdown("""<div style='font-family:Inter,sans-serif;font-size:12px;color:#F7F5F2;opacity:0.5;'>Set period date in Profile tab</div>""", unsafe_allow_html=True)
 
         st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
 
         # ── Goals ──
         goals = db_get("goals", user_id)
         if goals:
-            st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.08em;color:#F2F3EF;opacity:0.45;margin:0 0 8px;text-transform:uppercase;'>Goals</p>""", unsafe_allow_html=True)
+            st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.08em;color:#F7F5F2;opacity:0.45;margin:0 0 8px;text-transform:uppercase;'>Goals</p>""", unsafe_allow_html=True)
             for g in goals[:3]:
-                st.markdown(f"""<div style='font-family:Inter,sans-serif;font-size:12px;color:#F2F3EF;opacity:0.7;padding:4px 0;border-bottom:1px solid rgba(242,243,239,0.07);'>{g['goal'][:45]}</div>""", unsafe_allow_html=True)
+                st.markdown(f"""<div style='font-family:Inter,sans-serif;font-size:12px;color:#F7F5F2;opacity:0.7;padding:4px 0;border-bottom:1px solid rgba(242,243,239,0.07);'>{g['goal'][:45]}</div>""", unsafe_allow_html=True)
 
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
 
         # ── Sign out ──
-        st.markdown(f"""<div style='font-family:Inter,sans-serif;font-size:11px;color:#F2F3EF;opacity:0.35;margin-bottom:8px;'>{user.email}</div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div style='font-family:Inter,sans-serif;font-size:11px;color:#F7F5F2;opacity:0.35;margin-bottom:8px;'>{user.email}</div>""", unsafe_allow_html=True)
         if st.button("Sign out", use_container_width=True, key="signout_btn"):
             sign_out()
 
@@ -744,7 +736,7 @@ def show_main_app(user):
                      font-family:Newsreader,serif;font-size:2rem;'>
             {greeting}, {name.split()[0] if name else 'there'}.
           </h1>
-          <p style='color:#5B6270;font-family:Inter,sans-serif;font-size:0.9rem;margin:0;'>
+          <p style='color:#6B6864;font-family:Inter,sans-serif;font-size:0.9rem;margin:0;'>
             {date.today().strftime('%A, %d %B %Y')} · Cycle Day {cycle_day or '?'} · {(cycle_phase or '').split(' (')[0]}
           </p>
         </div>
@@ -791,62 +783,62 @@ def show_main_app(user):
 
         with sc1:
             st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;
-                letter-spacing:0.08em;color:#5B6270;text-transform:uppercase;margin-bottom:6px;'>
+                letter-spacing:0.08em;color:#6B6864;text-transform:uppercase;margin-bottom:6px;'>
                 Check-in</p>""", unsafe_allow_html=True)
             if today_logged_h:
                 row_h = checkins_home[0]
                 st.markdown(f"""
-                <div style='background:#F2F3EF;border-radius:10px;padding:12px;'>
-                  <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;color:#1C2330;'>
+                <div style='background:#F7F5F2;border-radius:10px;padding:12px;'>
+                  <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;color:#111214;'>
                     {row_h.get('energy','?')}<span style='font-size:0.7rem;opacity:0.5;'>/10</span>
                   </div>
-                  <div style='font-family:Inter,sans-serif;font-size:11px;color:#5B6270;margin-top:2px;'>Energy · logged ✓</div>
+                  <div style='font-family:Inter,sans-serif;font-size:11px;color:#6B6864;margin-top:2px;'>Energy · logged ✓</div>
                 </div>""", unsafe_allow_html=True)
             else:
                 st.markdown("""
-                <div style='background:#F2F3EF;border-radius:10px;padding:12px;border:1px dashed #C8C4BC;'>
-                  <div style='font-family:Inter,sans-serif;font-size:12px;color:#5B6270;'>Not logged yet</div>
+                <div style='background:#F7F5F2;border-radius:10px;padding:12px;border:1px dashed #C8C4BC;'>
+                  <div style='font-family:Inter,sans-serif;font-size:12px;color:#6B6864;'>Not logged yet</div>
                 </div>""", unsafe_allow_html=True)
 
         with sc2:
             st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;
-                letter-spacing:0.08em;color:#5B6270;text-transform:uppercase;margin-bottom:6px;'>
+                letter-spacing:0.08em;color:#6B6864;text-transform:uppercase;margin-bottom:6px;'>
                 Recovery</p>""", unsafe_allow_html=True)
             if wearable_home and wearable_home[0].get("recovery_score"):
                 rec = float(wearable_home[0]["recovery_score"])
-                rec_color = "#1D9E75" if rec >= 67 else ("#B68A3D" if rec >= 34 else "#C8384A")
+                rec_color = "#1D9E75" if rec >= 67 else ("#B6744A" if rec >= 34 else "#C8384A")
                 st.markdown(f"""
-                <div style='background:#F2F3EF;border-radius:10px;padding:12px;'>
+                <div style='background:#F7F5F2;border-radius:10px;padding:12px;'>
                   <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;color:{rec_color};'>
                     {rec:.0f}<span style='font-size:0.7rem;opacity:0.5;'>%</span>
                   </div>
-                  <div style='font-family:Inter,sans-serif;font-size:11px;color:#5B6270;margin-top:2px;'>
+                  <div style='font-family:Inter,sans-serif;font-size:11px;color:#6B6864;margin-top:2px;'>
                     WHOOP · HRV {wearable_home[0].get('hrv','?')} ms
                   </div>
                 </div>""", unsafe_allow_html=True)
             else:
                 st.markdown("""
-                <div style='background:#F2F3EF;border-radius:10px;padding:12px;border:1px dashed #C8C4BC;'>
-                  <div style='font-family:Inter,sans-serif;font-size:12px;color:#5B6270;'>No wearable data</div>
+                <div style='background:#F7F5F2;border-radius:10px;padding:12px;border:1px dashed #C8C4BC;'>
+                  <div style='font-family:Inter,sans-serif;font-size:12px;color:#6B6864;'>No wearable data</div>
                 </div>""", unsafe_allow_html=True)
 
         with sc3:
             st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;
-                letter-spacing:0.08em;color:#5B6270;text-transform:uppercase;margin-bottom:6px;'>
+                letter-spacing:0.08em;color:#6B6864;text-transform:uppercase;margin-bottom:6px;'>
                 Cycle</p>""", unsafe_allow_html=True)
             st.markdown(f"""
-            <div style='background:#F2F3EF;border-radius:10px;padding:12px;'>
-              <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;color:#1C2330;'>
+            <div style='background:#F7F5F2;border-radius:10px;padding:12px;'>
+              <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;color:#111214;'>
                 {cycle_day or '?'}
               </div>
-              <div style='font-family:Inter,sans-serif;font-size:11px;color:#5B6270;margin-top:2px;'>
+              <div style='font-family:Inter,sans-serif;font-size:11px;color:#6B6864;margin-top:2px;'>
                 {(cycle_phase or 'Unknown').split(' (')[0]}{f' · {days_to_next}d to next' if days_to_next else ''}
               </div>
             </div>""", unsafe_allow_html=True)
 
         with sc4:
             st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;
-                letter-spacing:0.08em;color:#5B6270;text-transform:uppercase;margin-bottom:6px;'>
+                letter-spacing:0.08em;color:#6B6864;text-transform:uppercase;margin-bottom:6px;'>
                 Roadmap</p>""", unsafe_allow_html=True)
             if st.session_state.get("roadmap_committed"):
                 saved_rm = db_get("roadmaps", user_id, order_col="generated_at", limit=1)
@@ -859,14 +851,14 @@ def show_main_app(user):
                 week_in = (days_in // 7) + 1
                 phase_in = "Phase 1" if days_in < 90 else ("Phase 2" if days_in < 180 else "Phase 3")
                 st.markdown(f"""
-                <div style='background:#F2F3EF;border-radius:10px;padding:12px;'>
-                  <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;color:#1C2330;'>W{week_in}</div>
-                  <div style='font-family:Inter,sans-serif;font-size:11px;color:#5B6270;margin-top:2px;'>{phase_in} · committed ✓</div>
+                <div style='background:#F7F5F2;border-radius:10px;padding:12px;'>
+                  <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;color:#111214;'>W{week_in}</div>
+                  <div style='font-family:Inter,sans-serif;font-size:11px;color:#6B6864;margin-top:2px;'>{phase_in} · committed ✓</div>
                 </div>""", unsafe_allow_html=True)
             else:
                 st.markdown("""
-                <div style='background:#F2F3EF;border-radius:10px;padding:12px;border:1px dashed #C8C4BC;'>
-                  <div style='font-family:Inter,sans-serif;font-size:12px;color:#5B6270;'>No roadmap yet</div>
+                <div style='background:#F7F5F2;border-radius:10px;padding:12px;border:1px dashed #C8C4BC;'>
+                  <div style='font-family:Inter,sans-serif;font-size:12px;color:#6B6864;'>No roadmap yet</div>
                 </div>""", unsafe_allow_html=True)
 
         st.divider()
@@ -904,9 +896,9 @@ def show_main_app(user):
                 tf = g.get("timeframe","")
                 st.markdown(f"""
                 <div style='display:flex;justify-content:space-between;align-items:center;
-                            padding:10px 14px;background:#F2F3EF;border-radius:8px;margin-bottom:6px;'>
-                  <span style='font-family:Inter,sans-serif;font-size:13px;color:#1C2330;'>{g['goal']}</span>
-                  {f"<span style='font-family:Inter,sans-serif;font-size:11px;color:#B68A3D;white-space:nowrap;margin-left:12px;'>{tf}</span>" if tf else ""}
+                            padding:10px 14px;background:#F7F5F2;border-radius:8px;margin-bottom:6px;'>
+                  <span style='font-family:Inter,sans-serif;font-size:13px;color:#111214;'>{g['goal']}</span>
+                  {f"<span style='font-family:Inter,sans-serif;font-size:11px;color:#B6744A;white-space:nowrap;margin-left:12px;'>{tf}</span>" if tf else ""}
                 </div>""", unsafe_allow_html=True)
 
     # ════════════════════════════
@@ -921,12 +913,12 @@ def show_main_app(user):
             pcol1, pcol2 = st.columns([2,1])
             with pcol1:
                 st.markdown(f"""
-                <div style='background:#F2F3EF;border-radius:12px;padding:20px;margin-bottom:8px;'>
-                  <p style='font-family:Newsreader,serif;font-size:1.3rem;color:#1C2330;margin:0 0 4px;'>{profile.get('full_name','')}</p>
-                  <p style='font-family:Inter,sans-serif;font-size:13px;color:#5B6270;margin:0;'>
+                <div style='background:#F7F5F2;border-radius:12px;padding:20px;margin-bottom:8px;'>
+                  <p style='font-family:Newsreader,serif;font-size:1.3rem;color:#111214;margin:0 0 4px;'>{profile.get('full_name','')}</p>
+                  <p style='font-family:Inter,sans-serif;font-size:13px;color:#6B6864;margin:0;'>
                     {profile.get('age','?')} years · {profile.get('sex','')} · {profile.get('height_cm','?')}cm · {profile.get('weight_kg','?')}kg · {profile.get('blood_group','')}
                   </p>
-                  <p style='font-family:Inter,sans-serif;font-size:13px;color:#5B6270;margin:4px 0 0;'>
+                  <p style='font-family:Inter,sans-serif;font-size:13px;color:#6B6864;margin:4px 0 0;'>
                     {profile.get('location','')} · {profile.get('diet','')}
                   </p>
                   {f"<p style='font-family:Inter,sans-serif;font-size:12px;color:#9B9B92;margin:4px 0 0;'>Allergies: {profile.get('allergies')}</p>" if profile.get('allergies') else ""}
@@ -934,9 +926,9 @@ def show_main_app(user):
                 """, unsafe_allow_html=True)
             with pcol2:
                 st.markdown(f"""
-                <div style='background:#F2F3EF;border-radius:12px;padding:20px;text-align:center;'>
-                  <div style='font-family:JetBrains Mono,monospace;font-size:1.6rem;color:#B68A3D;'>Day {cycle_day or '?'}</div>
-                  <div style='font-family:Inter,sans-serif;font-size:12px;color:#5B6270;margin-top:4px;'>{(cycle_phase or '').split(' (')[0]}</div>
+                <div style='background:#F7F5F2;border-radius:12px;padding:20px;text-align:center;'>
+                  <div style='font-family:JetBrains Mono,monospace;font-size:1.6rem;color:#B6744A;'>Day {cycle_day or '?'}</div>
+                  <div style='font-family:Inter,sans-serif;font-size:12px;color:#6B6864;margin-top:4px;'>{(cycle_phase or '').split(' (')[0]}</div>
                   {f"<div style='font-family:Inter,sans-serif;font-size:11px;color:#9B9B92;margin-top:2px;'>~{days_to_next}d until next period</div>" if days_to_next else ""}
                 </div>
                 """, unsafe_allow_html=True)
@@ -1505,9 +1497,9 @@ Give ONE sharp clinical observation in 2-3 sentences. Reference their cycle phas
 
             if st.session_state.get("checkin_insight"):
                 st.markdown(f"""
-                <div style='background:#F2F3EF;border-left:3px solid #B68A3D;border-radius:0 10px 10px 0;
+                <div style='background:#F7F5F2;border-left:3px solid #B6744A;border-radius:0 10px 10px 0;
                             padding:14px 18px;margin-top:16px;'>
-                <p style='font-family:Inter,sans-serif;font-size:13px;color:#1C2330;margin:0;line-height:1.6;'>
+                <p style='font-family:Inter,sans-serif;font-size:13px;color:#111214;margin:0;line-height:1.6;'>
                 {st.session_state.checkin_insight}
                 </p>
                 </div>
@@ -1852,8 +1844,8 @@ Complete every section fully. Never cut off."""
             month_header_col, month_btn_col = st.columns([3,1])
             with month_header_col:
                 st.markdown(f"""
-                <div style='background:var(--mist,#F2F3EF);border-left:3px solid #B68A3D;border-radius:0 10px 10px 0;padding:14px 18px;margin-bottom:4px;'>
-                <p style='font-family:Newsreader,serif;font-size:1.1rem;color:#1C2330;margin:0;font-weight:500;'>
+                <div style='background:var(--mist,#F7F5F2);border-left:3px solid #B6744A;border-radius:0 10px 10px 0;padding:14px 18px;margin-bottom:4px;'>
+                <p style='font-family:Newsreader,serif;font-size:1.1rem;color:#111214;margin:0;font-weight:500;'>
                   {current_month_name} · Month {current_month_num} · {roadmap_phase} · Week {current_week_num} overall
                 </p>
                 </div>
@@ -2093,9 +2085,9 @@ Identify 2-3 meaningful patterns (not just describing the data — interpret wha
 
                 if st.session_state.get("trend_insight"):
                     st.markdown(f"""
-                    <div style='background:#F2F3EF;border-left:3px solid #B68A3D;border-radius:0 10px 10px 0;
+                    <div style='background:#F7F5F2;border-left:3px solid #B6744A;border-radius:0 10px 10px 0;
                                 padding:16px 20px;margin:16px 0;'>
-                    <p style='font-family:Inter,sans-serif;font-size:13px;color:#1C2330;margin:0;line-height:1.6;'>
+                    <p style='font-family:Inter,sans-serif;font-size:13px;color:#111214;margin:0;line-height:1.6;'>
                     {st.session_state.trend_insight}
                     </p>
                     </div>
@@ -2184,19 +2176,19 @@ Identify 2-3 meaningful patterns (not just describing the data — interpret wha
             ]))
 
             st.markdown(f"""
-            <div style='background:#F2F3EF;padding:20px 24px;border-radius:14px;
-                        border-left:3px solid #B68A3D;margin-bottom:20px;'>
-              <p style='font-family:Newsreader,serif;font-size:1.15rem;color:#1C2330;
+            <div style='background:#F7F5F2;padding:20px 24px;border-radius:14px;
+                        border-left:3px solid #B6744A;margin-bottom:20px;'>
+              <p style='font-family:Newsreader,serif;font-size:1.15rem;color:#111214;
                          margin:0 0 4px;font-weight:500;'>Good to see you, {name}.</p>
-              <p style='font-family:Inter,sans-serif;font-size:13px;color:#5B6270;margin:0;'>
+              <p style='font-family:Inter,sans-serif;font-size:13px;color:#6B6864;margin:0;'>
                 I have your full profile, labs, and goals. Ask me anything — or pick a question below.
               </p>
-              {f"<p style='font-family:Inter,sans-serif;font-size:12px;color:#B68A3D;margin:8px 0 0;'>{context_line}</p>" if context_line else ""}
+              {f"<p style='font-family:Inter,sans-serif;font-size:12px;color:#B6744A;margin:8px 0 0;'>{context_line}</p>" if context_line else ""}
             </div>
             """, unsafe_allow_html=True)
 
             # Dynamic quick prompts based on current context
-            st.markdown("<p style='font-family:Inter,sans-serif;font-size:13px;font-weight:500;color:#1C2330;margin-bottom:8px;'>Quick questions</p>", unsafe_allow_html=True)
+            st.markdown("<p style='font-family:Inter,sans-serif;font-size:13px;font-weight:500;color:#111214;margin-bottom:8px;'>Quick questions</p>", unsafe_allow_html=True)
 
             # Build dynamic prompts based on cycle phase, check-in data, roadmap status
             q_supplement = ("💊 My supplement protocol today",
@@ -2335,21 +2327,19 @@ def show_onboarding(user):
     st.markdown("""
     <div style='text-align:center;padding:32px 0 24px;'>
       <div style='display:inline-flex;align-items:center;gap:10px;margin-bottom:8px;'>
-        <svg width="28" height="28" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-          <defs><radialGradient id="og" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#FAFAF7"/>
-            <stop offset="62%" stop-color="#B68A3D"/>
-            <stop offset="100%" stop-color="#1C2330" stop-opacity="0"/>
-          </radialGradient></defs>
-          <circle cx="50" cy="50" r="32" fill="url(#og)"/>
-          <circle cx="50" cy="50" r="6" fill="#FAFAF7"/>
+        <svg width="28" height="28" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+          <g fill="none" stroke="#111214" stroke-width="1.6">
+            <circle cx="40" cy="40" r="34"/>
+            <circle cx="40" cy="40" r="22"/>
+          </g>
+          <circle cx="40" cy="40" r="7" fill="#B6744A"/>
         </svg>
-        <span style="font-family:Newsreader,serif;font-style:italic;font-size:1.6rem;color:#1C2330;">
+        <span style="font-family:Newsreader,serif;font-style:italic;font-size:1.6rem;color:#111214;">
           <span style="font-style:normal;opacity:0.45;font-size:0.55em;vertical-align:0.3em;">one</span>Sattva
         </span>
       </div>
-      <p style="font-family:Newsreader,serif;font-style:italic;color:#B68A3D;font-size:0.9rem;margin:0;">With you. For you.</p>
-      <p style="font-family:Inter,sans-serif;font-size:0.95rem;color:#5B6270;margin-top:12px;">Let's build your health profile — takes about 5 minutes.</p>
+      <p style="font-family:Newsreader,serif;font-style:italic;color:#B6744A;font-size:0.9rem;margin:0;">Health, understood.</p>
+      <p style="font-family:Inter,sans-serif;font-size:0.95rem;color:#6B6864;margin-top:12px;">Let's build your health profile — takes about 5 minutes.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -2367,8 +2357,8 @@ def show_onboarding(user):
     for i, s in enumerate(steps):
         is_done = (i + 1) < current_step
         is_current = (i + 1) == current_step
-        bg = "#1C2330" if is_done else ("#B68A3D" if is_current else "#E8E8E4")
-        color = "#F2F3EF" if (is_done or is_current) else "#9B9B92"
+        bg = "#111214" if is_done else ("#B6744A" if is_current else "#E8E8E4")
+        color = "#F7F5F2" if (is_done or is_current) else "#9B9B92"
         step_html += f"<div style='flex:1;text-align:center;background:{bg};color:{color};border-radius:8px;padding:8px 4px;font-family:Inter,sans-serif;font-size:11px;font-weight:500;'>{s}</div>"
     step_html += "</div>"
     st.markdown(step_html, unsafe_allow_html=True)
@@ -2753,8 +2743,8 @@ Keep it concise — this is an onboarding summary, not a full consultation."""
     with col_r:
         if current_step == 1:
             st.markdown("""
-            <div style='background:#F2F3EF;border-radius:12px;padding:16px;font-family:Inter,sans-serif;font-size:13px;color:#5B6270;'>
-            <p style='font-weight:600;color:#1C2330;margin:0 0 8px;'>Why we ask</p>
+            <div style='background:#F7F5F2;border-radius:12px;padding:16px;font-family:Inter,sans-serif;font-size:13px;color:#6B6864;'>
+            <p style='font-weight:600;color:#111214;margin:0 0 8px;'>Why we ask</p>
             <p style='margin:0 0 6px;'>Your age, sex, height and weight affect how we interpret your labs and calibrate your nutrition and training recommendations.</p>
             <p style='margin:0 0 6px;'>Location helps us suggest locally available foods and brands.</p>
             <p style='margin:0;'>Alcohol and smoking directly influence hormone metabolism and gut health — we need to know to factor this in.</p>
@@ -2762,24 +2752,24 @@ Keep it concise — this is an onboarding summary, not a full consultation."""
             """, unsafe_allow_html=True)
         elif current_step == 2:
             st.markdown("""
-            <div style='background:#F2F3EF;border-radius:12px;padding:16px;font-family:Inter,sans-serif;font-size:13px;color:#5B6270;'>
-            <p style='font-weight:600;color:#1C2330;margin:0 0 8px;'>Your data is private</p>
+            <div style='background:#F7F5F2;border-radius:12px;padding:16px;font-family:Inter,sans-serif;font-size:13px;color:#6B6864;'>
+            <p style='font-weight:600;color:#111214;margin:0 0 8px;'>Your data is private</p>
             <p style='margin:0 0 6px;'>Only you can see your health information. No one else — including practitioners — can access your data unless you explicitly grant them permission.</p>
             <p style='margin:0;'>Add as little or as much as you're comfortable with. You can always update this later.</p>
             </div>
             """, unsafe_allow_html=True)
         elif current_step == 3:
             st.markdown("""
-            <div style='background:#F2F3EF;border-radius:12px;padding:16px;font-family:Inter,sans-serif;font-size:13px;color:#5B6270;'>
-            <p style='font-weight:600;color:#1C2330;margin:0 0 8px;'>Goals shape everything</p>
+            <div style='background:#F7F5F2;border-radius:12px;padding:16px;font-family:Inter,sans-serif;font-size:13px;color:#6B6864;'>
+            <p style='font-weight:600;color:#111214;margin:0 0 8px;'>Goals shape everything</p>
             <p style='margin:0 0 6px;'>Your roadmap is built around your goals and their timeframes. Be specific — "lose weight" is less useful than "reach 58kg by September."</p>
             <p style='margin:0;'>You can have multiple goals with different timeframes. After each goal is achieved, we build a maintenance guide so you keep the results.</p>
             </div>
             """, unsafe_allow_html=True)
         elif current_step == 4:
             st.markdown("""
-            <div style='background:#F2F3EF;border-radius:12px;padding:16px;font-family:Inter,sans-serif;font-size:13px;color:#5B6270;'>
-            <p style='font-weight:600;color:#1C2330;margin:0 0 8px;'>Why labs matter</p>
+            <div style='background:#F7F5F2;border-radius:12px;padding:16px;font-family:Inter,sans-serif;font-size:13px;color:#6B6864;'>
+            <p style='font-weight:600;color:#111214;margin:0 0 8px;'>Why labs matter</p>
             <p style='margin:0 0 6px;'>Functional medicine reads lab values differently from conventional medicine. A TSH of 2.5 might look "normal" but mask a T3 conversion problem.</p>
             <p style='margin:0 0 6px;'>Your coach interprets values against functional ranges, not just lab reference ranges.</p>
             <p style='margin:0;'>Reports older than 3 months are used for trend context only. Recent labs get priority.</p>
@@ -2853,21 +2843,19 @@ def show_onboarding(user):
     st.markdown("""
     <div style='text-align:center;padding:28px 0 20px;'>
       <div style='display:inline-flex;align-items:center;gap:10px;margin-bottom:8px;'>
-        <svg width="28" height="28" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-          <defs><radialGradient id="og" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#FAFAF7"/>
-            <stop offset="62%" stop-color="#B68A3D"/>
-            <stop offset="100%" stop-color="#1C2330" stop-opacity="0"/>
-          </radialGradient></defs>
-          <circle cx="50" cy="50" r="32" fill="url(#og)"/>
-          <circle cx="50" cy="50" r="6" fill="#FAFAF7"/>
+        <svg width="28" height="28" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+          <g fill="none" stroke="#111214" stroke-width="1.6">
+            <circle cx="40" cy="40" r="34"/>
+            <circle cx="40" cy="40" r="22"/>
+          </g>
+          <circle cx="40" cy="40" r="7" fill="#B6744A"/>
         </svg>
-        <span style="font-family:Newsreader,serif;font-style:italic;font-size:1.6rem;color:#1C2330;">
+        <span style="font-family:Newsreader,serif;font-style:italic;font-size:1.6rem;color:#111214;">
           <span style="font-style:normal;opacity:0.45;font-size:0.55em;vertical-align:0.3em;">one</span>Sattva
         </span>
       </div>
-      <p style="font-family:Newsreader,serif;font-style:italic;color:#B68A3D;font-size:0.9rem;margin:4px 0 0;">With you. For you.</p>
-      <p style="font-family:Inter,sans-serif;font-size:0.9rem;color:#5B6270;margin-top:10px;">Let's build your health profile — takes about 5 minutes.</p>
+      <p style="font-family:Newsreader,serif;font-style:italic;color:#B6744A;font-size:0.9rem;margin:4px 0 0;">Health, understood.</p>
+      <p style="font-family:Inter,sans-serif;font-size:0.9rem;color:#6B6864;margin-top:10px;">Let's build your health profile — takes about 5 minutes.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -2877,8 +2865,8 @@ def show_onboarding(user):
     for i, s in enumerate(steps):
         is_done = (i + 1) < current_step
         is_current = (i + 1) == current_step
-        bg = "#1C2330" if is_done else ("#B68A3D" if is_current else "#E8E8E4")
-        color = "#F2F3EF" if (is_done or is_current) else "#9B9B92"
+        bg = "#111214" if is_done else ("#B6744A" if is_current else "#E8E8E4")
+        color = "#F7F5F2" if (is_done or is_current) else "#9B9B92"
         step_html += f"<div style='flex:1;text-align:center;background:{bg};color:{color};border-radius:8px;padding:8px 2px;font-family:Inter,sans-serif;font-size:11px;font-weight:500;'>{s}</div>"
     step_html += "</div>"
     st.markdown(step_html, unsafe_allow_html=True)
@@ -3180,9 +3168,9 @@ def show_onboarding(user):
         title, body = tips.get(current_step, ("", ""))
         if title:
             st.markdown(f"""
-            <div style='background:#F2F3EF;border-radius:12px;padding:16px;margin-top:48px;'>
-            <p style='font-family:Inter,sans-serif;font-weight:600;color:#1C2330;font-size:13px;margin:0 0 8px;'>{title}</p>
-            <p style='font-family:Inter,sans-serif;color:#5B6270;font-size:13px;margin:0;line-height:1.5;'>{body}</p>
+            <div style='background:#F7F5F2;border-radius:12px;padding:16px;margin-top:48px;'>
+            <p style='font-family:Inter,sans-serif;font-weight:600;color:#111214;font-size:13px;margin:0 0 8px;'>{title}</p>
+            <p style='font-family:Inter,sans-serif;color:#6B6864;font-size:13px;margin:0;line-height:1.5;'>{body}</p>
             </div>
             """, unsafe_allow_html=True)
 
