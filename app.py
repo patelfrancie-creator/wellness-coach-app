@@ -710,46 +710,42 @@ def show_main_app(user):
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
         NAV_ITEMS = [
-            ("home",     "⌂",  "Home"),
-            ("protocol", "◈",  "Protocol"),
-            ("checkin",  "✓",  "Check-In"),
-            ("coach",    "✦",  "Coach"),
-            ("profile",  "◎",  "Profile & Data"),
+            ("home",     "⌂  Home"),
+            ("protocol", "◈  Protocol"),
+            ("checkin",  "✓  Check-In"),
+            ("coach",    "✦  Coach"),
+            ("profile",  "◎  Profile & Data"),
         ]
 
-        for section_key, icon, label in NAV_ITEMS:
+        for section_key, label in NAV_ITEMS:
             is_active = st.session_state.active_section == section_key
-            bg = "rgba(247,245,242,0.12)" if is_active else "transparent"
-            border = "rgba(247,245,242,0.20)" if is_active else "transparent"
-            weight = "600" if is_active else "400"
-            opacity = "1" if is_active else "0.65"
-            st.markdown(f"""
-            <div style='background:{bg};border:1px solid {border};border-radius:8px;
-                        padding:9px 12px;margin-bottom:3px;cursor:pointer;'>
-              <span style='font-family:Inter,sans-serif;font-size:13px;font-weight:{weight};
-                           color:#F7F5F2;opacity:{opacity};'>
-                <span style='margin-right:8px;opacity:0.7;'>{icon}</span>{label}
-              </span>
-            </div>
-            """, unsafe_allow_html=True)
-            if st.button(label, key=f"nav_{section_key}", use_container_width=True,
-                         help=label):
+            display_label = f"**{label}**" if is_active else label
+            if st.button(display_label, key=f"nav_{section_key}", use_container_width=True):
                 st.session_state.active_section = section_key
                 st.rerun()
 
         st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
-    # Hide sidebar nav buttons — rendered as invisible overlays behind styled divs
+    # Style sidebar nav buttons
     st.markdown("""
     <style>
     [data-testid="stSidebar"] [data-testid="stButton"] > button {
-        position: absolute !important;
-        opacity: 0 !important;
-        height: 38px !important;
-        margin-top: -40px !important;
-        width: 100% !important;
-        cursor: pointer !important;
-        z-index: 10 !important;
+        background: transparent !important;
+        border: none !important;
+        border-radius: 8px !important;
+        color: rgba(247,245,242,0.65) !important;
+        font-family: Inter, sans-serif !important;
+        font-size: 13px !important;
+        font-weight: 400 !important;
+        text-align: left !important;
+        padding: 9px 12px !important;
+        margin-bottom: 2px !important;
+        transition: background 0.12s ease !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stButton"] > button:hover {
+        background: rgba(247,245,242,0.08) !important;
+        color: #F7F5F2 !important;
+        border: none !important;
     }
     </style>
     """, unsafe_allow_html=True)
