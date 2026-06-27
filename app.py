@@ -979,54 +979,60 @@ Cycle: Day {cycle_day or '?'}, {(cycle_phase or 'Unknown').split(' (')[0]}"""
         has_checkin_trend = len(recent_checkins_h) >= 7
         has_wearable_trend = len(wearable_30d) >= 7
 
-        if has_checkin_trend or has_wearable_trend:
+        if True:  # always show trends section; individual cards handle empty states
             st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;
                 letter-spacing:0.08em;color:var(--mid);text-transform:uppercase;
                 margin:0 0 12px;'>Trends</p>""", unsafe_allow_html=True)
 
             tr1, tr2 = st.columns(2)
 
-            if has_checkin_trend:
-                df_ci = pd.DataFrame(recent_checkins_h)
-                df_ci = df_ci.sort_values("checkin_date")
-                energy_vals = pd.to_numeric(df_ci.get("energy", pd.Series()), errors="coerce").dropna().tolist()
-                sleep_vals  = pd.to_numeric(df_ci.get("sleep_hours", pd.Series()), errors="coerce").dropna().tolist()
-                # Normalise to % of max for bar heights
-                def to_bars(vals, max_val=10):
-                    return [max(8, int((v / max_val) * 100)) for v in vals[-15:]]
-                energy_bars = to_bars(energy_vals, 10)
-                sleep_bars  = to_bars(sleep_vals, 10)
-                bars_html_e = "".join([
-                    f"<div style='flex:1;background:var(--graphite);border-radius:2px 2px 0 0;height:{h}%;opacity:0.75;'></div>"
-                    for h in energy_bars
-                ])
-                with tr1:
-                    st.markdown(f"""
-                    <div style='background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px;'>
+            # Energy trend — left column
+            with tr1:
+                if has_checkin_trend:
+                    df_ci = pd.DataFrame(recent_checkins_h)
+                    df_ci = df_ci.sort_values("checkin_date")
+                    energy_vals = pd.to_numeric(df_ci.get("energy", pd.Series()), errors="coerce").dropna().tolist()
+                    if energy_vals:
+                        bars_html_e = "".join([
+                            f"<div style='flex:1;background:var(--graphite);border-radius:2px 2px 0 0;height:{max(8,int((v/10)*100))}%;opacity:0.75;'></div>"
+                            for v in energy_vals[-15:]
+                        ])
+                        st.markdown(f"""
+                        <div style='background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px;'>
+                          <div style='font-family:Inter,sans-serif;font-size:12.5px;font-weight:600;
+                                      color:var(--graphite);margin-bottom:6px;'>Energy · 30 days</div>
+                          <div style='display:flex;align-items:flex-end;gap:3px;height:52px;margin-bottom:10px;'>
+                            {bars_html_e}
+                          </div>
+                          <div style='font-family:Inter,sans-serif;font-size:12px;color:var(--mid);line-height:1.5;'>
+                            Avg {sum(energy_vals)/len(energy_vals):.1f}/10 over {len(energy_vals)} logged days.
+                          </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.markdown("""
+                    <div style='background:#FFFFFF;border:1px solid var(--line);border-radius:12px;
+                                padding:18px;border-style:dashed;'>
                       <div style='font-family:Inter,sans-serif;font-size:12.5px;font-weight:600;
                                   color:var(--graphite);margin-bottom:6px;'>Energy · 30 days</div>
-                      <div style='display:flex;align-items:flex-end;gap:3px;height:52px;margin-bottom:10px;'>
-                        {bars_html_e}
-                      </div>
-                      <div style='font-family:Inter,sans-serif;font-size:12px;color:var(--mid);
-                                  line-height:1.5;'>
-                        Avg {sum(energy_vals)/len(energy_vals):.1f}/10 over {len(energy_vals)} logged days.
+                      <div style='font-family:Inter,sans-serif;font-size:12px;color:var(--mid);'>
+                        Log 7+ check-ins to see your energy trend.
                       </div>
                     </div>
                     """, unsafe_allow_html=True)
 
-            if has_wearable_trend:
-                df_w = pd.DataFrame(wearable_30d)
-                df_w = df_w.sort_values("data_date")
-                hrv_vals = pd.to_numeric(df_w.get("hrv", pd.Series()), errors="coerce").dropna().tolist()
-                if hrv_vals:
-                    max_hrv = max(hrv_vals) or 1
-                    hrv_bars = [max(8, int((v / max_hrv) * 100)) for v in hrv_vals[-15:]]
-                    bars_html_h = "".join([
-                        f"<div style='flex:1;background:var(--graphite);border-radius:2px 2px 0 0;height:{h}%;opacity:0.75;'></div>"
-                        for h in hrv_bars
-                    ])
-                    with tr2:
+            # HRV trend — right column
+            with tr2:
+                if has_wearable_trend:
+                    df_w = pd.DataFrame(wearable_30d)
+                    df_w = df_w.sort_values("data_date")
+                    hrv_vals = pd.to_numeric(df_w.get("hrv", pd.Series()), errors="coerce").dropna().tolist()
+                    if hrv_vals:
+                        max_hrv = max(hrv_vals) or 1
+                        bars_html_h = "".join([
+                            f"<div style='flex:1;background:var(--graphite);border-radius:2px 2px 0 0;height:{max(8,int((v/max_hrv)*100))}%;opacity:0.75;'></div>"
+                            for v in hrv_vals[-15:]
+                        ])
                         st.markdown(f"""
                         <div style='background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px;'>
                           <div style='font-family:Inter,sans-serif;font-size:12.5px;font-weight:600;
@@ -1034,13 +1040,23 @@ Cycle: Day {cycle_day or '?'}, {(cycle_phase or 'Unknown').split(' (')[0]}"""
                           <div style='display:flex;align-items:flex-end;gap:3px;height:52px;margin-bottom:10px;'>
                             {bars_html_h}
                           </div>
-                          <div style='font-family:Inter,sans-serif;font-size:12px;color:var(--mid);
-                                      line-height:1.5;'>
+                          <div style='font-family:Inter,sans-serif;font-size:12px;color:var(--mid);line-height:1.5;'>
                             Avg {sum(hrv_vals)/len(hrv_vals):.0f} ms over {len(hrv_vals)} days.
                             Latest {hrv_vals[-1]:.0f} ms.
                           </div>
                         </div>
                         """, unsafe_allow_html=True)
+                else:
+                    st.markdown("""
+                    <div style='background:#FFFFFF;border:1px solid var(--line);border-radius:12px;
+                                padding:18px;border-style:dashed;'>
+                      <div style='font-family:Inter,sans-serif;font-size:12.5px;font-weight:600;
+                                  color:var(--graphite);margin-bottom:6px;'>HRV trajectory · 30 days</div>
+                      <div style='font-family:Inter,sans-serif;font-size:12px;color:var(--mid);'>
+                        Upload 7+ days of wearable data to see your HRV trend.
+                      </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
     # ════════════════════════════
     # PROFILE
