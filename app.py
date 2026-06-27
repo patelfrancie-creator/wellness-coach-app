@@ -702,17 +702,65 @@ def show_main_app(user):
         if st.button("Sign out", use_container_width=True, key="signout_btn"):
             sign_out()
 
-    # ── Tabs ───────────────────────────────────────────────────────────────────
-    tab0, tab_profile, tab5, tab6, tab2, tab4b, tab4, tab3, tab1 = st.tabs([
-        "🏡 Home", "👤 My Profile", "🧪 Lab Reports", "⌚ Wearable Data",
-        "📋 Daily Check-In", "🗺️ Treatment Roadmap", "📅 Weekly Protocol",
-        "📊 My Trends", "✦ Your Coach"
-    ])
+    # ── Sidebar nav ────────────────────────────────────────────────────────────
+    if "active_section" not in st.session_state:
+        st.session_state.active_section = "home"
+
+    with st.sidebar:
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+        NAV_ITEMS = [
+            ("home",     "⌂",  "Home"),
+            ("protocol", "◈",  "Protocol"),
+            ("checkin",  "✓",  "Check-In"),
+            ("coach",    "✦",  "Coach"),
+            ("profile",  "◎",  "Profile & Data"),
+        ]
+
+        for section_key, icon, label in NAV_ITEMS:
+            is_active = st.session_state.active_section == section_key
+            bg = "rgba(247,245,242,0.12)" if is_active else "transparent"
+            border = "rgba(247,245,242,0.20)" if is_active else "transparent"
+            weight = "600" if is_active else "400"
+            opacity = "1" if is_active else "0.65"
+            st.markdown(f"""
+            <div style='background:{bg};border:1px solid {border};border-radius:8px;
+                        padding:9px 12px;margin-bottom:3px;cursor:pointer;'>
+              <span style='font-family:Inter,sans-serif;font-size:13px;font-weight:{weight};
+                           color:#F7F5F2;opacity:{opacity};'>
+                <span style='margin-right:8px;opacity:0.7;'>{icon}</span>{label}
+              </span>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button(label, key=f"nav_{section_key}", use_container_width=True,
+                         help=label):
+                st.session_state.active_section = section_key
+                st.rerun()
+
+        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+    # Hide sidebar nav buttons — rendered as invisible overlays behind styled divs
+    st.markdown("""
+    <style>
+    [data-testid="stSidebar"] [data-testid="stButton"] > button {
+        position: absolute !important;
+        opacity: 0 !important;
+        height: 38px !important;
+        margin-top: -40px !important;
+        width: 100% !important;
+        cursor: pointer !important;
+        z-index: 10 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ── Section routing ─────────────────────────────────────────────────────────
+    active_section = st.session_state.active_section
 
     # ════════════════════════════
     # HOME
     # ════════════════════════════
-    with tab0:
+    if active_section == "home":
 
         # ── Data fetches ─────────────────────────────────────────────────────────
         checkins_home = db_get("checkins", user_id, order_col="checkin_date", limit=1)
@@ -1059,9 +1107,9 @@ Cycle: Day {cycle_day or '?'}, {(cycle_phase or 'Unknown').split(' (')[0]}"""
                     """, unsafe_allow_html=True)
 
     # ════════════════════════════
-    # PROFILE
+    # PROFILE & DATA — My Profile
     # ════════════════════════════
-    with tab_profile:
+    if active_section == "profile":
         st.title("👤 My Profile")
         st.caption("Your complete health record — the foundation your coach reasons from.")
 
@@ -1229,9 +1277,9 @@ Cycle: Day {cycle_day or '?'}, {(cycle_phase or 'Unknown').split(' (')[0]}"""
 
 
     # ════════════════════════════
-    # LAB REPORTS
+    # PROFILE & DATA — Lab Reports
     # ════════════════════════════
-    with tab5:
+    if active_section == "profile":
         st.title("🧪 Lab Reports")
         st.caption("Upload results — AI analyses against functional ranges and compares to your history.")
 
@@ -1366,9 +1414,9 @@ Complete every section. Never cut off."""
 
 
     # ════════════════════════════
-    # WEARABLE DATA
+    # PROFILE & DATA — Wearable Data
     # ════════════════════════════
-    with tab6:
+    if active_section == "profile":
         st.title("⌚ Wearable Data")
         st.caption("WHOOP data — recovery, HRV, sleep, and strain feed directly into your coach and protocols.")
 
@@ -1587,9 +1635,9 @@ Complete every section. Never cut off."""
                     st.rerun()
 
     # ════════════════════════════
-    # DAILY CHECK-IN
+    # CHECK-IN
     # ════════════════════════════
-    with tab2:
+    if active_section == "checkin":
         st.title("📋 Daily Check-In")
 
         now = datetime.now()
@@ -1762,9 +1810,9 @@ Give ONE sharp clinical observation in 2-3 sentences. Reference their cycle phas
 
 
     # ════════════════════════════
-    # TREATMENT ROADMAP
+    # PROTOCOL — Treatment Roadmap
     # ════════════════════════════
-    with tab4b:
+    if active_section == "protocol":
         st.title("🗺️ Treatment Roadmap")
         st.caption("Your 12-month strategic plan — generated once, committed to, updated only when significant new information warrants it.")
 
@@ -1916,9 +1964,9 @@ Complete every section fully. Never cut off."""
 
 
     # ════════════════════════════
-    # WEEKLY PROTOCOL
+    # PROTOCOL — Weekly Protocol
     # ════════════════════════════
-    with tab4:
+    if active_section == "protocol":
         st.title("📅 Protocol")
         st.caption("Monthly overview · Weekly execution · Built from your committed roadmap.")
 
@@ -2145,9 +2193,9 @@ If medication includes Thyronorm — always first on waking, plain water only, 4
 
 
     # ════════════════════════════
-    # TRENDS
+    # PROTOCOL — Trends
     # ════════════════════════════
-    with tab3:
+    if active_section == "protocol":
         st.title("📊 My Trends")
         st.caption("Patterns across your check-ins, wearable data, and cycle phases.")
 
@@ -2280,9 +2328,9 @@ Identify 2-3 meaningful patterns (not just describing the data — interpret wha
 
 
     # ════════════════════════════
-    # WELLNESS COACH CHAT
+    # COACH
     # ════════════════════════════
-    with tab1:
+    if active_section == "coach":
         st.title("✦ Your Coach")
         st.caption("OneSattva · Integrative Medicine · Functional Labs · Ayurveda · TCM")
 
