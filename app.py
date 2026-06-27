@@ -713,7 +713,66 @@ def show_main_app(user):
     # HOME
     # ════════════════════════════
     with tab0:
-        # ── Header ──────────────────────────────────────────────────────────────
+
+        # ── Data fetches ─────────────────────────────────────────────────────────
+        checkins_home = db_get("checkins", user_id, order_col="checkin_date", limit=1)
+        today_logged_h = checkins_home and checkins_home[0].get("checkin_date") == date.today().isoformat()
+        wearable_home = db_get("wearable_data", user_id, order_col="data_date", limit=1)
+        labs_home = db_get("lab_reports", user_id, order_col="report_date", limit=3)
+        recent_checkins_h = db_get("checkins", user_id, order_col="checkin_date", limit=30)
+        wearable_30d = db_get("wearable_data", user_id, order_col="data_date", limit=30)
+
+        # ── Plan mode banner ─────────────────────────────────────────────────────
+        if st.session_state.get("roadmap_committed"):
+            saved_rm = db_get("roadmaps", user_id, order_col="generated_at", limit=1)
+            rm_start = None
+            rm_name = "Active programme"
+            if saved_rm:
+                try:
+                    rm_start = datetime.fromisoformat(saved_rm[0]["generated_at"].replace("Z","")).date()
+                    # Extract programme name from first non-empty line of roadmap text
+                    for ln in (saved_rm[0].get("roadmap_text","") or "").split("\n"):
+                        ln = ln.strip().lstrip("#").strip()
+                        if ln and len(ln) < 80:
+                            rm_name = ln
+                            break
+                except: pass
+            days_in = (date.today() - rm_start).days if rm_start else 0
+            week_in = (days_in // 7) + 1
+            # Progress bar: assume 90-day programme, cap at 100%
+            progress_pct = min(100, int((days_in / 90) * 100))
+            st.markdown(f"""
+            <div style='background:var(--graphite);border-radius:14px;padding:18px 22px;
+                        margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;'>
+              <div style='flex:1;'>
+                <div style='font-family:Inter,sans-serif;font-size:10px;font-weight:600;
+                            letter-spacing:0.08em;color:rgba(247,245,242,0.45);
+                            text-transform:uppercase;margin-bottom:6px;'>Plan mode</div>
+                <div style='font-family:Newsreader,serif;font-size:1.1rem;color:#F7F5F2;
+                            font-weight:500;margin-bottom:10px;'>{rm_name[:60]}</div>
+                <div style='display:flex;align-items:center;gap:10px;'>
+                  <div style='flex:1;height:3px;background:rgba(247,245,242,0.12);
+                              border-radius:2px;overflow:hidden;'>
+                    <div style='width:{progress_pct}%;height:100%;
+                                background:#B6744A;border-radius:2px;'></div>
+                  </div>
+                  <div style='font-family:JetBrains Mono,monospace;font-size:11px;
+                              color:rgba(247,245,242,0.5);white-space:nowrap;'>Wk {week_in}</div>
+                </div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style='background:var(--stone);border-radius:14px;padding:16px 20px;
+                        margin-bottom:24px;border:1px dashed rgba(17,18,20,0.15);'>
+              <div style='font-family:Inter,sans-serif;font-size:13px;color:var(--mid);'>
+                No active plan — generate a Treatment Roadmap to unlock priorities and tracking.
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # ── Greeting ─────────────────────────────────────────────────────────────
         now_h = datetime.now()
         hour_h = now_h.hour
         if hour_h < 12: greeting = "Good morning"
@@ -721,175 +780,267 @@ def show_main_app(user):
         else: greeting = "Good evening"
 
         st.markdown(f"""
-        <div style='padding:8px 0 16px;'>
+        <div style='padding:0 0 20px;'>
           <h1 style='border:none;margin-bottom:2px !important;padding-bottom:0 !important;
-                     font-family:Newsreader,serif;font-size:2rem;'>
+                     font-family:Newsreader,serif;font-size:2rem;color:var(--graphite);'>
             {greeting}, {name.split()[0] if name else 'there'}.
           </h1>
-          <p style='color:#6B6864;font-family:Inter,sans-serif;font-size:0.9rem;margin:0;'>
-            {date.today().strftime('%A, %d %B %Y')} · Cycle Day {cycle_day or '?'} · {(cycle_phase or '').split(' (')[0]}
+          <p style='color:var(--mid);font-family:Inter,sans-serif;font-size:0.9rem;margin:0;'>
+            {date.today().strftime('%A, %d %B %Y')} · Here's what matters today.
           </p>
         </div>
         """, unsafe_allow_html=True)
 
-        # ── Flags — show any urgent attention items first ────────────────────────
-        checkins_home = db_get("checkins", user_id, order_col="checkin_date", limit=1)
-        today_logged_h = checkins_home and checkins_home[0].get("checkin_date") == date.today().isoformat()
-        labs_home = db_get("lab_reports", user_id, order_col="report_date", limit=1)
-        wearable_home = db_get("wearable_data", user_id, order_col="data_date", limit=1)
+        # ── Today's priorities ───────────────────────────────────────────────────
+        st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;
+            letter-spacing:0.08em;color:var(--mid);text-transform:uppercase;
+            margin:0 0 12px;'>Today's priorities</p>""", unsafe_allow_html=True)
 
-        from datetime import date as _d2
-        three_months_ago_h = date.today() - timedelta(days=90)
-
-        flags_h = []
-        if not today_logged_h:
-            flags_h.append(("📋 Daily check-in not done yet", "info"))
-        if not labs_home:
-            flags_h.append(("🧪 No lab reports uploaded — your roadmap will be generic without them", "warning"))
-        elif labs_home:
-            try:
-                lab_age = (date.today() - date.fromisoformat(labs_home[0]["report_date"])).days
-                if lab_age > 90:
-                    flags_h.append((f"🧪 Your most recent labs are {lab_age} days old — consider retesting for current status", "warning"))
-            except: pass
-        if not st.session_state.get("roadmap_committed"):
-            flags_h.append(("🗺️ No committed roadmap — generate one in the Treatment Roadmap tab", "info"))
-        if wearable_home and wearable_home[0].get("recovery_score"):
-            rec = float(wearable_home[0]["recovery_score"])
-            if rec < 34:
-                flags_h.append((f"⌚ WHOOP recovery {rec:.0f}% — very low. Consider a rest or recovery day today", "warning"))
-
-        if flags_h:
-            for msg, kind in flags_h:
-                if kind == "warning":
-                    st.warning(msg)
-                else:
-                    st.info(msg)
-
-        st.divider()
-
-        # ── Status row ───────────────────────────────────────────────────────────
-        sc1, sc2, sc3, sc4 = st.columns(4)
-
-        with sc1:
-            st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;
-                letter-spacing:0.08em;color:#6B6864;text-transform:uppercase;margin-bottom:6px;'>
-                Check-in</p>""", unsafe_allow_html=True)
-            if today_logged_h:
-                row_h = checkins_home[0]
-                st.markdown(f"""
-                <div style='background:#F7F5F2;border-radius:10px;padding:12px;'>
-                  <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;color:#111214;'>
-                    {row_h.get('energy','?')}<span style='font-size:0.7rem;opacity:0.5;'>/10</span>
-                  </div>
-                  <div style='font-family:Inter,sans-serif;font-size:11px;color:#6B6864;margin-top:2px;'>Energy · logged ✓</div>
-                </div>""", unsafe_allow_html=True)
-            else:
-                st.markdown("""
-                <div style='background:#F7F5F2;border-radius:10px;padding:12px;border:1px dashed #C8C4BC;'>
-                  <div style='font-family:Inter,sans-serif;font-size:12px;color:#6B6864;'>Not logged yet</div>
-                </div>""", unsafe_allow_html=True)
-
-        with sc2:
-            st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;
-                letter-spacing:0.08em;color:#6B6864;text-transform:uppercase;margin-bottom:6px;'>
-                Recovery</p>""", unsafe_allow_html=True)
-            if wearable_home and wearable_home[0].get("recovery_score"):
-                rec = float(wearable_home[0]["recovery_score"])
-                rec_color = "#1D9E75" if rec >= 67 else ("#B6744A" if rec >= 34 else "#C8384A")
-                st.markdown(f"""
-                <div style='background:#F7F5F2;border-radius:10px;padding:12px;'>
-                  <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;color:{rec_color};'>
-                    {rec:.0f}<span style='font-size:0.7rem;opacity:0.5;'>%</span>
-                  </div>
-                  <div style='font-family:Inter,sans-serif;font-size:11px;color:#6B6864;margin-top:2px;'>
-                    WHOOP · HRV {wearable_home[0].get('hrv','?')} ms
-                  </div>
-                </div>""", unsafe_allow_html=True)
-            else:
-                st.markdown("""
-                <div style='background:#F7F5F2;border-radius:10px;padding:12px;border:1px dashed #C8C4BC;'>
-                  <div style='font-family:Inter,sans-serif;font-size:12px;color:#6B6864;'>No wearable data</div>
-                </div>""", unsafe_allow_html=True)
-
-        with sc3:
-            st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;
-                letter-spacing:0.08em;color:#6B6864;text-transform:uppercase;margin-bottom:6px;'>
-                Cycle</p>""", unsafe_allow_html=True)
-            st.markdown(f"""
-            <div style='background:#F7F5F2;border-radius:10px;padding:12px;'>
-              <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;color:#111214;'>
-                {cycle_day or '?'}
-              </div>
-              <div style='font-family:Inter,sans-serif;font-size:11px;color:#6B6864;margin-top:2px;'>
-                {(cycle_phase or 'Unknown').split(' (')[0]}{f' · {days_to_next}d to next' if days_to_next else ''}
-              </div>
-            </div>""", unsafe_allow_html=True)
-
-        with sc4:
-            st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;
-                letter-spacing:0.08em;color:#6B6864;text-transform:uppercase;margin-bottom:6px;'>
-                Roadmap</p>""", unsafe_allow_html=True)
-            if st.session_state.get("roadmap_committed"):
-                saved_rm = db_get("roadmaps", user_id, order_col="generated_at", limit=1)
-                rm_start = None
-                if saved_rm:
+        if "home_priorities" not in st.session_state:
+            # Check we have enough data to generate meaningful priorities
+            has_data = (
+                st.session_state.get("roadmap_committed") or
+                labs_home or
+                checkins_home or
+                wearable_home
+            )
+            if has_data:
+                with st.spinner("Preparing your priorities…"):
                     try:
-                        rm_start = datetime.fromisoformat(saved_rm[0]["generated_at"].replace("Z","")).date()
-                    except: pass
-                days_in = (date.today() - rm_start).days if rm_start else 0
-                week_in = (days_in // 7) + 1
-                phase_in = "Phase 1" if days_in < 90 else ("Phase 2" if days_in < 180 else "Phase 3")
-                st.markdown(f"""
-                <div style='background:#F7F5F2;border-radius:10px;padding:12px;'>
-                  <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;color:#111214;'>W{week_in}</div>
-                  <div style='font-family:Inter,sans-serif;font-size:11px;color:#6B6864;margin-top:2px;'>{phase_in} · committed ✓</div>
-                </div>""", unsafe_allow_html=True)
+                        # Build context for priority generation
+                        rm_text = st.session_state.get("treatment_roadmap","") or ""
+                        lab_summary = ""
+                        if labs_home:
+                            lab_lines = []
+                            for l in labs_home[:3]:
+                                lab_lines.append(f"- {l.get('test_name','Lab')} {l.get('report_date','')}: {l.get('summary') or l.get('notes','')}")
+                            lab_summary = "\n".join(lab_lines)
+                        wearable_summary = ""
+                        if wearable_home:
+                            w = wearable_home[0]
+                            wearable_summary = (
+                                f"Latest wearable ({w.get('data_date','')}):\n"
+                                f"- Recovery: {w.get('recovery_score','?')}%\n"
+                                f"- HRV: {w.get('hrv','?')} ms\n"
+                                f"- Sleep performance: {w.get('sleep_performance','?')}%\n"
+                                f"- Strain: {w.get('strain','?')}"
+                            )
+                        checkin_summary = ""
+                        if checkins_home:
+                            c = checkins_home[0]
+                            checkin_summary = (
+                                f"Latest check-in ({c.get('checkin_date','')}):\n"
+                                f"- Energy: {c.get('energy','?')}/10\n"
+                                f"- Mood: {c.get('mood','?')}/10\n"
+                                f"- Sleep: {c.get('sleep_hours','?')}h, quality {c.get('sleep_quality','?')}/10\n"
+                                f"- Notes: {c.get('notes','')}"
+                            )
+                        priority_prompt = f"""You are OneSattva. Generate exactly 3 priority cards for today based on the user's data below.
+
+Respond ONLY with valid JSON — no markdown, no preamble, no explanation. Format:
+[
+  {{"triage": "act_today", "title": "...", "body": "..."}},
+  {{"triage": "watch", "title": "...", "body": "..."}},
+  {{"triage": "background", "title": "...", "body": "..."}}
+]
+
+Triage values must be exactly: act_today, watch, or background.
+Title: max 8 words. Body: 2-3 sentences, specific and clinical.
+Order by urgency: most urgent first.
+
+If data is limited, generate priorities based on what is available — do not refuse.
+
+USER DATA:
+Roadmap: {rm_text[:800] if rm_text else 'No roadmap yet'}
+Labs: {lab_summary or 'No labs uploaded'}
+Wearable: {wearable_summary or 'No wearable data'}
+Check-in: {checkin_summary or 'No check-in data'}
+Today: {date.today().strftime('%A, %d %B %Y')}
+Cycle: Day {cycle_day or '?'}, {(cycle_phase or 'Unknown').split(' (')[0]}"""
+
+                        resp = ai_client.messages.create(
+                            model="claude-sonnet-4-6",
+                            max_tokens=600,
+                            messages=[{"role": "user", "content": priority_prompt}]
+                        )
+                        raw = resp.content[0].text.strip()
+                        # Strip markdown fences if present
+                        raw = raw.replace("```json","").replace("```","").strip()
+                        st.session_state.home_priorities = _json.loads(raw)
+                    except Exception as e:
+                        st.session_state.home_priorities = []
             else:
-                st.markdown("""
-                <div style='background:#F7F5F2;border-radius:10px;padding:12px;border:1px dashed #C8C4BC;'>
-                  <div style='font-family:Inter,sans-serif;font-size:12px;color:#6B6864;'>No roadmap yet</div>
-                </div>""", unsafe_allow_html=True)
+                st.session_state.home_priorities = []
 
-        st.divider()
+        priorities = st.session_state.get("home_priorities", [])
 
-        # ── This week's focus (from monthly protocol) ────────────────────────────
-        if st.session_state.get("monthly_protocol"):
-            with st.expander("📅 This month's focus", expanded=True):
-                # Show just the first section of monthly protocol
-                monthly_lines = st.session_state.monthly_protocol.split("\n")
-                focus_lines = [l for l in monthly_lines if l.strip() and not l.startswith("#")][:6]
-                st.markdown("\n".join(focus_lines))
+        TRIAGE_LABELS = {
+            "act_today": ("Act today", "triage-now"),
+            "watch":     ("Watch",     "triage-watch"),
+            "background":("Background","triage-background"),
+        }
 
-        # ── 7-day trend mini-chart ───────────────────────────────────────────────
-        recent_checkins_h = db_get("checkins", user_id, order_col="checkin_date", limit=7)
-        if recent_checkins_h and len(recent_checkins_h) >= 3:
-            st.markdown("##### Last 7 days")
-            df_h = pd.DataFrame(recent_checkins_h)
-            hm1, hm2, hm3 = st.columns(3)
-            if "energy" in df_h.columns:
-                avg_e = pd.to_numeric(df_h["energy"], errors="coerce").mean()
-                hm1.metric("Avg Energy", f"{avg_e:.1f}/10")
-            if "sleep_hours" in df_h.columns:
-                avg_s = pd.to_numeric(df_h["sleep_hours"], errors="coerce").mean()
-                hm2.metric("Avg Sleep", f"{avg_s:.1f} hrs")
-            if "mood" in df_h.columns:
-                avg_m = pd.to_numeric(df_h["mood"], errors="coerce").mean()
-                hm3.metric("Avg Mood", f"{avg_m:.1f}/10")
+        if priorities:
+            pc_cols = st.columns(len(priorities))
+            for i, p in enumerate(priorities[:3]):
+                triage_key = p.get("triage","background")
+                label, css_class = TRIAGE_LABELS.get(triage_key, ("Background","triage-background"))
+                with pc_cols[i]:
+                    st.markdown(f"""
+                    <div style='background:#FFFFFF;border:1px solid var(--line);border-radius:12px;
+                                padding:16px 18px;height:100%;min-height:140px;'>
+                      <span class='{css_class}' style='display:inline-block;margin-bottom:10px;'>
+                        {label}
+                      </span>
+                      <div style='font-family:Inter,sans-serif;font-size:13.5px;font-weight:600;
+                                  color:var(--graphite);margin-bottom:8px;line-height:1.35;'>
+                        {p.get('title','')}
+                      </div>
+                      <div style='font-family:Inter,sans-serif;font-size:12.5px;color:var(--mid);
+                                  line-height:1.55;'>
+                        {p.get('body','')}
+                      </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            # Refresh button
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            if st.button("↺ Refresh priorities", key="refresh_priorities"):
+                del st.session_state["home_priorities"]
+                st.rerun()
+        else:
+            st.markdown("""
+            <div style='background:var(--stone);border-radius:12px;padding:20px 22px;
+                        border:1px dashed rgba(17,18,20,0.12);'>
+              <div style='font-family:Inter,sans-serif;font-size:13px;color:var(--mid);'>
+                Priorities will appear here once you have a roadmap, labs, or check-in data.
+                Add your profile and upload labs to get started.
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        # ── Goals ────────────────────────────────────────────────────────────────
-        goals_h = db_get("goals", user_id)
-        if goals_h:
-            st.divider()
-            st.markdown("##### Your goals")
-            for g in goals_h[:4]:
-                tf = g.get("timeframe","")
-                st.markdown(f"""
-                <div style='display:flex;justify-content:space-between;align-items:center;
-                            padding:10px 14px;background:#F7F5F2;border-radius:8px;margin-bottom:6px;'>
-                  <span style='font-family:Inter,sans-serif;font-size:13px;color:#111214;'>{g['goal']}</span>
-                  {f"<span style='font-family:Inter,sans-serif;font-size:11px;color:#B6744A;white-space:nowrap;margin-left:12px;'>{tf}</span>" if tf else ""}
-                </div>""", unsafe_allow_html=True)
+        st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+
+        # ── Today's snapshot ─────────────────────────────────────────────────────
+        st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;
+            letter-spacing:0.08em;color:var(--mid);text-transform:uppercase;
+            margin:0 0 12px;'>Today's snapshot</p>""", unsafe_allow_html=True)
+
+        w = wearable_home[0] if wearable_home else {}
+        c = checkins_home[0] if checkins_home else {}
+
+        def snap_box(label, value, unit, sub, flag=""):
+            flag_html = f"<div style='font-family:Inter,sans-serif;font-size:11px;color:#B6744A;margin-top:5px;'>{flag}</div>" if flag else ""
+            if value is None:
+                return f"""
+                <div style='background:#FFFFFF;border:1px solid var(--line);border-radius:12px;
+                            padding:16px;border-style:dashed;'>
+                  <div style='font-family:Inter,sans-serif;font-size:10px;font-weight:600;
+                              letter-spacing:0.07em;color:var(--mid);text-transform:uppercase;
+                              margin-bottom:8px;'>{label}</div>
+                  <div style='font-family:Inter,sans-serif;font-size:12px;color:var(--mid);
+                              opacity:0.6;'>No data</div>
+                </div>"""
+            return f"""
+            <div style='background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:16px;'>
+              <div style='font-family:Inter,sans-serif;font-size:10px;font-weight:600;
+                          letter-spacing:0.07em;color:var(--mid);text-transform:uppercase;
+                          margin-bottom:8px;'>{label}</div>
+              <div style='font-family:JetBrains Mono,monospace;font-size:1.6rem;
+                          color:var(--graphite);line-height:1;'>
+                {value}<span style='font-size:0.65em;opacity:0.5;margin-left:2px;'>{unit}</span>
+              </div>
+              <div style='font-family:Inter,sans-serif;font-size:11px;color:var(--mid);
+                          margin-top:5px;'>{sub}</div>
+              {flag_html}
+            </div>"""
+
+        sn1, sn2, sn3, sn4 = st.columns(4)
+
+        hrv_val = w.get("hrv") if w else None
+        with sn1:
+            st.markdown(snap_box("HRV", hrv_val, "ms", "WHOOP · latest"), unsafe_allow_html=True)
+
+        rec_val = round(float(w["recovery_score"])) if w.get("recovery_score") else None
+        with sn2:
+            st.markdown(snap_box("Recovery", rec_val, "%", "WHOOP · latest"), unsafe_allow_html=True)
+
+        sleep_val = w.get("sleep_performance") if w else None
+        with sn3:
+            st.markdown(snap_box("Sleep", sleep_val, "%", "WHOOP · latest"), unsafe_allow_html=True)
+
+        energy_val = c.get("energy") if c else None
+        energy_sub = f"Check-in · {c.get('checkin_date','')}" if c else "No check-in"
+        with sn4:
+            st.markdown(snap_box("Energy", energy_val, "/10", energy_sub), unsafe_allow_html=True)
+
+        st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+
+        # ── Trends ───────────────────────────────────────────────────────────────
+        has_checkin_trend = len(recent_checkins_h) >= 7
+        has_wearable_trend = len(wearable_30d) >= 7
+
+        if has_checkin_trend or has_wearable_trend:
+            st.markdown("""<p style='font-family:Inter,sans-serif;font-size:11px;font-weight:600;
+                letter-spacing:0.08em;color:var(--mid);text-transform:uppercase;
+                margin:0 0 12px;'>Trends</p>""", unsafe_allow_html=True)
+
+            tr1, tr2 = st.columns(2)
+
+            if has_checkin_trend:
+                df_ci = pd.DataFrame(recent_checkins_h)
+                df_ci = df_ci.sort_values("checkin_date")
+                energy_vals = pd.to_numeric(df_ci.get("energy", pd.Series()), errors="coerce").dropna().tolist()
+                sleep_vals  = pd.to_numeric(df_ci.get("sleep_hours", pd.Series()), errors="coerce").dropna().tolist()
+                # Normalise to % of max for bar heights
+                def to_bars(vals, max_val=10):
+                    return [max(8, int((v / max_val) * 100)) for v in vals[-15:]]
+                energy_bars = to_bars(energy_vals, 10)
+                sleep_bars  = to_bars(sleep_vals, 10)
+                bars_html_e = "".join([
+                    f"<div style='flex:1;background:var(--graphite);border-radius:2px 2px 0 0;height:{h}%;opacity:0.75;'></div>"
+                    for h in energy_bars
+                ])
+                with tr1:
+                    st.markdown(f"""
+                    <div style='background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px;'>
+                      <div style='font-family:Inter,sans-serif;font-size:12.5px;font-weight:600;
+                                  color:var(--graphite);margin-bottom:6px;'>Energy · 30 days</div>
+                      <div style='display:flex;align-items:flex-end;gap:3px;height:52px;margin-bottom:10px;'>
+                        {bars_html_e}
+                      </div>
+                      <div style='font-family:Inter,sans-serif;font-size:12px;color:var(--mid);
+                                  line-height:1.5;'>
+                        Avg {sum(energy_vals)/len(energy_vals):.1f}/10 over {len(energy_vals)} logged days.
+                      </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            if has_wearable_trend:
+                df_w = pd.DataFrame(wearable_30d)
+                df_w = df_w.sort_values("data_date")
+                hrv_vals = pd.to_numeric(df_w.get("hrv", pd.Series()), errors="coerce").dropna().tolist()
+                if hrv_vals:
+                    max_hrv = max(hrv_vals) or 1
+                    hrv_bars = [max(8, int((v / max_hrv) * 100)) for v in hrv_vals[-15:]]
+                    bars_html_h = "".join([
+                        f"<div style='flex:1;background:var(--graphite);border-radius:2px 2px 0 0;height:{h}%;opacity:0.75;'></div>"
+                        for h in hrv_bars
+                    ])
+                    with tr2:
+                        st.markdown(f"""
+                        <div style='background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px;'>
+                          <div style='font-family:Inter,sans-serif;font-size:12.5px;font-weight:600;
+                                      color:var(--graphite);margin-bottom:6px;'>HRV trajectory · 30 days</div>
+                          <div style='display:flex;align-items:flex-end;gap:3px;height:52px;margin-bottom:10px;'>
+                            {bars_html_h}
+                          </div>
+                          <div style='font-family:Inter,sans-serif;font-size:12px;color:var(--mid);
+                                      line-height:1.5;'>
+                            Avg {sum(hrv_vals)/len(hrv_vals):.0f} ms over {len(hrv_vals)} days.
+                            Latest {hrv_vals[-1]:.0f} ms.
+                          </div>
+                        </div>
+                        """, unsafe_allow_html=True)
 
     # ════════════════════════════
     # PROFILE
