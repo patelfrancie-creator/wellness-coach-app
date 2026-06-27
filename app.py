@@ -1012,7 +1012,7 @@ Cycle: Day {cycle_day or '?'}, {(cycle_phase or 'Unknown').split(' (')[0]}"""
                 else:
                     st.markdown("""
                     <div style='background:#FFFFFF;border:1px solid var(--line);border-radius:12px;
-                                padding:18px;border-style:dashed;'>
+                                padding:18px;border-style:dashed;min-height:130px;'>
                       <div style='font-family:Inter,sans-serif;font-size:12.5px;font-weight:600;
                                   color:var(--graphite);margin-bottom:6px;'>Energy · 30 days</div>
                       <div style='font-family:Inter,sans-serif;font-size:12px;color:var(--mid);'>
@@ -1049,7 +1049,7 @@ Cycle: Day {cycle_day or '?'}, {(cycle_phase or 'Unknown').split(' (')[0]}"""
                 else:
                     st.markdown("""
                     <div style='background:#FFFFFF;border:1px solid var(--line);border-radius:12px;
-                                padding:18px;border-style:dashed;'>
+                                padding:18px;border-style:dashed;min-height:130px;'>
                       <div style='font-family:Inter,sans-serif;font-size:12.5px;font-weight:600;
                                   color:var(--graphite);margin-bottom:6px;'>HRV trajectory · 30 days</div>
                       <div style='font-family:Inter,sans-serif;font-size:12px;color:var(--mid);'>
