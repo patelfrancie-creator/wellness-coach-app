@@ -572,50 +572,52 @@ def show_auth_screen():
 
     # ── LANDING (S1) ──────────────────────────────────────────────────────
     if auth_mode == "landing":
+        # Full-page dark landing — CTAs embedded inside the HTML so they stay in-viewport.
+        # Streamlit can't fill 100vh reliably; we use a large centred card instead.
         st.markdown(f"""
-        <div style="background:var(--graphite);min-height:100vh;display:flex;
-                    flex-direction:column;margin:-1rem -1rem 0 -1rem;padding:0;">
-          <!-- nav -->
-          <div style="padding:24px 52px;display:flex;justify-content:space-between;align-items:center;">
+        <div style="min-height:92vh;background:var(--graphite);border-radius:16px;
+                    display:flex;flex-direction:column;overflow:hidden;margin:-0.5rem 0;">
+          <!-- nav bar -->
+          <div style="padding:22px 40px;display:flex;justify-content:space-between;align-items:center;">
             <div style="display:flex;align-items:center;gap:10px;">
               {_MARK_DARK}
               <div>
-                <span style="font-family:'Newsreader',serif;font-weight:400;font-size:19px;
-                             letter-spacing:-0.02em;color:#F7F5F2;line-height:1;">OneSattva</span>
+                <div style="font-family:'Newsreader',serif;font-weight:400;font-size:18px;
+                            letter-spacing:-0.02em;color:#F7F5F2;line-height:1;">OneSattva</div>
                 <div style="font-family:'Newsreader',serif;font-style:italic;font-size:11px;
                             color:var(--copper);margin-top:3px;">Health, understood.</div>
               </div>
             </div>
           </div>
-          <!-- body -->
+          <!-- hero body -->
           <div style="flex:1;display:flex;align-items:center;justify-content:center;
-                      flex-direction:column;text-align:center;padding:48px;">
+                      flex-direction:column;text-align:center;padding:40px 40px 20px;">
             {_mark_light(76)}
-            <div style="font-family:'Newsreader',serif;font-style:italic;font-size:58px;
-                        color:var(--bone);line-height:1.1;margin:28px 0 16px;max-width:560px;">
+            <div style="font-family:'Newsreader',serif;font-style:italic;font-size:52px;
+                        color:var(--bone);line-height:1.1;margin:24px 0 14px;max-width:540px;">
               Health, understood.
             </div>
             <div style="font-size:15px;color:rgba(247,245,242,0.42);line-height:1.65;
-                        max-width:420px;margin-bottom:42px;">
+                        max-width:400px;margin-bottom:36px;">
               Your personal health intelligence — remembers your story, understands your context,
               and guides what matters next.
             </div>
           </div>
           <!-- footer -->
-          <div style="padding:22px 52px;border-top:1px solid rgba(247,245,242,0.06);
+          <div style="padding:18px 40px;border-top:1px solid rgba(247,245,242,0.06);
                       display:flex;justify-content:space-between;">
-            <div style="font-size:11.5px;color:rgba(247,245,242,0.2);">
-              © 2026 OneSattva · Not a substitute for medical care · Trademark clearance pending
+            <div style="font-size:11px;color:rgba(247,245,242,0.2);">
+              © 2026 OneSattva · Not a substitute for medical care
             </div>
-            <div style="font-size:11.5px;color:rgba(247,245,242,0.2);">
-              Functional Medicine · Ayurveda · Traditional Chinese Medicine
+            <div style="font-size:11px;color:rgba(247,245,242,0.2);">
+              Functional Medicine · Ayurveda · TCM
             </div>
           </div>
         </div>
         """, unsafe_allow_html=True)
 
-        # CTA buttons under the dark section (Streamlit renders below)
-        st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+        # CTAs rendered by Streamlit immediately below the dark card
+        st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         _, col1, col2, _ = st.columns([3, 2, 2, 3])
         with col1:
             if st.button("Begin your journey", type="primary", use_container_width=True, key="landing_begin"):
@@ -630,16 +632,15 @@ def show_auth_screen():
     elif auth_mode == "login":
         col1, col2, col3 = st.columns([1, 1.4, 1])
         with col2:
+            # Mark + wordmark header above the card (no separate white box)
             st.markdown(f"""
-            <div style="background:var(--bone);border-radius:18px;padding:44px;
-                        box-shadow:0 8px 48px rgba(17,18,20,0.18);margin-top:48px;">
-              <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:32px;gap:10px;">
-                {_mark_light(46)}
-                <span style="font-family:'Newsreader',serif;font-weight:400;font-size:26px;
-                             letter-spacing:-0.02em;color:#111214;line-height:1;">OneSattva</span>
-                <div style="font-family:'Newsreader',serif;font-style:italic;
-                            font-size:12.5px;color:var(--copper);">Health, understood.</div>
-              </div>
+            <div style="display:flex;flex-direction:column;align-items:center;
+                        margin:40px 0 24px;gap:10px;text-align:center;">
+              {_mark_light(46)}
+              <span style="font-family:'Newsreader',serif;font-weight:400;font-size:26px;
+                           letter-spacing:-0.02em;color:#111214;line-height:1;">OneSattva</span>
+              <div style="font-family:'Newsreader',serif;font-style:italic;
+                          font-size:12.5px;color:var(--copper);">Health, understood.</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -690,13 +691,11 @@ def show_auth_screen():
         col1, col2, col3 = st.columns([1, 1.4, 1])
         with col2:
             st.markdown(f"""
-            <div style="background:var(--bone);border-radius:18px;padding:44px;
-                        box-shadow:0 8px 48px rgba(17,18,20,0.18);margin-top:48px;">
-              <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:32px;gap:10px;">
-                {_mark_light(38)}
-                <span style="font-family:'Newsreader',serif;font-weight:400;font-size:22px;
-                             letter-spacing:-0.02em;color:#111214;line-height:1;">OneSattva</span>
-              </div>
+            <div style="display:flex;flex-direction:column;align-items:center;
+                        margin:40px 0 20px;gap:10px;text-align:center;">
+              {_mark_light(38)}
+              <span style="font-family:'Newsreader',serif;font-weight:400;font-size:22px;
+                           letter-spacing:-0.02em;color:#111214;line-height:1;">OneSattva</span>
             </div>
             """, unsafe_allow_html=True)
 
@@ -1375,13 +1374,19 @@ def show_main_app(user):
 
         st.markdown('<div style="font-size:10px;font-weight:600;letter-spacing:0.08em;color:rgba(247,245,242,0.24);text-transform:uppercase;padding:0 8px;margin-bottom:5px;">Navigation</div>', unsafe_allow_html=True)
 
+        # Inject active-state CSS for the currently active nav button
+        active_now = st.session_state.get("active_section", "home")
+        nav_css = ""
+        nav_keys = ["home","protocol","checkin","coach","profile"]
+        for nk in nav_keys:
+            if active_now == nk:
+                nav_css += f"[data-testid='stSidebar'] [data-testid='stButton']:has(button[data-testid='stButton'][key='nav_{nk}']) > button{{background:rgba(182,116,74,0.11)!important;color:#F7F5F2!important;}}"
+        if nav_css:
+            st.markdown(f"<style>{nav_css}</style>", unsafe_allow_html=True)
+
         NAV = [("home","⌂","Home"), ("protocol","◈","Protocol"),
                ("checkin","✓","Check-In"), ("coach","✦","Coach")]
         for sec, icon, label in NAV:
-            is_on = st.session_state.active_section == sec
-            # Inject active style per nav item
-            if is_on:
-                st.markdown(f"<style>[data-testid='stSidebar'] button[kind='secondary']:has(div:contains('{icon}')){{background:rgba(182,116,74,0.11)!important;color:#F7F5F2!important;}}</style>", unsafe_allow_html=True)
             if st.button(f"{icon}  {label}", key=f"nav_{sec}", use_container_width=True):
                 st.session_state.active_section = sec; st.rerun()
 
@@ -1577,6 +1582,44 @@ def _protocol(user_id, profile, cycle_day, cycle_phase, plan_mode, current_week,
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "Treatment Roadmap", "Monthly Goal", "Supplements", "Nutrition", "Workouts"])
 
+    # ── Gap detection (7-day / 14-day logic) ────────────────────────────
+    last_ci = db_get("checkins", user_id, order_col="checkin_date", limit=1)
+    gap_days = 0
+    if last_ci:
+        try:
+            gap_days = (date.today() - date.fromisoformat(last_ci[0]["checkin_date"])).days
+        except Exception:
+            gap_days = 0
+
+    if gap_days >= 14:
+        st.markdown("""
+        <div style="background:var(--cu-bg);border:1px solid var(--cu-bd);border-radius:10px;
+                    padding:14px 18px;margin-bottom:16px;">
+          <div style="font-size:13px;font-weight:500;color:var(--graphite);margin-bottom:6px;">
+            ⚠️ It's been """ + str(gap_days) + """ days since your last check-in
+          </div>
+          <div style="font-size:12.5px;color:var(--mid);line-height:1.5;">
+            A gap this long may mean your protocol needs a review before continuing.
+            Your coach will ask a re-entry question before making new recommendations.
+            Update your profile notes with anything that has changed.
+          </div>
+        </div>""", unsafe_allow_html=True)
+        reentry = st.text_area("What's changed in the last few weeks? (optional)",
+            placeholder="e.g. Been travelling, stopped some supplements, energy has been low...",
+            key="reentry_note")
+        if st.button("Update my coach and continue", type="primary", key="reentry_btn"):
+            if reentry.strip():
+                ex = db_get_single("profile_notes", user_id)
+                combined = ((ex.get("notes","") if ex else "") + f"\n\n[Re-entry {date.today()}]: {reentry}").strip()
+                db_upsert("profile_notes", {"user_id": user_id, "notes": combined})
+                st.session_state.system_prompt = build_system_prompt(user_id, profile)
+                for k in ["weekly_supplements","weekly_nutrition","weekly_workouts","monthly_protocol"]:
+                    st.session_state.pop(k, None)
+                st.success("Updated. Your protocol will reflect this context.")
+                st.rerun()
+    elif gap_days >= 7:
+        st.info(f"👋 It's been {gap_days} days since your last check-in. Has anything changed? If so, update your profile notes before generating this week's protocol.")
+
     # Load roadmap into session if not present
     if "treatment_roadmap" not in st.session_state: st.session_state.treatment_roadmap = None
     if "roadmap_committed" not in st.session_state: st.session_state.roadmap_committed = False
@@ -1678,7 +1721,7 @@ Complete every section. Never cut off."""
             roadmap_phase      = "Phase 1" if days_in < 90 else ("Phase 2" if days_in < 180 else "Phase 3")
             mhc, mbc = st.columns([3,1])
             with mbc:
-                if st.button("↻ Refresh", use_container_width=True, key="refresh_month"):
+                if st.button("↻ Regenerate", use_container_width=True, key="refresh_month"):
                     st.session_state.monthly_protocol = None
             if "monthly_protocol" not in st.session_state: st.session_state.monthly_protocol = None
             if "monthly_protocol_month" not in st.session_state: st.session_state.monthly_protocol_month = None
@@ -1701,7 +1744,18 @@ Complete every section. Never cut off."""
             st.info("💡 Generate and commit your Treatment Roadmap first.")
         else:
             if "weekly_supplements" not in st.session_state: st.session_state.weekly_supplements = None
-            if st.button("🔄 Generate / Refresh Supplement Schedule", type="primary", use_container_width=True, key="gen_supps"):
+            if st.session_state.weekly_supplements:
+                supp_feedback = st.text_input("Want to adjust anything?",
+                    placeholder="e.g. I stopped taking Zinc, add Ashwagandha for stress",
+                    key="supp_feedback")
+                regen_col, _ = st.columns([2,3])
+                with regen_col:
+                    regen_supps = st.button("↻ Regenerate with changes", key="regen_supps")
+            else:
+                supp_feedback = ""
+                regen_supps   = False
+            if st.button("Generate Supplement Schedule", type="primary", use_container_width=True, key="gen_supps") or regen_supps:
+                if regen_supps: st.session_state.weekly_supplements = None
                 with st.spinner("Building supplement schedule..."):
                     rs = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=2000,
                         system=st.session_state.system_prompt,
@@ -1722,7 +1776,18 @@ Complete every section. Never cut off."""
         else:
             if "weekly_nutrition" not in st.session_state: st.session_state.weekly_nutrition = None
             np_focus = st.selectbox("Priority focus", ["Balanced","Fat loss","Fertility & conception","Gut healing","Energy & thyroid","Sleep & recovery"], key="np_focus")
-            if st.button("🔄 Generate / Refresh Nutrition Plan", type="primary", use_container_width=True, key="gen_nutrition"):
+            if st.session_state.weekly_nutrition:
+                nut_feedback = st.text_input("Want to adjust anything?",
+                    placeholder="e.g. I'm travelling this week, need simpler meals",
+                    key="nut_feedback")
+                rn_col, _ = st.columns([2,3])
+                with rn_col:
+                    regen_nut = st.button("↻ Regenerate with changes", key="regen_nut")
+            else:
+                nut_feedback = ""
+                regen_nut    = False
+            if st.button("Generate Nutrition Plan", type="primary", use_container_width=True, key="gen_nutrition") or regen_nut:
+                if regen_nut: st.session_state.weekly_nutrition = None
                 day_names = [(datetime.now()+timedelta(days=i)).strftime("%A %d %b") for i in range(7)]
                 with st.spinner("Building 7-day nutrition plan..."):
                     rn = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=4096,
@@ -1742,7 +1807,18 @@ Complete every section. Never cut off."""
             st.info("💡 Generate and commit your Treatment Roadmap first.")
         else:
             if "weekly_workouts" not in st.session_state: st.session_state.weekly_workouts = None
-            if st.button("🔄 Generate / Refresh Training Plan", type="primary", use_container_width=True, key="gen_workouts"):
+            if st.session_state.weekly_workouts:
+                wo_feedback = st.text_input("Want to adjust anything?",
+                    placeholder="e.g. Knee is sore this week, avoid squats",
+                    key="wo_feedback")
+                rw_col, _ = st.columns([2,3])
+                with rw_col:
+                    regen_wo = st.button("↻ Regenerate with changes", key="regen_wo")
+            else:
+                wo_feedback = ""
+                regen_wo    = False
+            if st.button("Generate Training Plan", type="primary", use_container_width=True, key="gen_workouts") or regen_wo:
+                if regen_wo: st.session_state.weekly_workouts = None
                 day_names = [(datetime.now()+timedelta(days=i)).strftime("%A %d %b") for i in range(7)]
                 with st.spinner("Building training plan..."):
                     rw = ai_client.messages.create(model="claude-sonnet-4-6", max_tokens=3000,
@@ -1817,33 +1893,24 @@ def _checkin(user_id, name, first, cycle_day, cycle_phase):
             st.session_state.edit_checkin = True; st.rerun()
 
     if not already or st.session_state.get("edit_checkin"):
-        # ci-grid: 2-col, 3 rows = 6 fields (prototype exact)
-        st.markdown('<div class="ci-grid">', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        # Use streamlit columns to approximate ci-grid
         ci_col1, ci_col2 = st.columns(2)
         with ci_col1:
-            st.markdown('<div class="ci-field"><div class="ci-lbl">Energy</div></div>', unsafe_allow_html=True)
+            st.markdown("<p style='font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--mid);margin-bottom:4px;'>Energy</p>", unsafe_allow_html=True)
             c_energy = st.slider("Energy", 1, 10, pv("energy",5), key="ci_e", label_visibility="collapsed")
-
-            st.markdown('<div class="ci-field"><div class="ci-lbl">Sleep quality</div></div>', unsafe_allow_html=True)
+            st.markdown("<p style='font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--mid);margin:12px 0 4px;'>Sleep quality</p>", unsafe_allow_html=True)
             c_sleep_q = st.slider("Sleep quality", 1, 10, pv("sleep_quality",5), key="ci_sq", label_visibility="collapsed")
-
-            st.markdown('<div class="ci-field"><div class="ci-lbl">Gut / digestion</div></div>', unsafe_allow_html=True)
+            st.markdown("<p style='font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--mid);margin:12px 0 4px;'>Gut / digestion</p>", unsafe_allow_html=True)
             bloat_opts = ["None","Mild","Moderate","Severe"]
             c_bloating = st.selectbox("Gut", bloat_opts,
                 index=bloat_opts.index(pv("bloating","None")) if pv("bloating","None") in bloat_opts else 0,
                 key="ci_b", label_visibility="collapsed")
 
         with ci_col2:
-            st.markdown('<div class="ci-field"><div class="ci-lbl">Mental clarity</div></div>', unsafe_allow_html=True)
+            st.markdown("<p style='font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--mid);margin-bottom:4px;'>Mental clarity</p>", unsafe_allow_html=True)
             c_mood = st.slider("Mental clarity", 1, 10, pv("mood",5), key="ci_m", label_visibility="collapsed")
-
-            st.markdown('<div class="ci-field"><div class="ci-lbl">Mood</div></div>', unsafe_allow_html=True)
+            st.markdown("<p style='font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--mid);margin:12px 0 4px;'>Mood</p>", unsafe_allow_html=True)
             c_stress = st.slider("Mood", 1, 10, pv("stress",5), key="ci_s", label_visibility="collapsed")
-
-            st.markdown('<div class="ci-field"><div class="ci-lbl">Libido</div></div>', unsafe_allow_html=True)
+            st.markdown("<p style='font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--mid);margin:12px 0 4px;'>Libido</p>", unsafe_allow_html=True)
             lib_opts = ["Good","Average","Poor"]
             c_libido = st.selectbox("Libido", lib_opts,
                 index=lib_opts.index(pv("digestion","Good")) if pv("digestion","Good") in lib_opts else 0,
@@ -1856,7 +1923,6 @@ def _checkin(user_id, name, first, cycle_day, cycle_phase):
             placeholder="e.g. Headache this morning. Noticed more energy after lunch. Want to ask about increasing training load...",
             height=80, key="ci_n")
 
-        st.markdown('<div class="save-row">', unsafe_allow_html=True)
         if st.button("Save today's check-in →", type="primary", use_container_width=True, key="ci_save"):
             if cycle_day:
                 if   cycle_day <= 5:  ph = "Menstruation"
@@ -1873,7 +1939,6 @@ def _checkin(user_id, name, first, cycle_day, cycle_phase):
             st.session_state.pop("checkin_insight", None)
             st.session_state.pop("edit_checkin", None)
             st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
 # COACH (prototype-exact: forest welcome box + ch-hd labels)
