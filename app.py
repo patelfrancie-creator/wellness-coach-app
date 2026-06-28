@@ -1,6 +1,6 @@
 """
 OneSattva — Health, understood.
-app.py · June 2026
+app.py · June 2026 · v2
 Stack: Streamlit / Supabase / Anthropic Claude Sonnet / Resend / GitHub / Streamlit Cloud
 Supabase: fxzqxovsisdbfgixnjgj — profiles table PK is `id` not `user_id`
 UI source of truth: OneSattva_Prototype_Part1.html + OneSattva_Prototype_Part2.html
