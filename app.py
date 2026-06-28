@@ -616,7 +616,7 @@ def show_auth_screen():
 
         # CTA buttons under the dark section (Streamlit renders below)
         st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
-        col1, col2, col3 = st.columns([2, 1, 1, 2])[1:3] if False else st.columns([3,2,2,3])[1:3]
+        _, col1, col2, _ = st.columns([3, 2, 2, 3])
         with col1:
             if st.button("Begin your journey", type="primary", use_container_width=True, key="landing_begin"):
                 st.session_state.auth_mode = "signup"
