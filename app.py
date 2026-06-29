@@ -129,11 +129,36 @@ GLOBAL_CSS = """
 .fn { color:var(--graphite); font-weight:500; }
 .fok { color:#3A6B4A; font-size:11px; font-weight:600; }
 
-/* Auth dark page */
-.auth-page .stApp { background-color: #111214 !important; }
-.auth-card { background:var(--bone); border-radius:16px; padding:40px 36px; max-width:420px; margin:60px auto; box-shadow:0 8px 32px rgba(0,0,0,0.3); }
-.auth-card h1 { font-family:'Newsreader',serif; font-size:22px; color:var(--graphite); margin:12px 0 2px; font-weight:400; }
-.auth-card .tagline { font-family:'Newsreader',serif; font-style:italic; font-size:13px; color:var(--copper); margin-bottom:20px; }
+/* Auth — style the bone container that wraps Streamlit widgets */
+[data-testid="stVerticalBlock"] > .auth-wrapper {
+    background: var(--bone); border-radius:16px; padding:40px 36px;
+    max-width:420px; margin:60px auto; box-shadow:0 8px 32px rgba(0,0,0,0.3);
+}
+
+/* Sidebar nav buttons — ghost style matching prototype */
+[data-testid="stSidebar"] button[kind="secondary"],
+[data-testid="stSidebar"] button[data-testid^="stBaseButton"] {
+    background: transparent !important;
+    border: none !important;
+    color: rgba(247,245,242,0.55) !important;
+    font-size: 13px !important;
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 400 !important;
+    text-align: left !important;
+    padding: 8px 12px !important;
+    border-radius: 8px !important;
+    justify-content: flex-start !important;
+    transition: background 0.15s, color 0.15s;
+}
+[data-testid="stSidebar"] button[kind="secondary"]:hover {
+    background: rgba(247,245,242,0.06) !important;
+    color: #F7F5F2 !important;
+}
+/* Active nav item — set via data attribute */
+[data-testid="stSidebar"] button.nav-active {
+    background: rgba(182,116,74,0.11) !important;
+    color: #F7F5F2 !important;
+}
 .mode-card { background:var(--white); border:2px solid var(--line); border-radius:12px; padding:16px; cursor:pointer; transition:border-color 0.2s; }
 .mode-card.selected { border-color:var(--graphite); }
 .mode-dur { font-size:10px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--mid); }
@@ -536,6 +561,20 @@ INDIA SUPPLEMENT BRANDS (preference order):
 def show_auth():
     st.markdown(AUTH_CSS, unsafe_allow_html=True)
     st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
+    # Extra CSS to style the auth container and inputs on dark bg
+    st.markdown("""<style>
+    .stApp [data-testid="stVerticalBlock"] { max-width:440px; margin:0 auto; }
+    .auth-mark { text-align:center; margin-top:50px; }
+    .auth-wordmark { text-align:center; font-family:'Newsreader',serif; font-size:24px; color:#F7F5F2; margin:14px 0 2px; font-weight:400; }
+    .auth-tagline { text-align:center; font-family:'Newsreader',serif; font-style:italic; font-size:13px; color:#B6744A; margin-bottom:28px; }
+    /* Bone card for the form area */
+    [data-testid="stExpander"], .auth-form-card {
+        background:#F7F5F2 !important; border-radius:16px !important;
+        padding:32px 28px !important; box-shadow:0 8px 32px rgba(0,0,0,0.3) !important;
+    }
+    .auth-form-card [data-testid="stTextInput"] label,
+    .auth-form-card [data-testid="stCheckbox"] label { color:var(--graphite) !important; }
+    </style>""", unsafe_allow_html=True)
 
     mode = st.session_state.get("auth_mode", "login")
 
@@ -543,78 +582,73 @@ def show_auth():
         show_password_reset()
         return
 
-    col_l, col_c, col_r = st.columns([1, 2, 1])
-    with col_c:
-        st.markdown(f'<div style="text-align:center;margin-top:60px;">{mark_svg(46, dark=True)}</div>', unsafe_allow_html=True)
-        st.markdown('<div style="text-align:center;font-family:Newsreader,serif;font-size:22px;color:#F7F5F2;margin:12px 0 2px;">OneSattva</div>', unsafe_allow_html=True)
-        st.markdown('<div style="text-align:center;font-family:Newsreader,serif;font-style:italic;font-size:13px;color:#B6744A;margin-bottom:24px;">Health, understood.</div>', unsafe_allow_html=True)
+    # Mark + Wordmark + Tagline (rendered on dark bg)
+    st.markdown(f'<div class="auth-mark">{mark_svg(46, dark=True)}</div>', unsafe_allow_html=True)
+    st.markdown('<div class="auth-wordmark">OneSattva</div>', unsafe_allow_html=True)
+    st.markdown('<div class="auth-tagline">Health, understood.</div>', unsafe_allow_html=True)
 
-        if mode == "login":
-            with st.container():
-                st.markdown('<div style="background:#F7F5F2;border-radius:16px;padding:32px 28px;box-shadow:0 8px 32px rgba(0,0,0,0.3);">', unsafe_allow_html=True)
-                email = st.text_input("Email", key="login_email")
-                password = st.text_input("Password", type="password", key="login_password")
-                if st.button("Forgot password?", type="tertiary"):
-                    st.session_state["auth_mode"] = "reset"
-                    st.rerun()
-                if st.button("Sign in", type="primary", use_container_width=True):
-                    if email and password:
-                        user, session, err = sign_in(email, password)
-                        if err:
-                            st.error(err)
-                        else:
-                            st.session_state["user"] = user
-                            st.session_state["session"] = session
-                            st.rerun()
+    if mode == "login":
+        with st.container(border=True):
+            email = st.text_input("Email", key="login_email")
+            password = st.text_input("Password", type="password", key="login_password")
+            if st.button("Forgot password?", type="tertiary"):
+                st.session_state["auth_mode"] = "reset"
+                st.rerun()
+            if st.button("Sign in", type="primary", use_container_width=True):
+                if email and password:
+                    user, session, err = sign_in(email, password)
+                    if err:
+                        st.error(err)
                     else:
-                        st.warning("Please enter email and password.")
-                st.markdown('</div>', unsafe_allow_html=True)
-                if st.button("New to OneSattva? Create an account →", type="tertiary", use_container_width=True):
-                    st.session_state["auth_mode"] = "signup"
-                    st.rerun()
+                        st.session_state["user"] = user
+                        st.session_state["session"] = session
+                        st.rerun()
+                else:
+                    st.warning("Please enter email and password.")
+        if st.button("New to OneSattva? Create an account →", type="tertiary", use_container_width=True):
+            st.session_state["auth_mode"] = "signup"
+            st.rerun()
 
-        elif mode == "signup":
-            with st.container():
-                st.markdown('<div style="background:#F7F5F2;border-radius:16px;padding:32px 28px;box-shadow:0 8px 32px rgba(0,0,0,0.3);">', unsafe_allow_html=True)
-                c1, c2 = st.columns(2)
-                with c1:
-                    first_name = st.text_input("First name", key="su_first")
-                with c2:
-                    last_name = st.text_input("Last name", key="su_last")
-                email = st.text_input("Email", key="su_email")
-                password = st.text_input("Create password", type="password", key="su_pass", help="Minimum 8 characters")
-                st.divider()
-                tos = st.checkbox("I agree to the **Terms of Service** and **Privacy Policy**", key="su_tos")
-                health_consent = st.checkbox("I explicitly consent to OneSattva collecting, storing, and processing my personal health data — including lab results, wearable data, and symptom logs — solely for personalised health coaching.", key="su_health")
-                if st.button("Create account →", type="primary", use_container_width=True):
-                    if not first_name or not last_name:
-                        st.error("Please enter your full name.")
-                    elif not email:
-                        st.error("Please enter your email.")
-                    elif len(password) < 8:
-                        st.error("Password must be at least 8 characters.")
-                    elif not tos:
-                        st.error("You must agree to the Terms of Service and Privacy Policy.")
-                    elif not health_consent:
-                        st.error("You must consent to health data processing to use OneSattva.")
+    elif mode == "signup":
+        with st.container(border=True):
+            st.markdown(f'<div style="text-align:center;margin-bottom:12px;">{mark_svg(38)}</div>', unsafe_allow_html=True)
+            st.markdown('<div style="text-align:center;font-family:Newsreader,serif;font-size:20px;color:var(--graphite);margin-bottom:16px;">Create your account</div>', unsafe_allow_html=True)
+            c1, c2 = st.columns(2)
+            with c1:
+                first_name = st.text_input("First name", key="su_first")
+            with c2:
+                last_name = st.text_input("Last name", key="su_last")
+            email = st.text_input("Email", key="su_email")
+            password = st.text_input("Create password", type="password", key="su_pass", help="Minimum 8 characters")
+            st.divider()
+            tos = st.checkbox("I agree to the **Terms of Service** and **Privacy Policy**", key="su_tos")
+            health_consent = st.checkbox("I explicitly consent to OneSattva collecting, storing, and processing my personal health data — including lab results, wearable data, and symptom logs — solely for personalised health coaching.", key="su_health")
+            if st.button("Create account →", type="primary", use_container_width=True):
+                if not first_name or not last_name:
+                    st.error("Please enter your full name.")
+                elif not email:
+                    st.error("Please enter your email.")
+                elif len(password) < 8:
+                    st.error("Password must be at least 8 characters.")
+                elif not tos:
+                    st.error("You must agree to the Terms of Service and Privacy Policy.")
+                elif not health_consent:
+                    st.error("You must consent to health data processing to use OneSattva.")
+                else:
+                    full_name = f"{first_name} {last_name}"
+                    user, err = sign_up(email, password, full_name)
+                    if err:
+                        st.error(err)
                     else:
-                        full_name = f"{first_name} {last_name}"
-                        user, err = sign_up(email, password, full_name)
-                        if err:
-                            st.error(err)
-                        else:
-                            st.success("Account created! Please check your email to verify, then sign in.")
-                st.markdown('</div>', unsafe_allow_html=True)
-                if st.button("Already have an account? Sign in", type="tertiary", use_container_width=True):
-                    st.session_state["auth_mode"] = "login"
-                    st.rerun()
+                        st.success("Account created! Please check your email to verify, then sign in.")
+        if st.button("Already have an account? Sign in", type="tertiary", use_container_width=True):
+            st.session_state["auth_mode"] = "login"
+            st.rerun()
 
 def show_password_reset():
-    col_l, col_c, col_r = st.columns([1, 2, 1])
-    with col_c:
-        st.markdown(f'<div style="text-align:center;margin-top:60px;">{mark_svg(38, dark=True)}</div>', unsafe_allow_html=True)
-        st.markdown('<div style="text-align:center;font-family:Newsreader,serif;font-size:22px;color:#F7F5F2;margin:12px 0 20px;">Reset password</div>', unsafe_allow_html=True)
-        st.markdown('<div style="background:#F7F5F2;border-radius:16px;padding:32px 28px;box-shadow:0 8px 32px rgba(0,0,0,0.3);">', unsafe_allow_html=True)
+    st.markdown(f'<div class="auth-mark">{mark_svg(38, dark=True)}</div>', unsafe_allow_html=True)
+    st.markdown('<div style="text-align:center;font-family:Newsreader,serif;font-size:22px;color:#F7F5F2;margin:12px 0 20px;">Reset password</div>', unsafe_allow_html=True)
+    with st.container(border=True):
         email = st.text_input("Email", key="reset_email")
         if st.button("Send reset link", type="primary", use_container_width=True):
             if email:
@@ -623,10 +657,9 @@ def show_password_reset():
                     st.success("Reset link sent! Check your email.")
                 except Exception as e:
                     st.error(str(e))
-        st.markdown('</div>', unsafe_allow_html=True)
-        if st.button("← Back to sign in", type="tertiary"):
-            st.session_state["auth_mode"] = "login"
-            st.rerun()
+    if st.button("← Back to sign in", type="tertiary"):
+        st.session_state["auth_mode"] = "login"
+        st.rerun()
 # ── Onboarding ────────────────────────────────────────────────────────────────
 
 PLAN_MODES = [
@@ -1118,7 +1151,14 @@ def onboarding_step6(user_id, profile, ob_state):
             cycle_day, phase, _ = calculate_cycle_status(user_id)
             cycle_ctx = f"\nCycle: Day {cycle_day}, {phase}" if cycle_day else ""
 
+            duration_detail = {"Reset": "30 days, 2 phases", "Restore": "90 days, 4 phases", "Transform": "6 months, 4-6 phases", "Sustain": "12+ months ongoing, 4 phases"}
+            phases_detail = {"Reset": 2, "Restore": 4, "Transform": 6, "Sustain": 4}
+            plan_dur = duration_detail.get(plan_mode, "90 days, 4 phases")
+            num_phases = phases_detail.get(plan_mode, 4)
+
             roadmap_prompt = f"""Generate a comprehensive {plan_mode} programme roadmap.
+
+CRITICAL: This is a {plan_mode} plan lasting {plan_dur}. Generate exactly {num_phases} phases that fit within this timeframe. Do NOT generate phases beyond the plan duration.
 
 FORMAT:
 ## Your {plan_mode} Programme — Generated {today_str}
@@ -1126,14 +1166,14 @@ One sentence on what this programme addresses.
 
 ## Phase Timeline
 Table: Phase | Focus | Key milestones | Checkpoint
-[phases matching the plan duration — 4 phases for Restore, 2 for Reset, etc.]
+[exactly {num_phases} phases fitting within {plan_dur}]
 
 ## Phase 1 — [Title]: [weeks]
 What changes. Specific supplements/nutrition/training with exact doses.
 **Retest at checkpoint:** [markers]
 **What success looks like:** [outcomes]
 
-[Repeat per phase]
+[Repeat per phase — {num_phases} phases total]
 
 ## If Phase 1 Shows No Progress
 [Escalation]
@@ -1253,10 +1293,18 @@ def show_sidebar(user_id, profile):
             ("◎", "Profile & Data"),
         ]
         current_page = st.session_state.get("page", "Home")
+
+        # Inject per-button active styling based on current page
+        active_idx = next((i for i, (_, l) in enumerate(nav_items) if l == current_page), 0)
+        st.markdown(f"""<style>
+        [data-testid="stSidebar"] [data-testid="stBaseButton-secondary"]:nth-of-type({active_idx + 1}) {{
+            background: rgba(182,116,74,0.11) !important;
+            color: #F7F5F2 !important;
+            font-weight: 500 !important;
+        }}
+        </style>""", unsafe_allow_html=True)
+
         for icon, label in nav_items:
-            is_active = current_page == label
-            bg = "rgba(182,116,74,0.11)" if is_active else "transparent"
-            color = "#F7F5F2" if is_active else "rgba(247,245,242,0.55)"
             if st.button(f"{icon}  {label}", key=f"nav_{label}", use_container_width=True):
                 st.session_state["page"] = label
                 st.rerun()
@@ -1288,21 +1336,22 @@ def show_home(user_id, profile):
     first_name = (profile.get("full_name") or "").split()[0] if profile else "there"
     today = date.today()
 
-    # Plan banner
+    # Plan banner — show if any roadmap exists (committed or draft)
     roadmaps = db_get("roadmaps", user_id, order_col="generated_at", limit=1)
     committed_roadmap = roadmaps[0] if roadmaps and roadmaps[0].get("committed") else None
+    has_any_roadmap = bool(roadmaps)
 
-    if committed_roadmap:
+    if has_any_roadmap:
         progress_pct = min(100, int((current_week / max(total_weeks, 1)) * 100))
+        status_note = "" if committed_roadmap else ' <span style="font-size:10px;color:rgba(247,245,242,0.5);margin-left:8px;">(draft — commit from Protocol)</span>'
         st.markdown(f"""<div class="plan-banner">
 <div style="display:flex;justify-content:space-between;align-items:start;">
 <div style="flex:1;">
 <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:rgba(247,245,242,0.4);margin-bottom:4px;">Plan mode</div>
-<div style="font-family:Newsreader,serif;font-style:italic;font-size:16px;color:#F7F5F2;margin-bottom:8px;">{plan_mode} programme</div>
+<div style="font-family:Newsreader,serif;font-style:italic;font-size:16px;color:#F7F5F2;margin-bottom:8px;">{plan_mode} programme{status_note}</div>
 <div style="background:rgba(247,245,242,0.15);border-radius:4px;height:4px;margin-bottom:4px;"><div style="background:var(--copper);border-radius:4px;height:4px;width:{progress_pct}%;"></div></div>
 <div style="font-size:11px;color:rgba(247,245,242,0.5);">Wk {current_week} / {total_weeks}</div>
 </div>
-<div style="margin-left:20px;"><a href="#" style="font-size:12px;color:var(--copper);opacity:0.7;text-decoration:none;">View roadmap →</a></div>
 </div>
 </div>""", unsafe_allow_html=True)
     else:
@@ -1313,6 +1362,15 @@ def show_home(user_id, profile):
     # Greeting
     st.markdown(f'<div class="pg-title">{greeting()}, {first_name}.</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="pg-sub">{today.strftime("%A, %d %B %Y")} · Here\'s what matters today.</div>', unsafe_allow_html=True)
+
+    # Goals summary
+    goals = db_get("goals", user_id)
+    if goals:
+        goals_text = " · ".join([g["goal"] for g in goals[:5]])
+        st.markdown(f"""<div style="background:var(--cu-bg);border:1px solid var(--cu-bd);border-radius:10px;padding:10px 14px;margin-bottom:14px;">
+<div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--copper);margin-bottom:4px;">Your goals</div>
+<div style="font-size:12px;color:var(--mid);line-height:1.5;">{goals_text}</div>
+</div>""", unsafe_allow_html=True)
 
     # Today's priorities
     st.markdown('<div class="sl first">Today\'s priorities</div>', unsafe_allow_html=True)
@@ -1488,8 +1546,26 @@ def show_protocol_roadmap(user_id, profile):
                 sys_prompt = build_system_prompt(user_id, profile)
                 ob = get_onboarding_state(user_id)
                 plan_mode = ob.get("plan_mode", "Restore") if ob else "Restore"
+                duration_map = {"Reset": "30 days (2 phases)", "Restore": "90 days (4 phases)", "Transform": "6 months (4-6 phases)", "Sustain": "12+ months (ongoing)"}
+                phases_map = {"Reset": 2, "Restore": 4, "Transform": 6, "Sustain": 4}
+                plan_duration = duration_map.get(plan_mode, "90 days (4 phases)")
+                num_phases = phases_map.get(plan_mode, 4)
                 today_str = date.today().strftime("%d %B %Y")
-                roadmap_text = ai_generate(sys_prompt, f"Generate a comprehensive {plan_mode} programme roadmap with focus on {focus} at {intensity} intensity.\n\nFORMAT:\n## Your {plan_mode} Programme — Generated {today_str}\n[full roadmap]", max_tokens=4096)
+                roadmap_text = ai_generate(sys_prompt, f"""Generate a comprehensive {plan_mode} programme roadmap with focus on {focus} at {intensity} intensity.
+
+CRITICAL: This is a {plan_mode} plan lasting {plan_duration}. Generate exactly {num_phases} phases that fit within this timeframe. Do NOT generate phases beyond the plan duration.
+
+FORMAT:
+## Your {plan_mode} Programme — Generated {today_str}
+One sentence on what this programme addresses.
+
+## Phase Timeline
+Table: Phase | Focus | Key milestones | Checkpoint
+[exactly {num_phases} phases fitting within {plan_duration}]
+
+[Then detail each phase with supplements, nutrition, training, checkpoints]
+
+**Start today:** [one immediate action]""", max_tokens=4096)
                 supabase.table("roadmaps").insert({
                     "user_id": user_id, "roadmap_text": roadmap_text, "committed": False,
                     "priority_focus": focus, "intensity": intensity, "generated_at": datetime.now().isoformat()
@@ -1611,13 +1687,17 @@ def show_protocol_nutrition(user_id, profile):
         st.session_state["protocol_nutrition"] = None
 
     if not st.session_state["protocol_nutrition"]:
-        focus = st.selectbox("Priority focus", ["Balanced nutrition", "Gut healing", "Anti-inflammatory", "Energy optimisation", "Hormonal support", "Weight management"], key="nut_focus")
         if st.button("Generate Nutrition Plan", type="primary"):
             with st.spinner("Generating nutrition plan..."):
                 sys_prompt = build_system_prompt(user_id, profile)
                 cycle_day, phase, _ = calculate_cycle_status(user_id)
                 cycle_ctx = f"Cycle Day {cycle_day}, {phase}" if cycle_day else ""
-                prompt = f"Generate a 7-day nutrition plan with focus on {focus}. {cycle_ctx}\n\nFORMAT: Markdown table: Day | Breakfast | Lunch | Snack | Dinner | Notes\nInclude specific foods, portions, and preparation methods."
+                prompt = f"""Generate a 7-day nutrition plan for this patient based on their full profile, conditions, goals, and preferences. You decide the focus based on their data — do not ask the patient to choose.
+
+{cycle_ctx}
+
+FORMAT: Markdown table: Day | Breakfast | Lunch | Snack | Dinner | Notes
+Include specific foods, portions, and preparation methods. Respect their dietary preferences."""
                 result = ai_generate(sys_prompt, prompt, max_tokens=3000)
                 st.session_state["protocol_nutrition"] = result
                 st.rerun()
@@ -1637,7 +1717,6 @@ def show_protocol_workouts(user_id, profile):
         st.session_state["protocol_workouts"] = None
 
     if not st.session_state["protocol_workouts"]:
-        focus = st.selectbox("Priority focus", ["General fitness", "Strength", "Recovery", "Cardio endurance", "Flexibility"], key="work_focus")
         if st.button("Generate Workout Plan", type="primary"):
             with st.spinner("Generating workout plan..."):
                 sys_prompt = build_system_prompt(user_id, profile)
@@ -1645,7 +1724,12 @@ def show_protocol_workouts(user_id, profile):
                 cycle_ctx = f"Cycle Day {cycle_day}, {phase}" if cycle_day else ""
                 wearable = db_get("wearable_data", user_id, order_col="data_date", limit=1)
                 recovery_ctx = f"Recovery: {wearable[0].get('recovery_score','?')}%, HRV: {wearable[0].get('hrv','?')}ms" if wearable else ""
-                prompt = f"Generate a 7-day training plan with focus on {focus}. {cycle_ctx} {recovery_ctx}\n\nFORMAT: Markdown table: Day | Session | Detail | Duration | Notes\nInclude specific exercises, sets, reps, RPE."
+                prompt = f"""Generate a 7-day training plan for this patient based on their full profile, conditions, goals, recovery data, and cycle phase. You decide the focus and intensity based on their data — do not ask the patient to choose.
+
+{cycle_ctx} {recovery_ctx}
+
+FORMAT: Markdown table: Day | Session | Detail | Duration | Notes
+Include specific exercises, sets, reps, RPE. Apply cycle-phase periodisation if female."""
                 result = ai_generate(sys_prompt, prompt, max_tokens=3000)
                 st.session_state["protocol_workouts"] = result
                 st.rerun()
@@ -1786,26 +1870,35 @@ def show_coach(user_id, profile):
     if "coach_messages" not in st.session_state:
         st.session_state["coach_messages"] = []
 
-    # Welcome state
-    if not st.session_state["coach_messages"]:
-        greet = greeting()
-        checkins = db_get("checkins", user_id, order_col="checkin_date", limit=1)
-        context_parts = []
-        if cycle_day:
-            context_parts.append(f"Day {cycle_day} · {phase.split('(')[0].strip()}")
-        if checkins:
-            ci = checkins[0]
-            if ci.get("energy"):
-                context_parts.append(f"Energy {ci['energy']}/10 on last check-in")
-        context_line = " · ".join(context_parts) if context_parts else ""
+    # Welcome state — always show at top
+    greet = greeting()
+    checkins = db_get("checkins", user_id, order_col="checkin_date", limit=1)
+    context_parts = []
+    if cycle_day:
+        context_parts.append(f"Day {cycle_day} · {phase.split('(')[0].strip()}")
+    if checkins:
+        ci = checkins[0]
+        if ci.get("energy"):
+            context_parts.append(f"Energy {ci['energy']}/10 on last check-in")
+    context_line = " · ".join(context_parts) if context_parts else ""
 
-        st.markdown(f"""<div class="insight-box">
+    st.markdown(f"""<div class="insight-box">
 <div class="ib-lbl">✦ OneSattva Coach</div>
 <div class="ib-txt">{greet}, {first_name}. I have your full profile, labs, and goals. Ask me anything.</div>
 {f'<div style="font-size:11px;color:var(--copper);margin-top:8px;">{context_line}</div>' if context_line else ''}
 </div>""", unsafe_allow_html=True)
 
-        # Quick prompts
+    # Chat input — at the top, right below welcome
+    user_input = st.chat_input("Ask your coach anything…")
+    if user_input:
+        st.session_state["coach_messages"].append({"role": "user", "content": user_input})
+        with st.spinner("Thinking..."):
+            response = ai_chat(sys_prompt, st.session_state["coach_messages"][-MAX_HISTORY:])
+            st.session_state["coach_messages"].append({"role": "assistant", "content": response})
+        st.rerun()
+
+    # Quick prompts — only when no messages yet
+    if not st.session_state["coach_messages"]:
         phase_short = phase.split("(")[0].strip() if phase else ""
         phase_prompts = {
             "Luteal": "🌙 Luteal phase — what should I adjust?",
@@ -1854,15 +1947,6 @@ def show_coach(user_id, profile):
                 with st.chat_message("assistant"):
                     st.markdown('<div class="ch-hd">✦ OneSattva Coach</div>', unsafe_allow_html=True)
                     st.write(msg["content"])
-
-    # Chat input
-    user_input = st.chat_input("Ask your coach anything…")
-    if user_input:
-        st.session_state["coach_messages"].append({"role": "user", "content": user_input})
-        with st.spinner("Thinking..."):
-            response = ai_chat(sys_prompt, st.session_state["coach_messages"][-MAX_HISTORY:])
-            st.session_state["coach_messages"].append({"role": "assistant", "content": response})
-        st.rerun()
 # ── Profile & Data Page ───────────────────────────────────────────────────────
 
 def show_profile(user_id, profile):
