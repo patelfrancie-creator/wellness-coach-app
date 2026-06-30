@@ -374,6 +374,19 @@ def ai_chat(system_prompt, messages, max_tokens=4096):
 # hard-coded rule and instead gives the coach the patient's data plus the three
 # reasoning frameworks, and tells it explicitly to use the patient's own
 # location/labs/gut history to reach brand- and food-specific conclusions.
+# NOTE ON A CONFLICT FOUND IN OneSattva_AI_Coach_KB_v3.docx (Branding folder):
+# Section 05 of that doc gives a fixed "Menstrual / Follicular / Ovulatory / Luteal"
+# supplement-and-food table and calls cycle-phase calibration "non-negotiable" for
+# every female user. That is the same hard-coded-template problem the product
+# brief's bio-individuality principle was written to eliminate (Brief Section 8:
+# "the coach reasons from first principles... it does not apply a template";
+# Section 13 explicitly lists "cycle phase rules applied to all females" as a
+# resolved anti-pattern). Per the established rule that the product brief wins on
+# conflicts, this prompt treats cycle phase as physiological context the coach
+# reasons WITH, never a fixed phase->protocol lookup table — see the explicit
+# line in GOVERNING PRINCIPLE below and the CYCLE DATA section further down.
+# If OneSattva_AI_Coach_KB_v3.docx is ever uploaded as a live knowledge-base
+# attachment, its cycle-phase table should be stripped or reframed before upload.
 def build_system_prompt(user_id, profile, has_cycle=False):
     today = date.today()
     ninety_days_ago = today - timedelta(days=90)
@@ -384,7 +397,7 @@ def build_system_prompt(user_id, profile, has_cycle=False):
 ═══════════════════════════════════════════════════════
 GOVERNING PRINCIPLE — BIO-INDIVIDUALITY
 ═══════════════════════════════════════════════════════
-There is no universal rule for what this person should eat, supplement, or do. The right answer emerges only from THEIR data below — labs, check-ins, wearable trends, history, goals, location. You do not apply population defaults, fixed doses, brand lists, or templates. You reason from this individual's data to the individual answer, and you state the reasoning, not just the conclusion. If their gut data shows no issue, raw food may be exactly right for them; if it shows bloating and poor digestion, cooked food may be right — but only their data tells you which. Never assume a 28-day menstrual cycle. Never assume a location-specific brand list — derive brand and food suggestions from their actual location and what is realistically available there, asking if location is unclear.
+There is no universal rule for what this person should eat, supplement, or do. The right answer emerges only from THEIR data below — labs, check-ins, wearable trends, history, goals, location. You do not apply population defaults, fixed doses, brand lists, or templates. You reason from this individual's data to the individual answer, and you state the reasoning, not just the conclusion. If their gut data shows no issue, raw food may be exactly right for them; if it shows bloating and poor digestion, cooked food may be right — but only their data tells you which. Never assume a 28-day menstrual cycle. Never assume a location-specific brand list — derive brand and food suggestions from their actual location and what is realistically available there, asking if location is unclear. Cycle phase (where applicable) is physiological context to reason with — not a fixed phase-by-phase supplement or food template. Two people in the same phase can need different things depending on their actual labs, symptoms, and history; conclude from their data, not from a lookup table.
 
 ═══════════════════════════════════════════════════════
 NON-NEGOTIABLE RULES
@@ -554,6 +567,7 @@ For complex questions, structure as: (1) what is happening — mechanism across 
             base += f"Last period start: {cd.get('last_period_start','?')} | Actual average cycle length: {cd.get('avg_cycle_length','?')} days (never assume 28)\n"
             if cycle_day:
                 base += f"Current cycle day: {cycle_day} | Phase: {phase} | Days until next period: {days_until_next}\n"
+            base += "Reason from this phase as physiological context alongside their actual labs, check-ins and symptoms — do not apply a fixed per-phase supplement/food template regardless of their individual data.\n"
 
     roadmap = db_get_single("roadmaps", user_id)
     if roadmap and roadmap.get("committed"):
