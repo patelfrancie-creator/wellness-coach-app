@@ -42,33 +42,36 @@ _MARK_COUNTER = {"n": 0}
 
 
 def mark_svg(size=46, dark=False):
-    """Exact reproduction of the canonical mark from "OneSattva Brand
-    Identity.html" (the brand deck — authoritative over the older prototype
-    HTML, which used graduated ring opacity that blurs into a soft blob at
-    small render sizes). The official mark uses solid, full-opacity strokes
-    at exact radii 94.49/83.80/70.96 (outer) and 61.03/50.19/39.49 (inner)
-    on a 200x200 viewBox, centre glow r=31.3. dark=True is the bone-on-
-    graphite variant used in the sidebar; dark=False is the graphite-on-
-    bone variant used on auth/onboarding cards — per brand guidelines the
-    ring colours don't change between contexts, only the outer-ring stroke
-    swaps so it stays visible against the background."""
+    """OneSattva mark — geometry per OneSattva_Brand_Implementation_Brief_v2.docx
+    Section 04 ("For the app.py technical build," the most specific and
+    authoritative spec: viewBox 100x100, radii 47/42/35 outer + 30/25/20
+    inner, centre glow r=16). That doc's literal copy-paste code adds a
+    graduated opacity ramp (0.18->0.28->0.40) on the light-background
+    outer rings, matching the older prototype HTML — but at the small
+    sizes this mark renders at (22-46px), that opacity ramp on a 1.4px
+    stroke anti-aliases into a blurred blob rather than distinct rings.
+    The separate Brand Identity deck (OneSattva Brand Identity.html) uses
+    solid, full-opacity strokes for the same mark. This keeps the
+    Implementation Brief's exact geometry but drops the opacity ramp,
+    matching the deck's solid-stroke treatment — reconciling both sources
+    and fixing the blur."""
     _MARK_COUNTER["n"] += 1
     gid = f"gMark{_MARK_COUNTER['n']}"
     outer = "#F7F5F2" if dark else "#111214"
     rings = f"""
-<circle cx="100" cy="100" r="94.49" fill="none" stroke="{outer}" stroke-width="1.3"/>
-<circle cx="100" cy="100" r="83.80" fill="none" stroke="{outer}" stroke-width="1.3"/>
-<circle cx="100" cy="100" r="70.96" fill="none" stroke="{outer}" stroke-width="1.3"/>
-<circle cx="100" cy="100" r="61.03" fill="none" stroke="#B6744A" stroke-width="1.6"/>
-<circle cx="100" cy="100" r="50.19" fill="none" stroke="#B6744A" stroke-width="1.6"/>
-<circle cx="100" cy="100" r="39.49" fill="none" stroke="#B6744A" stroke-width="1.6"/>"""
-    return f"""<svg width="{size}" height="{size}" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+<circle cx="50" cy="50" r="47" fill="none" stroke="{outer}" stroke-width="1.4"/>
+<circle cx="50" cy="50" r="42" fill="none" stroke="{outer}" stroke-width="1.4"/>
+<circle cx="50" cy="50" r="35" fill="none" stroke="{outer}" stroke-width="1.4"/>
+<circle cx="50" cy="50" r="30" fill="none" stroke="#B6744A" stroke-width="1.7"/>
+<circle cx="50" cy="50" r="25" fill="none" stroke="#B6744A" stroke-width="1.7"/>
+<circle cx="50" cy="50" r="20" fill="none" stroke="#B6744A" stroke-width="1.7"/>"""
+    return f"""<svg width="{size}" height="{size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
 <defs><radialGradient id="{gid}" cx="50%" cy="50%" r="50%">
 <stop offset="0%" stop-color="#B1643A"/><stop offset="40%" stop-color="#B1643A"/>
 <stop offset="54%" stop-color="#BE7C58" stop-opacity="0.72"/><stop offset="70%" stop-color="#D2A084" stop-opacity="0.4"/>
 <stop offset="86%" stop-color="#E6CCB8" stop-opacity="0.14"/><stop offset="100%" stop-color="#E6CCB8" stop-opacity="0"/>
 </radialGradient></defs>{rings}
-<circle cx="100" cy="100" r="31.3" fill="url(#{gid})"/></svg>"""
+<circle cx="50" cy="50" r="16" fill="url(#{gid})"/></svg>"""
 
 
 def wordmark_html(size=19, tag=True, color="#F7F5F2", tag_color="var(--copper)"):
