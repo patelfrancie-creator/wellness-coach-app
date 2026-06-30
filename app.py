@@ -540,12 +540,25 @@ def show_auth():
     inject_css(auth_mode=True)
     mode = st.session_state.get("auth_mode", "login")
 
-    _, col, _ = st.columns([1, 1.4, 1])
-    with col:
-        st.markdown('<div style="height:48px"></div>', unsafe_allow_html=True)
-        with st.container(border=False):
-            st.markdown(f"""
-<div style="background:var(--bone);border-radius:18px;padding:44px;box-shadow:0 8px 48px rgba(17,18,20,0.18)">
+    # st.container(key=...) emits a real DOM node with a stable class
+    # (.st-key-auth_card) — this lets the bone card background wrap the
+    # logo AND the actual widgets together. Splitting an st.markdown() HTML
+    # div open/close around widgets does NOT work in Streamlit: widgets
+    # always render outside the markdown block, which is why the card used
+    # to show as an empty box with the form floating below it.
+    st.markdown("""
+<style>
+.st-key-auth_card {
+  background: var(--bone); border-radius: 18px; padding: 44px;
+  box-shadow: 0 8px 48px rgba(17,18,20,0.18);
+  max-width: 460px; margin: 48px auto 0;
+}
+.st-key-auth_card label, .st-key-auth_card p, .st-key-auth_card span { color: var(--graphite) !important; }
+</style>
+""", unsafe_allow_html=True)
+
+    with st.container(key="auth_card"):
+        st.markdown(f"""
 <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:28px;gap:8px">
 {mark_svg(44 if mode=='login' else 36)}
 <span style="font-family:'Newsreader',serif;font-weight:400;font-size:{26 if mode=='login' else 22}px;letter-spacing:-0.02em;color:#111214;line-height:1">OneSattva</span>
@@ -553,6 +566,7 @@ def show_auth():
 </div>
 """, unsafe_allow_html=True)
 
+        if True:
             if mode == "login":
                 with st.form("login_form", border=False):
                     email = st.text_input("Email", placeholder="your@email.com")
@@ -564,7 +578,12 @@ def show_auth():
                     else:
                         user, session, err = sign_in(email, pw)
                         if err:
-                            st.error("Couldn't sign in — check your email and password.")
+                            if "not confirmed" in err.lower() or "not_confirmed" in err.lower():
+                                st.error("Check your inbox to confirm your email before signing in. Check spam if you don't see it within a minute.")
+                            elif "invalid" in err.lower():
+                                st.error("Couldn't sign in — check your email and password.")
+                            else:
+                                st.error(f"Couldn't sign in: {err}")
                         else:
                             st.session_state.user_id = user.id
                             st.session_state.user_email = user.email
@@ -627,7 +646,6 @@ def show_auth():
                     st.session_state.auth_mode = "login"
                     st.rerun()
 
-            st.markdown("</div>", unsafe_allow_html=True)
 
 # ── Onboarding progress header ────────────────────────────────────────────────
 ONBOARDING_STEPS = ["About you", "Health history", "Lifestyle & goals", "Labs", "Coach analysis", "Plan mode", "Review & commit"]
