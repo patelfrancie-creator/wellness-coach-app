@@ -38,17 +38,39 @@ PLAN_MODES = {
 }
 
 # ── SVG Mark ──────────────────────────────────────────────────────────────────
+_MARK_COUNTER = {"n": 0}
+
+
 def mark_svg(size=46, dark=False):
-    outer = "#F7F5F2" if dark else "rgba(17,18,20,0.28)"
-    inner = "#B6744A"
-    r_vals = [size * 0.47, size * 0.42, size * 0.35, size * 0.30, size * 0.25, size * 0.20]
-    cx = size / 2
-    rings = ""
-    for i, r in enumerate(r_vals):
-        color = outer if i < 3 else inner
-        rings += f'<circle cx="{cx}" cy="{cx}" r="{r}" fill="none" stroke="{color}" stroke-width="1.5"/>'
-    rings += f'<circle cx="{cx}" cy="{cx}" r="{size*0.16}" fill="{inner}"/>'
-    return f'<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}" xmlns="http://www.w3.org/2000/svg">{rings}</svg>'
+    """Exact reproduction of the prototype's 6-ring mark (radial-gradient
+    centre + graduated ring opacity on light backgrounds). dark=True is the
+    bone-on-graphite variant used in the sidebar; dark=False is the
+    graphite-on-bone variant used on auth/onboarding cards."""
+    _MARK_COUNTER["n"] += 1
+    gid = f"gMark{_MARK_COUNTER['n']}"
+    if dark:
+        rings = f"""
+<circle cx="50" cy="50" r="47" fill="none" stroke="#F7F5F2" stroke-width="1.4"/>
+<circle cx="50" cy="50" r="42" fill="none" stroke="#F7F5F2" stroke-width="1.4"/>
+<circle cx="50" cy="50" r="35" fill="none" stroke="#F7F5F2" stroke-width="1.4"/>
+<circle cx="50" cy="50" r="30" fill="none" stroke="#B6744A" stroke-width="1.7"/>
+<circle cx="50" cy="50" r="25" fill="none" stroke="#B6744A" stroke-width="1.7"/>
+<circle cx="50" cy="50" r="20" fill="none" stroke="#B6744A" stroke-width="1.7"/>"""
+    else:
+        rings = f"""
+<circle cx="50" cy="50" r="47" fill="none" stroke="#111214" stroke-width="1.4" opacity="0.18"/>
+<circle cx="50" cy="50" r="42" fill="none" stroke="#111214" stroke-width="1.4" opacity="0.28"/>
+<circle cx="50" cy="50" r="35" fill="none" stroke="#111214" stroke-width="1.4" opacity="0.40"/>
+<circle cx="50" cy="50" r="30" fill="none" stroke="#B6744A" stroke-width="1.7" opacity="0.65"/>
+<circle cx="50" cy="50" r="25" fill="none" stroke="#B6744A" stroke-width="1.7" opacity="0.80"/>
+<circle cx="50" cy="50" r="20" fill="none" stroke="#B6744A" stroke-width="1.7"/>"""
+    return f"""<svg width="{size}" height="{size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+<defs><radialGradient id="{gid}" cx="50%" cy="50%" r="50%">
+<stop offset="0%" stop-color="#B1643A"/><stop offset="40%" stop-color="#B1643A"/>
+<stop offset="54%" stop-color="#BE7C58" stop-opacity="0.72"/><stop offset="70%" stop-color="#D2A084" stop-opacity="0.4"/>
+<stop offset="86%" stop-color="#E6CCB8" stop-opacity="0.14"/><stop offset="100%" stop-color="#E6CCB8" stop-opacity="0"/>
+</radialGradient></defs>{rings}
+<circle cx="50" cy="50" r="16" fill="url(#{gid})"/></svg>"""
 
 
 def wordmark_html(size=19, tag=True, color="#F7F5F2", tag_color="var(--copper)"):
