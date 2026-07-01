@@ -255,6 +255,7 @@ def sign_in(email, password):
     try:
         res = supabase.auth.sign_in_with_password({"email": email, "password": password})
         supabase.postgrest.auth(res.session.access_token)
+        st.session_state.access_token = res.session.access_token
         return res.user, res.session, None
     except Exception as e:
         return None, None, str(e)
@@ -640,8 +641,8 @@ def show_auth():
                         if err:
                             if "not confirmed" in err.lower() or "not_confirmed" in err.lower():
                                 st.error("Check your inbox to confirm your email before signing in. Check spam if you don't see it within a minute.")
-                            elif "invalid" in err.lower():
-                                st.error("Couldn't sign in — check your email and password.")
+                            elif "invalid" in err.lower() or "credentials" in err.lower():
+                                st.error("Couldn't sign in — wrong email or password. If you haven't signed up yet, use 'Create an account' below.")
                             else:
                                 st.error(f"Couldn't sign in: {err}")
                         else:
@@ -683,7 +684,7 @@ def show_auth():
                             st.error(f"Couldn't create account: {err}")
                         else:
                             db_upsert("profiles", {"id": user.id, "full_name": full_name, "email": email, "onboarding_complete": False})
-                            st.success("Account created. Please sign in.")
+                            st.success("Account created! Check your inbox to verify your email before signing in. Check your spam folder if you don't see it within a minute.")
                             st.session_state.auth_mode = "login"
                             st.rerun()
                 st.markdown('<div style="text-align:center;margin-top:8px;font-size:12.5px;color:var(--mid)">Already have an account?</div>', unsafe_allow_html=True)
@@ -872,7 +873,7 @@ def onboarding_step3(user_id):
     c1, c2 = st.columns(2)
     activity_level = c1.selectbox("Activity level", ["Sedentary", "Lightly active", "Moderately active", "Very active"])
     restrictions = c2.text_input("Dietary restrictions or intolerances", value="")
-    alcohol = c1.selectbox("Alcohol consumption", ["None", "Occasionally (1–2×/week)", "Regularly (3+/week)"])
+    alcohol = c1.selectbox("Alcohol consumption", ["None", "Rarely (special occasions)", "1–2× per month", "Once a week", "2–3× per week", "Daily"])
     smoking = c2.selectbox("Smoking / tobacco", ["Non-smoker", "Former smoker", "Occasional (social)", "Regular smoker", "Vaping / e-cigarettes"])
     exercise_routine = st.text_area("Exercise routine", height=60)
 
@@ -889,7 +890,7 @@ def onboarding_step3(user_id):
     first_meal = c1.text_input("First meal time", placeholder="8:00 am")
     last_meal = c2.text_input("Last meal time", placeholder="8:30 pm")
     meals_per_day = c1.selectbox("Meals per day", ["2 meals", "3 meals", "3 meals + snacks", "Intermittent fasting"])
-    eating_out = c2.selectbox("Eating out frequency", ["Rarely", "2–3× per week", "4–5× per week", "Daily"])
+    eating_out = c2.selectbox("Eating out / ordering in", ["Rarely (home-cooked most days)", "Once a week", "2–3× per week", "4–5× per week", "Most meals"])
     food_prefs = st.text_area("Food preferences or patterns the coach should know about (optional)", height=60)
 
     st.markdown('<div class="sl">Stress & wellbeing</div>', unsafe_allow_html=True)
@@ -965,18 +966,33 @@ def onboarding_step4(user_id):
                 prompt, max_tokens=1200)
     st.markdown(st.session_state.ob_recommended_panel)
 
-    with st.expander("Paste your lab values"):
+    with st.expander("Upload or paste your lab values", expanded=True):
         report_date = st.date_input("Report date", value=date.today())
-        raw_values = st.text_area("Paste values (marker: value, one per line, or freeform)", height=160)
+        lab_file = st.file_uploader("Upload lab report (PDF or image)", type=["pdf", "png", "jpg", "jpeg"], help="We'll extract and interpret the values automatically.")
+        raw_values = st.text_area("Or paste values directly (marker: value, one per line, or freeform)", height=120)
+
         if st.button("Analyse and save"):
-            if raw_values.strip():
+            text_to_analyse = raw_values.strip()
+            if lab_file and not text_to_analyse:
+                # Read file bytes and pass as base64 text block for the AI to parse
+                import base64
+                file_bytes = lab_file.read()
+                b64 = base64.b64encode(file_bytes).decode()
+                ext = lab_file.name.split(".")[-1].lower()
+                if ext == "pdf":
+                    text_to_analyse = f"[PDF lab report uploaded — filename: {lab_file.name}. Please extract and interpret all lab markers and values you can identify from the following base64-encoded content.]\n{b64[:8000]}"
+                else:
+                    text_to_analyse = f"[Lab report image uploaded — filename: {lab_file.name}. Please extract and interpret all lab markers and values visible in the image from the following base64-encoded content.]\n{b64[:8000]}"
+            if text_to_analyse:
                 with st.spinner("Interpreting against functional ranges..."):
                     summary = ai_generate(
                         "You are OneSattva, interpreting lab values against functional (optimal) ranges, not conventional population reference ranges. Give a concise 2-4 sentence clinical summary.",
-                        raw_values, max_tokens=500)
-                db_insert("lab_reports", {"user_id": user_id, "report_date": report_date.isoformat(), "raw_values": raw_values, "summary": summary})
+                        text_to_analyse, max_tokens=500)
+                db_insert("lab_reports", {"user_id": user_id, "report_date": report_date.isoformat(), "raw_values": text_to_analyse[:2000], "summary": summary})
                 st.session_state.ob_labs_uploaded = True
                 st.success("Lab report saved and interpreted.")
+            else:
+                st.warning("Upload a file or paste your values first.")
 
     skipped = not st.session_state.get("ob_labs_uploaded", False)
     if skipped:
@@ -1101,7 +1117,7 @@ What changes and why, reasoned from this person's actual data. Specific suppleme
 **Start today:** [one specific immediate action]
 """
         with st.spinner(f"Building your {plan_mode} roadmap..."):
-            st.session_state.ob_roadmap_text = ai_generate(sys_prompt, prompt, max_tokens=3000)
+            st.session_state.ob_roadmap_text = ai_generate(sys_prompt, prompt, max_tokens=4096)
 
     first_name = (profile or {}).get("full_name", "").split(" ")[0] or "there"
     st.markdown(f"""
@@ -1912,6 +1928,12 @@ def main():
         st.session_state.auth_mode = st.session_state.get("auth_mode", "login")
         show_auth()
         return
+
+    # Re-apply the Supabase auth token on every Streamlit rerun — the module-level
+    # client is shared across reruns but postgrest.auth() must be called each time
+    # or RLS filters every query to empty, causing silent save failures and bad reads.
+    if "access_token" in st.session_state:
+        supabase.postgrest.auth(st.session_state.access_token)
 
     user_id = st.session_state.user_id
     profile = db_get_single("profiles", user_id)
