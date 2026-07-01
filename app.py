@@ -1963,64 +1963,102 @@ def show_profile_user(user_id, profile):
             db_insert("supplements", {"user_id": user_id, "name": sn, "dose": sd, "timing": st_, "active": True})
             st.rerun()
 
-    with st.expander("Dietary profile & restrictions"):
-        eating_pattern = st.selectbox("Eating pattern", ["Omnivore", "Vegetarian", "Vegan", "Pescatarian", "Other"],
-                                       index=["Omnivore", "Vegetarian", "Vegan", "Pescatarian", "Other"].index(p.get("eating_pattern")) if p.get("eating_pattern") in ["Omnivore", "Vegetarian", "Vegan", "Pescatarian", "Other"] else 0, key="ed_diet")
-        allergies = st.text_input("Allergies / intolerances", value=p.get("allergies", ""), key="ed_allerg")
-        if st.button("Save dietary profile", key="save_diet"):
-            db_upsert("profiles", {"id": user_id, "eating_pattern": eating_pattern, "allergies": allergies})
-            st.success("Saved.")
-            st.rerun()
-        st.markdown("---")
-        st.markdown("**Eating schedule & food preferences**")
-        ec1, ec2 = st.columns(2)
-        ed_first_meal = ec1.text_input("First meal time", value=p.get("first_meal", ""), key="ed_first_meal")
-        ed_last_meal = ec2.text_input("Last meal time", value=p.get("last_meal", ""), key="ed_last_meal")
-        ed_meals_per_day = ec1.selectbox("Meals per day", MEALS_PER_DAY_OPTIONS, index=selectbox_index(MEALS_PER_DAY_OPTIONS, p.get("meals_per_day")), key="ed_meals_per_day")
-        ed_eating_out = ec2.selectbox("Eating out / ordering in", EATING_OUT_LEVELS, index=selectbox_index(EATING_OUT_LEVELS, p.get("eating_out")), key="ed_eating_out")
-        ed_food_prefs = st.text_area("Food preferences or patterns the coach should know about", value=p.get("food_prefs", ""), height=80, key="ed_food_prefs")
-        if st.button("Save eating schedule", key="save_eating"):
-            db_upsert("profiles", {"id": user_id, "first_meal": ed_first_meal, "last_meal": ed_last_meal,
-                                    "meals_per_day": ed_meals_per_day, "eating_out": ed_eating_out, "food_prefs": ed_food_prefs})
-            st.success("Saved.")
-            st.rerun()
+    with st.container(border=True):
+        st.markdown('#### Dietary Profile & Restrictions')
+        st.markdown(f"""
+<div class="pr"><span class="pr-k">Eating pattern</span><span class="pr-v">{p.get('eating_pattern') or '—'}</span></div>
+<div class="pr"><span class="pr-k">Allergies / intolerances</span><span class="pr-v">{p.get('allergies') or '—'}</span></div>
+""", unsafe_allow_html=True)
+        with st.expander("Edit dietary profile"):
+            eating_pattern = st.selectbox("Eating pattern", ["Omnivore", "Vegetarian", "Vegan", "Pescatarian", "Other"],
+                                           index=["Omnivore", "Vegetarian", "Vegan", "Pescatarian", "Other"].index(p.get("eating_pattern")) if p.get("eating_pattern") in ["Omnivore", "Vegetarian", "Vegan", "Pescatarian", "Other"] else 0, key="ed_diet")
+            allergies = st.text_input("Allergies / intolerances", value=p.get("allergies", ""), key="ed_allerg")
+            if st.button("Save dietary profile", key="save_diet"):
+                db_upsert("profiles", {"id": user_id, "eating_pattern": eating_pattern, "allergies": allergies})
+                st.success("Saved.")
+                st.rerun()
 
-    with st.expander("Lifestyle — activity, sleep, stress"):
+        meal_window = f"{p.get('first_meal') or '?'} – {p.get('last_meal') or '?'}" if (p.get("first_meal") or p.get("last_meal")) else "—"
+        st.markdown(f"""
+<div class="pr"><span class="pr-k">Meal window</span><span class="pr-v">{meal_window}</span></div>
+<div class="pr"><span class="pr-k">Meals per day</span><span class="pr-v">{p.get('meals_per_day') or '—'}</span></div>
+<div class="pr"><span class="pr-k">Eating out</span><span class="pr-v">{p.get('eating_out') or '—'}</span></div>
+<div class="pr"><span class="pr-k">Food preferences</span><span class="pr-v">{p.get('food_prefs') or '—'}</span></div>
+""", unsafe_allow_html=True)
+        with st.expander("Edit eating schedule & food preferences"):
+            ec1, ec2 = st.columns(2)
+            ed_first_meal = ec1.text_input("First meal time", value=p.get("first_meal", ""), key="ed_first_meal")
+            ed_last_meal = ec2.text_input("Last meal time", value=p.get("last_meal", ""), key="ed_last_meal")
+            ed_meals_per_day = ec1.selectbox("Meals per day", MEALS_PER_DAY_OPTIONS, index=selectbox_index(MEALS_PER_DAY_OPTIONS, p.get("meals_per_day")), key="ed_meals_per_day")
+            ed_eating_out = ec2.selectbox("Eating out / ordering in", EATING_OUT_LEVELS, index=selectbox_index(EATING_OUT_LEVELS, p.get("eating_out")), key="ed_eating_out")
+            ed_food_prefs = st.text_area("Food preferences or patterns the coach should know about", value=p.get("food_prefs", ""), height=80, key="ed_food_prefs")
+            if st.button("Save eating schedule", key="save_eating"):
+                db_upsert("profiles", {"id": user_id, "first_meal": ed_first_meal, "last_meal": ed_last_meal,
+                                        "meals_per_day": ed_meals_per_day, "eating_out": ed_eating_out, "food_prefs": ed_food_prefs})
+                st.success("Saved.")
+                st.rerun()
+
+    with st.container(border=True):
+        st.markdown('#### Lifestyle — Activity, Sleep, Stress')
         st.markdown("**Activity & exercise**")
-        ac1, ac2 = st.columns(2)
-        ed_activity_level = ac1.selectbox("Activity level", ACTIVITY_LEVELS, index=selectbox_index(ACTIVITY_LEVELS, p.get("activity_level")), key="ed_activity_level")
-        ed_alcohol = ac1.selectbox("Alcohol consumption", ALCOHOL_LEVELS, index=selectbox_index(ALCOHOL_LEVELS, p.get("alcohol")), key="ed_alcohol")
-        ed_smoking = ac2.selectbox("Smoking / tobacco", SMOKING_LEVELS, index=selectbox_index(SMOKING_LEVELS, p.get("smoking")), key="ed_smoking")
-        ed_exercise_routine = st.text_area("Exercise routine", value=p.get("exercise_routine", ""), height=70, key="ed_exercise_routine")
-        if st.button("Save activity", key="save_activity"):
-            db_upsert("profiles", {"id": user_id, "activity_level": ed_activity_level, "alcohol": ed_alcohol,
-                                    "smoking": ed_smoking, "exercise_routine": ed_exercise_routine})
-            st.success("Saved.")
-            st.rerun()
+        st.markdown(f"""
+<div class="pr"><span class="pr-k">Activity level</span><span class="pr-v">{p.get('activity_level') or '—'}</span></div>
+<div class="pr"><span class="pr-k">Alcohol</span><span class="pr-v">{p.get('alcohol') or '—'}</span></div>
+<div class="pr"><span class="pr-k">Smoking</span><span class="pr-v">{p.get('smoking') or '—'}</span></div>
+<div class="pr"><span class="pr-k">Exercise routine</span><span class="pr-v">{p.get('exercise_routine') or '—'}</span></div>
+""", unsafe_allow_html=True)
+        with st.expander("Edit activity & exercise"):
+            ac1, ac2 = st.columns(2)
+            ed_activity_level = ac1.selectbox("Activity level", ACTIVITY_LEVELS, index=selectbox_index(ACTIVITY_LEVELS, p.get("activity_level")), key="ed_activity_level")
+            ed_alcohol = ac1.selectbox("Alcohol consumption", ALCOHOL_LEVELS, index=selectbox_index(ALCOHOL_LEVELS, p.get("alcohol")), key="ed_alcohol")
+            ed_smoking = ac2.selectbox("Smoking / tobacco", SMOKING_LEVELS, index=selectbox_index(SMOKING_LEVELS, p.get("smoking")), key="ed_smoking")
+            ed_exercise_routine = st.text_area("Exercise routine", value=p.get("exercise_routine", ""), height=70, key="ed_exercise_routine")
+            if st.button("Save activity", key="save_activity"):
+                db_upsert("profiles", {"id": user_id, "activity_level": ed_activity_level, "alcohol": ed_alcohol,
+                                        "smoking": ed_smoking, "exercise_routine": ed_exercise_routine})
+                st.success("Saved.")
+                st.rerun()
+
         st.markdown("---")
         st.markdown("**Sleep**")
-        sc1, sc2, sc3 = st.columns(3)
-        ed_bedtime = sc1.text_input("Typical bedtime", value=p.get("sleep_bedtime", ""), key="ed_bedtime")
-        ed_wake_time = sc2.text_input("Typical wake time", value=p.get("sleep_wake_time", ""), key="ed_wake_time")
-        ed_sleep_duration = sc3.text_input("Average sleep duration", value=p.get("sleep_duration", ""), key="ed_sleep_duration")
-        ed_sleep_quality = st.slider("Sleep quality (self-rated)", 1, 10, int(p.get("sleep_quality") or 5), key="ed_sleep_quality")
-        ed_sleep_challenges = st.text_area("Sleep challenges", value=p.get("sleep_challenges", ""), height=60, key="ed_sleep_challenges")
-        if st.button("Save sleep", key="save_sleep"):
-            db_upsert("profiles", {"id": user_id, "sleep_bedtime": ed_bedtime, "sleep_wake_time": ed_wake_time,
-                                    "sleep_duration": ed_sleep_duration, "sleep_quality": int(ed_sleep_quality), "sleep_challenges": ed_sleep_challenges})
-            st.success("Saved.")
-            st.rerun()
+        sleep_window = f"{p.get('sleep_bedtime') or '?'} → {p.get('sleep_wake_time') or '?'}" if (p.get("sleep_bedtime") or p.get("sleep_wake_time")) else "—"
+        st.markdown(f"""
+<div class="pr"><span class="pr-k">Bedtime → Wake</span><span class="pr-v">{sleep_window}</span></div>
+<div class="pr"><span class="pr-k">Average duration</span><span class="pr-v">{p.get('sleep_duration') or '—'}</span></div>
+<div class="pr"><span class="pr-k">Quality</span><span class="pr-v">{f"{p.get('sleep_quality')}/10" if p.get('sleep_quality') else '—'}</span></div>
+<div class="pr"><span class="pr-k">Challenges</span><span class="pr-v">{p.get('sleep_challenges') or '—'}</span></div>
+""", unsafe_allow_html=True)
+        with st.expander("Edit sleep"):
+            sc1, sc2, sc3 = st.columns(3)
+            ed_bedtime = sc1.text_input("Typical bedtime", value=p.get("sleep_bedtime", ""), key="ed_bedtime")
+            ed_wake_time = sc2.text_input("Typical wake time", value=p.get("sleep_wake_time", ""), key="ed_wake_time")
+            ed_sleep_duration = sc3.text_input("Average sleep duration", value=p.get("sleep_duration", ""), key="ed_sleep_duration")
+            ed_sleep_quality = st.slider("Sleep quality (self-rated)", 1, 10, int(p.get("sleep_quality") or 5), key="ed_sleep_quality")
+            ed_sleep_challenges = st.text_area("Sleep challenges", value=p.get("sleep_challenges", ""), height=60, key="ed_sleep_challenges")
+            if st.button("Save sleep", key="save_sleep"):
+                db_upsert("profiles", {"id": user_id, "sleep_bedtime": ed_bedtime, "sleep_wake_time": ed_wake_time,
+                                        "sleep_duration": ed_sleep_duration, "sleep_quality": int(ed_sleep_quality), "sleep_challenges": ed_sleep_challenges})
+                st.success("Saved.")
+                st.rerun()
+
         st.markdown("---")
         st.markdown("**Stress & symptoms**")
-        ed_stress_level = st.slider("Current stress level", 1, 10, int(p.get("stress_level") or 5), key="ed_stress_level")
-        ed_stressors = st.text_input("Primary stressors", value=p.get("stressors", ""), key="ed_stressors")
-        ed_symptoms = st.text_area("Current symptoms or main concerns", value=p.get("symptoms", ""), height=70, key="ed_symptoms")
-        ed_anything_else = st.text_area("Anything else you'd like your coach to know", value=p.get("anything_else", ""), height=50, key="ed_anything_else")
-        if st.button("Save stress & symptoms", key="save_stress"):
-            db_upsert("profiles", {"id": user_id, "stress_level": int(ed_stress_level), "stressors": ed_stressors,
-                                    "symptoms": ed_symptoms, "anything_else": ed_anything_else})
-            st.success("Saved.")
-            st.rerun()
+        st.markdown(f"""
+<div class="pr"><span class="pr-k">Stress level</span><span class="pr-v">{f"{p.get('stress_level')}/10" if p.get('stress_level') else '—'}</span></div>
+<div class="pr"><span class="pr-k">Stressors</span><span class="pr-v">{p.get('stressors') or '—'}</span></div>
+<div class="pr"><span class="pr-k">Symptoms</span><span class="pr-v">{p.get('symptoms') or '—'}</span></div>
+<div class="pr"><span class="pr-k">Other notes</span><span class="pr-v">{p.get('anything_else') or '—'}</span></div>
+""", unsafe_allow_html=True)
+        with st.expander("Edit stress & symptoms"):
+            ed_stress_level = st.slider("Current stress level", 1, 10, int(p.get("stress_level") or 5), key="ed_stress_level")
+            ed_stressors = st.text_input("Primary stressors", value=p.get("stressors", ""), key="ed_stressors")
+            ed_symptoms = st.text_area("Current symptoms or main concerns", value=p.get("symptoms", ""), height=70, key="ed_symptoms")
+            ed_anything_else = st.text_area("Anything else you'd like your coach to know", value=p.get("anything_else", ""), height=50, key="ed_anything_else")
+            if st.button("Save stress & symptoms", key="save_stress"):
+                db_upsert("profiles", {"id": user_id, "stress_level": int(ed_stress_level), "stressors": ed_stressors,
+                                        "symptoms": ed_symptoms, "anything_else": ed_anything_else})
+                st.success("Saved.")
+                st.rerun()
 
     if p.get("has_cycle"):
         with st.expander("Cycle tracking"):
