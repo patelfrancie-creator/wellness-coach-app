@@ -47,49 +47,15 @@ def split_location(location):
         return parts[0], ", ".join(parts[1:])
     return location.strip(), ""
 
-# ── profile_notes section helpers ──────────────────────────────────────────
-# profile_notes.notes stores everything as one text field, but onboarding
-# collects it in named groups (health background, activity, sleep, stress,
-# eating). Storing it flat meant a single failed save (e.g. the old
-# duplicate-key upsert bug) silently dropped an entire step's answers with
-# no way to tell what was missing. These helpers store/read it as
-# "## Section Title" blocks instead, so Profile & Data can show — and save —
-# each group independently. Text saved before this existed (no headers) is
-# preserved under "Other notes" rather than discarded.
-NOTES_SECTIONS = ["Health Background", "Activity & Exercise", "Sleep", "Stress & Symptoms", "Eating Schedule & Food Preferences"]
+ACTIVITY_LEVELS = ["Sedentary", "Lightly active", "Moderately active", "Very active"]
+ALCOHOL_LEVELS = ["None", "Rarely (special occasions)", "1–2× per month", "Once a week", "2–3× per week", "Daily"]
+SMOKING_LEVELS = ["Non-smoker", "Former smoker", "Occasional (social)", "Regular smoker", "Vaping / e-cigarettes"]
+MEALS_PER_DAY_OPTIONS = ["2 meals", "3 meals", "3 meals + snacks", "Intermittent fasting"]
+EATING_OUT_LEVELS = ["Rarely (home-cooked most days)", "Once a week", "2–3× per week", "4–5× per week", "Most meals"]
 
 
-def parse_notes_sections(text):
-    sections = {}
-    if not text:
-        return sections
-    parts = re.split(r'\n?## (.+?)\n', text)
-    if parts[0].strip():
-        sections["Other notes"] = parts[0].strip()
-    for i in range(1, len(parts), 2):
-        title = parts[i].strip()
-        body = parts[i + 1].strip() if i + 1 < len(parts) else ""
-        sections[title] = body
-    return sections
-
-
-def rebuild_notes_sections(sections):
-    ordered = [t for t in ["Other notes"] + NOTES_SECTIONS if t in sections]
-    ordered += [t for t in sections if t not in ordered]
-    blocks = []
-    for t in ordered:
-        body = (sections.get(t) or "").strip()
-        if not body:
-            continue
-        blocks.append(body if t == "Other notes" else f"## {t}\n{body}")
-    return "\n\n".join(blocks).strip()
-
-
-def save_notes_sections(user_id, updates):
-    existing = db_get_single("profile_notes", user_id)
-    sections = parse_notes_sections((existing or {}).get("notes", ""))
-    sections.update(updates)
-    db_upsert("profile_notes", {"user_id": user_id, "notes": rebuild_notes_sections(sections)}, on_conflict="user_id")
+def selectbox_index(options, value, default=0):
+    return options.index(value) if value in options else default
 
 PLAN_MODES = {
     "Reset":     {"duration_days": 30,  "subtitle": "Foundation · 1 month",
@@ -615,9 +581,22 @@ For complex questions, structure as: (1) what is happening — mechanism across 
         for s in active_supps:
             base += f"- {s.get('name','')} {s.get('dose','')} ({s.get('timing','')})\n"
 
+    if profile:
+        lifestyle_lines = []
+        if profile.get("activity_level") or profile.get("exercise_routine") or profile.get("alcohol") or profile.get("smoking"):
+            lifestyle_lines.append(f"Activity: {profile.get('activity_level','?')} | Alcohol: {profile.get('alcohol','?')} | Smoking: {profile.get('smoking','?')} | Exercise: {profile.get('exercise_routine','') or 'not stated'}")
+        if profile.get("sleep_bedtime") or profile.get("sleep_quality"):
+            lifestyle_lines.append(f"Sleep: bedtime {profile.get('sleep_bedtime','?')}, wake {profile.get('sleep_wake_time','?')}, duration {profile.get('sleep_duration','?')}, quality {profile.get('sleep_quality','?')}/10. Challenges: {profile.get('sleep_challenges','') or 'none stated'}")
+        if profile.get("first_meal") or profile.get("food_prefs") or profile.get("meals_per_day"):
+            lifestyle_lines.append(f"Eating schedule: first meal {profile.get('first_meal','?')}, last meal {profile.get('last_meal','?')}, {profile.get('meals_per_day','?')}, eating out {profile.get('eating_out','?')}. Food preferences: {profile.get('food_prefs','') or 'not stated'}")
+        if profile.get("stress_level") or profile.get("stressors") or profile.get("symptoms"):
+            lifestyle_lines.append(f"Stress: {profile.get('stress_level','?')}/10. Stressors: {profile.get('stressors','') or 'none stated'}. Symptoms: {profile.get('symptoms','') or 'none stated'}. Other: {profile.get('anything_else','') or 'none'}")
+        if lifestyle_lines:
+            base += "\nLIFESTYLE:\n" + "\n".join(lifestyle_lines) + "\n"
+
     notes = db_get_single("profile_notes", user_id)
     if notes and notes.get("notes"):
-        base += f"\nLIFESTYLE / PROFILE NOTES:\n{notes['notes']}\n"
+        base += f"\nFAMILY HISTORY / PAST SURGERIES:\n{notes['notes']}\n"
 
     labs = db_get("lab_reports", user_id, order_col="report_date", limit=10)
     if labs:
@@ -999,7 +978,7 @@ def onboarding_step2(user_id):
                 db_insert("supplements", {"user_id": user_id, "name": row["Supplement"], "dose": row.get("Dose", ""), "timing": row.get("Timing", ""), "active": True})
         notes_text = f"Family history: {family_history}\nPast surgeries/events: {surgeries}" if (family_history or surgeries) else ""
         if notes_text:
-            save_notes_sections(user_id, {"Health Background": notes_text})
+            db_upsert("profile_notes", {"user_id": user_id, "notes": notes_text}, on_conflict="user_id")
         set_ob_step(user_id, 3)
         st.rerun()
 
@@ -1013,35 +992,37 @@ def onboarding_step3(user_id):
 
     primary_goal = st.text_area("Primary health goal — in your own words", value=st.session_state.get("ob_primary_goal", ""), height=80)
 
+    lp = db_get_single("profiles", user_id) or {}
+
     st.markdown('<div class="sl">Diet & activity</div>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
-    activity_level = c1.selectbox("Activity level", ["Sedentary", "Lightly active", "Moderately active", "Very active"])
-    restrictions = c2.text_input("Dietary restrictions or intolerances", value="")
-    alcohol = c1.selectbox("Alcohol consumption", ["None", "Rarely (special occasions)", "1–2× per month", "Once a week", "2–3× per week", "Daily"])
-    smoking = c2.selectbox("Smoking / tobacco", ["Non-smoker", "Former smoker", "Occasional (social)", "Regular smoker", "Vaping / e-cigarettes"])
-    exercise_routine = st.text_area("Exercise routine", height=60)
+    activity_level = c1.selectbox("Activity level", ACTIVITY_LEVELS, index=selectbox_index(ACTIVITY_LEVELS, lp.get("activity_level")))
+    restrictions = c2.text_input("Dietary restrictions or intolerances", value=lp.get("allergies", ""))
+    alcohol = c1.selectbox("Alcohol consumption", ALCOHOL_LEVELS, index=selectbox_index(ALCOHOL_LEVELS, lp.get("alcohol")))
+    smoking = c2.selectbox("Smoking / tobacco", SMOKING_LEVELS, index=selectbox_index(SMOKING_LEVELS, lp.get("smoking")))
+    exercise_routine = st.text_area("Exercise routine", value=lp.get("exercise_routine", ""), height=60)
 
     st.markdown('<div class="sl">Sleep</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
-    bedtime = c1.text_input("Typical bedtime", placeholder="11:00 pm")
-    wake_time = c2.text_input("Typical wake time", placeholder="6:30 am")
-    sleep_duration = c3.text_input("Average sleep duration", placeholder="6.5 hrs")
-    sleep_quality = st.slider("Sleep quality (self-rated)", 1, 10, 5)
-    sleep_challenges = st.text_area("Sleep challenges (optional)", height=50)
+    bedtime = c1.text_input("Typical bedtime", value=lp.get("sleep_bedtime", ""), placeholder="11:00 pm")
+    wake_time = c2.text_input("Typical wake time", value=lp.get("sleep_wake_time", ""), placeholder="6:30 am")
+    sleep_duration = c3.text_input("Average sleep duration", value=lp.get("sleep_duration", ""), placeholder="6.5 hrs")
+    sleep_quality = st.slider("Sleep quality (self-rated)", 1, 10, int(lp.get("sleep_quality") or 5))
+    sleep_challenges = st.text_area("Sleep challenges (optional)", value=lp.get("sleep_challenges", ""), height=50)
 
     st.markdown('<div class="sl">Eating schedule</div>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
-    first_meal = c1.text_input("First meal time", placeholder="8:00 am")
-    last_meal = c2.text_input("Last meal time", placeholder="8:30 pm")
-    meals_per_day = c1.selectbox("Meals per day", ["2 meals", "3 meals", "3 meals + snacks", "Intermittent fasting"])
-    eating_out = c2.selectbox("Eating out / ordering in", ["Rarely (home-cooked most days)", "Once a week", "2–3× per week", "4–5× per week", "Most meals"])
-    food_prefs = st.text_area("Food preferences or patterns the coach should know about (optional)", height=60)
+    first_meal = c1.text_input("First meal time", value=lp.get("first_meal", ""), placeholder="8:00 am")
+    last_meal = c2.text_input("Last meal time", value=lp.get("last_meal", ""), placeholder="8:30 pm")
+    meals_per_day = c1.selectbox("Meals per day", MEALS_PER_DAY_OPTIONS, index=selectbox_index(MEALS_PER_DAY_OPTIONS, lp.get("meals_per_day")))
+    eating_out = c2.selectbox("Eating out / ordering in", EATING_OUT_LEVELS, index=selectbox_index(EATING_OUT_LEVELS, lp.get("eating_out")))
+    food_prefs = st.text_area("Food preferences or patterns the coach should know about (optional)", value=lp.get("food_prefs", ""), height=60)
 
     st.markdown('<div class="sl">Stress & wellbeing</div>', unsafe_allow_html=True)
-    stress_level = st.slider("Current stress level", 1, 10, 5)
-    stressors = st.text_input("Primary stressors")
-    symptoms = st.text_area("Current symptoms or main concerns — in your own words", height=70)
-    anything_else = st.text_area("Anything else you'd like your coach to know (optional)", height=50)
+    stress_level = st.slider("Current stress level", 1, 10, int(lp.get("stress_level") or 5))
+    stressors = st.text_input("Primary stressors", value=lp.get("stressors", ""))
+    symptoms = st.text_area("Current symptoms or main concerns — in your own words", value=lp.get("symptoms", ""), height=70)
+    anything_else = st.text_area("Anything else you'd like your coach to know (optional)", value=lp.get("anything_else", ""), height=50)
 
     st.markdown('<div class="sl">Additional goals</div>', unsafe_allow_html=True)
     if "ob_extra_goals" not in st.session_state:
@@ -1054,8 +1035,7 @@ def onboarding_step3(user_id):
         st.session_state.ob_extra_goals.append({"goal": "", "timeframe": "3 months"})
         st.rerun()
 
-    profile_row = db_get_single("profiles", user_id) or {}
-    has_cycle = profile_row.get("has_cycle", False)
+    has_cycle = lp.get("has_cycle", False)
     cycle_last_start, cycle_avg_len, cycle_period_dur = None, None, None
     if has_cycle:
         st.markdown('<div class="sl">Cycle data</div>', unsafe_allow_html=True)
@@ -1074,18 +1054,14 @@ def onboarding_step3(user_id):
         for g in st.session_state.ob_extra_goals:
             if g.get("goal", "").strip():
                 db_insert("goals", {"user_id": user_id, "goal": g["goal"], "timeframe": g.get("timeframe", "")})
-        activity_notes = f"Activity level: {activity_level} | Alcohol: {alcohol} | Smoking: {smoking}\nExercise routine: {exercise_routine}".strip()
-        sleep_notes = f"Bedtime {bedtime}, wake {wake_time}, duration {sleep_duration}, quality {sleep_quality}/10.\nChallenges: {sleep_challenges}".strip()
-        eating_notes = f"Eating schedule: first meal {first_meal}, last meal {last_meal}, {meals_per_day}, eating out {eating_out}.\nDietary restrictions: {restrictions}\nFood preferences / what to eat or avoid: {food_prefs}".strip()
-        stress_notes = f"Stress level: {stress_level}/10. Stressors: {stressors}\nCurrent symptoms: {symptoms}\nOther notes: {anything_else}".strip()
-        save_notes_sections(user_id, {
-            "Activity & Exercise": activity_notes,
-            "Sleep": sleep_notes,
-            "Eating Schedule & Food Preferences": eating_notes,
-            "Stress & Symptoms": stress_notes,
+        db_upsert("profiles", {
+            "id": user_id, "activity_level": activity_level, "alcohol": alcohol, "smoking": smoking,
+            "exercise_routine": exercise_routine, "sleep_bedtime": bedtime, "sleep_wake_time": wake_time,
+            "sleep_duration": sleep_duration, "sleep_quality": int(sleep_quality), "sleep_challenges": sleep_challenges,
+            "first_meal": first_meal, "last_meal": last_meal, "meals_per_day": meals_per_day, "eating_out": eating_out,
+            "food_prefs": food_prefs, "stress_level": int(stress_level), "stressors": stressors,
+            "symptoms": symptoms, "anything_else": anything_else, "allergies": restrictions.strip(),
         })
-        if restrictions.strip():
-            db_upsert("profiles", {"id": user_id, "allergies": restrictions.strip()})
         if has_cycle and cycle_last_start and cycle_avg_len:
             db_upsert("cycle_data", {"user_id": user_id, "last_period_start": cycle_last_start.isoformat(),
                                       "avg_cycle_length": int(cycle_avg_len), "period_duration": int(cycle_period_dur or 5)}, on_conflict="user_id")
@@ -1877,8 +1853,7 @@ def show_profile(user_id, profile):
 
 def show_profile_user(user_id, profile):
     p = profile or {}
-    notes_row = db_get_single("profile_notes", user_id)
-    notes_sections = parse_notes_sections((notes_row or {}).get("notes", ""))
+    health_bg_row = db_get_single("profile_notes", user_id)
     c1, c2 = st.columns(2)
     with c1:
         with st.container(border=True):
@@ -1953,9 +1928,9 @@ def show_profile_user(user_id, profile):
                     db_insert("medications", {"user_id": user_id, "name": new_med, "dose": med_dose, "frequency": med_freq, "active": True})
                     st.rerun()
             with st.expander("Family history & past surgeries"):
-                bg_text = st.text_area("Family history & past surgeries", value=notes_sections.get("Health Background", ""), height=90, key="ed_health_bg", label_visibility="collapsed")
+                bg_text = st.text_area("Family history & past surgeries", value=(health_bg_row or {}).get("notes", ""), height=90, key="ed_health_bg", label_visibility="collapsed")
                 if st.button("Save", key="save_health_bg"):
-                    save_notes_sections(user_id, {"Health Background": bg_text})
+                    db_upsert("profile_notes", {"user_id": user_id, "notes": bg_text}, on_conflict="user_id")
                     st.success("Saved.")
                     st.rerun()
 
@@ -1997,37 +1972,55 @@ def show_profile_user(user_id, profile):
             st.success("Saved.")
             st.rerun()
         st.markdown("---")
-        eating_text = st.text_area("Eating schedule & food preferences — what you eat, avoid, meal times, eating out", value=notes_sections.get("Eating Schedule & Food Preferences", ""), height=120, key="ed_eating")
-        if st.button("Save eating notes", key="save_eating"):
-            save_notes_sections(user_id, {"Eating Schedule & Food Preferences": eating_text})
+        st.markdown("**Eating schedule & food preferences**")
+        ec1, ec2 = st.columns(2)
+        ed_first_meal = ec1.text_input("First meal time", value=p.get("first_meal", ""), key="ed_first_meal")
+        ed_last_meal = ec2.text_input("Last meal time", value=p.get("last_meal", ""), key="ed_last_meal")
+        ed_meals_per_day = ec1.selectbox("Meals per day", MEALS_PER_DAY_OPTIONS, index=selectbox_index(MEALS_PER_DAY_OPTIONS, p.get("meals_per_day")), key="ed_meals_per_day")
+        ed_eating_out = ec2.selectbox("Eating out / ordering in", EATING_OUT_LEVELS, index=selectbox_index(EATING_OUT_LEVELS, p.get("eating_out")), key="ed_eating_out")
+        ed_food_prefs = st.text_area("Food preferences or patterns the coach should know about", value=p.get("food_prefs", ""), height=80, key="ed_food_prefs")
+        if st.button("Save eating schedule", key="save_eating"):
+            db_upsert("profiles", {"id": user_id, "first_meal": ed_first_meal, "last_meal": ed_last_meal,
+                                    "meals_per_day": ed_meals_per_day, "eating_out": ed_eating_out, "food_prefs": ed_food_prefs})
             st.success("Saved.")
             st.rerun()
 
     with st.expander("Lifestyle — activity, sleep, stress"):
         st.markdown("**Activity & exercise**")
-        activity_text = st.text_area("Activity & exercise", value=notes_sections.get("Activity & Exercise", ""), height=100, key="ed_activity", label_visibility="collapsed")
-        if st.button("Save activity notes", key="save_activity"):
-            save_notes_sections(user_id, {"Activity & Exercise": activity_text})
+        ac1, ac2 = st.columns(2)
+        ed_activity_level = ac1.selectbox("Activity level", ACTIVITY_LEVELS, index=selectbox_index(ACTIVITY_LEVELS, p.get("activity_level")), key="ed_activity_level")
+        ed_alcohol = ac1.selectbox("Alcohol consumption", ALCOHOL_LEVELS, index=selectbox_index(ALCOHOL_LEVELS, p.get("alcohol")), key="ed_alcohol")
+        ed_smoking = ac2.selectbox("Smoking / tobacco", SMOKING_LEVELS, index=selectbox_index(SMOKING_LEVELS, p.get("smoking")), key="ed_smoking")
+        ed_exercise_routine = st.text_area("Exercise routine", value=p.get("exercise_routine", ""), height=70, key="ed_exercise_routine")
+        if st.button("Save activity", key="save_activity"):
+            db_upsert("profiles", {"id": user_id, "activity_level": ed_activity_level, "alcohol": ed_alcohol,
+                                    "smoking": ed_smoking, "exercise_routine": ed_exercise_routine})
             st.success("Saved.")
             st.rerun()
         st.markdown("---")
         st.markdown("**Sleep**")
-        sleep_text = st.text_area("Sleep", value=notes_sections.get("Sleep", ""), height=100, key="ed_sleep", label_visibility="collapsed")
-        if st.button("Save sleep notes", key="save_sleep"):
-            save_notes_sections(user_id, {"Sleep": sleep_text})
+        sc1, sc2, sc3 = st.columns(3)
+        ed_bedtime = sc1.text_input("Typical bedtime", value=p.get("sleep_bedtime", ""), key="ed_bedtime")
+        ed_wake_time = sc2.text_input("Typical wake time", value=p.get("sleep_wake_time", ""), key="ed_wake_time")
+        ed_sleep_duration = sc3.text_input("Average sleep duration", value=p.get("sleep_duration", ""), key="ed_sleep_duration")
+        ed_sleep_quality = st.slider("Sleep quality (self-rated)", 1, 10, int(p.get("sleep_quality") or 5), key="ed_sleep_quality")
+        ed_sleep_challenges = st.text_area("Sleep challenges", value=p.get("sleep_challenges", ""), height=60, key="ed_sleep_challenges")
+        if st.button("Save sleep", key="save_sleep"):
+            db_upsert("profiles", {"id": user_id, "sleep_bedtime": ed_bedtime, "sleep_wake_time": ed_wake_time,
+                                    "sleep_duration": ed_sleep_duration, "sleep_quality": int(ed_sleep_quality), "sleep_challenges": ed_sleep_challenges})
             st.success("Saved.")
             st.rerun()
         st.markdown("---")
         st.markdown("**Stress & symptoms**")
-        stress_text = st.text_area("Stress & symptoms", value=notes_sections.get("Stress & Symptoms", ""), height=100, key="ed_stress", label_visibility="collapsed")
-        if st.button("Save stress notes", key="save_stress"):
-            save_notes_sections(user_id, {"Stress & Symptoms": stress_text})
+        ed_stress_level = st.slider("Current stress level", 1, 10, int(p.get("stress_level") or 5), key="ed_stress_level")
+        ed_stressors = st.text_input("Primary stressors", value=p.get("stressors", ""), key="ed_stressors")
+        ed_symptoms = st.text_area("Current symptoms or main concerns", value=p.get("symptoms", ""), height=70, key="ed_symptoms")
+        ed_anything_else = st.text_area("Anything else you'd like your coach to know", value=p.get("anything_else", ""), height=50, key="ed_anything_else")
+        if st.button("Save stress & symptoms", key="save_stress"):
+            db_upsert("profiles", {"id": user_id, "stress_level": int(ed_stress_level), "stressors": ed_stressors,
+                                    "symptoms": ed_symptoms, "anything_else": ed_anything_else})
             st.success("Saved.")
             st.rerun()
-        if notes_sections.get("Other notes"):
-            st.markdown("---")
-            st.caption("Saved before this account had separate sections — edit and re-save under the fields above once you've moved it over.")
-            st.markdown(f"**Other notes**\n\n{notes_sections['Other notes']}")
 
     if p.get("has_cycle"):
         with st.expander("Cycle tracking"):

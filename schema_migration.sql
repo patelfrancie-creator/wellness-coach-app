@@ -204,3 +204,33 @@ with ranked as (
   from supplements
 )
 delete from supplements where id in (select id from ranked where rn > 1);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Round 4: give lifestyle fields real columns instead of flattened text.
+--
+-- Onboarding Step 3 collects these as dropdowns/sliders (activity level,
+-- alcohol, smoking, sleep quality, meals per day, eating out, stress level)
+-- and text fields (bedtime, exercise routine, food preferences, etc). They
+-- were being concatenated into one free-text field, so Profile & Data could
+-- only show/edit them as a text box — losing the dropdown/slider UI the
+-- onboarding wizard used. These columns let Profile & Data render the same
+-- widget type for each field as onboarding did.
+-- ═══════════════════════════════════════════════════════════════════════════
+alter table profiles add column if not exists activity_level text;
+alter table profiles add column if not exists alcohol text;
+alter table profiles add column if not exists smoking text;
+alter table profiles add column if not exists exercise_routine text;
+alter table profiles add column if not exists sleep_bedtime text;
+alter table profiles add column if not exists sleep_wake_time text;
+alter table profiles add column if not exists sleep_duration text;
+alter table profiles add column if not exists sleep_quality int;
+alter table profiles add column if not exists sleep_challenges text;
+alter table profiles add column if not exists first_meal text;
+alter table profiles add column if not exists last_meal text;
+alter table profiles add column if not exists meals_per_day text;
+alter table profiles add column if not exists eating_out text;
+alter table profiles add column if not exists food_prefs text;
+alter table profiles add column if not exists stress_level int;
+alter table profiles add column if not exists stressors text;
+alter table profiles add column if not exists symptoms text;
+alter table profiles add column if not exists anything_else text;
