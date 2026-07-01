@@ -170,3 +170,37 @@ end $$;
 
 -- current_step powers the "resume onboarding where you left off" fix.
 alter table onboarding add column if not exists current_step int;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Round 3: clean up duplicate conditions/medications/supplements.
+--
+-- These tables intentionally have no unique constraint (a person can have
+-- several conditions/meds/supplements), so the app-level dedup guard added
+-- this round only stops *future* re-inserts — it can't remove rows that
+-- were already duplicated by an earlier onboarding run (e.g. before the
+-- forced-logout/resume fix existed). This deletes exact-name duplicates
+-- (case-insensitive), keeping the earliest row per person.
+--
+-- This will NOT catch near-duplicates typed differently, e.g. "Peruease"
+-- vs "Peruease 1mg" as two separate medication entries — those aren't the
+-- same string, so the database can't safely tell they're the same thing.
+-- Delete those manually from Profile & Data (Delete buttons are now on
+-- every condition/medication/supplement row) once this migration runs.
+-- ═══════════════════════════════════════════════════════════════════════════
+with ranked as (
+  select id, row_number() over (partition by user_id, lower(condition) order by id) as rn
+  from medical_history
+)
+delete from medical_history where id in (select id from ranked where rn > 1);
+
+with ranked as (
+  select id, row_number() over (partition by user_id, lower(name) order by id) as rn
+  from medications
+)
+delete from medications where id in (select id from ranked where rn > 1);
+
+with ranked as (
+  select id, row_number() over (partition by user_id, lower(name) order by id) as rn
+  from supplements
+)
+delete from supplements where id in (select id from ranked where rn > 1);

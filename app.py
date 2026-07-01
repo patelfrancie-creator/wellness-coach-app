@@ -47,6 +47,50 @@ def split_location(location):
         return parts[0], ", ".join(parts[1:])
     return location.strip(), ""
 
+# ── profile_notes section helpers ──────────────────────────────────────────
+# profile_notes.notes stores everything as one text field, but onboarding
+# collects it in named groups (health background, activity, sleep, stress,
+# eating). Storing it flat meant a single failed save (e.g. the old
+# duplicate-key upsert bug) silently dropped an entire step's answers with
+# no way to tell what was missing. These helpers store/read it as
+# "## Section Title" blocks instead, so Profile & Data can show — and save —
+# each group independently. Text saved before this existed (no headers) is
+# preserved under "Other notes" rather than discarded.
+NOTES_SECTIONS = ["Health Background", "Activity & Exercise", "Sleep", "Stress & Symptoms", "Eating Schedule & Food Preferences"]
+
+
+def parse_notes_sections(text):
+    sections = {}
+    if not text:
+        return sections
+    parts = re.split(r'\n?## (.+?)\n', text)
+    if parts[0].strip():
+        sections["Other notes"] = parts[0].strip()
+    for i in range(1, len(parts), 2):
+        title = parts[i].strip()
+        body = parts[i + 1].strip() if i + 1 < len(parts) else ""
+        sections[title] = body
+    return sections
+
+
+def rebuild_notes_sections(sections):
+    ordered = [t for t in ["Other notes"] + NOTES_SECTIONS if t in sections]
+    ordered += [t for t in sections if t not in ordered]
+    blocks = []
+    for t in ordered:
+        body = (sections.get(t) or "").strip()
+        if not body:
+            continue
+        blocks.append(body if t == "Other notes" else f"## {t}\n{body}")
+    return "\n\n".join(blocks).strip()
+
+
+def save_notes_sections(user_id, updates):
+    existing = db_get_single("profile_notes", user_id)
+    sections = parse_notes_sections((existing or {}).get("notes", ""))
+    sections.update(updates)
+    db_upsert("profile_notes", {"user_id": user_id, "notes": rebuild_notes_sections(sections)}, on_conflict="user_id")
+
 PLAN_MODES = {
     "Reset":     {"duration_days": 30,  "subtitle": "Foundation · 1 month",
                   "desc": "Break a pattern. Build a baseline. Understand your body for the first time. The coach is investigative — high-frequency check-ins, establishing rhythms, calibrating your picture."},
@@ -955,9 +999,7 @@ def onboarding_step2(user_id):
                 db_insert("supplements", {"user_id": user_id, "name": row["Supplement"], "dose": row.get("Dose", ""), "timing": row.get("Timing", ""), "active": True})
         notes_text = f"Family history: {family_history}\nPast surgeries/events: {surgeries}" if (family_history or surgeries) else ""
         if notes_text:
-            existing = db_get_single("profile_notes", user_id)
-            combined = (existing.get("notes", "") + "\n\n" if existing else "") + notes_text
-            db_upsert("profile_notes", {"user_id": user_id, "notes": combined}, on_conflict="user_id")
+            save_notes_sections(user_id, {"Health Background": notes_text})
         set_ob_step(user_id, 3)
         st.rerun()
 
@@ -1032,18 +1074,16 @@ def onboarding_step3(user_id):
         for g in st.session_state.ob_extra_goals:
             if g.get("goal", "").strip():
                 db_insert("goals", {"user_id": user_id, "goal": g["goal"], "timeframe": g.get("timeframe", "")})
-        lifestyle_notes = f"""
-Activity level: {activity_level} | Dietary restrictions: {restrictions} | Alcohol: {alcohol} | Smoking: {smoking}
-Exercise routine: {exercise_routine}
-Sleep: bedtime {bedtime}, wake {wake_time}, duration {sleep_duration}, quality {sleep_quality}/10. Challenges: {sleep_challenges}
-Eating schedule: first meal {first_meal}, last meal {last_meal}, {meals_per_day}, eating out {eating_out}. Preferences: {food_prefs}
-Stress level: {stress_level}/10. Stressors: {stressors}
-Current symptoms: {symptoms}
-Other notes: {anything_else}
-""".strip()
-        existing = db_get_single("profile_notes", user_id)
-        combined = (existing.get("notes", "") + "\n\n" if existing else "") + lifestyle_notes
-        db_upsert("profile_notes", {"user_id": user_id, "notes": combined}, on_conflict="user_id")
+        activity_notes = f"Activity level: {activity_level} | Alcohol: {alcohol} | Smoking: {smoking}\nExercise routine: {exercise_routine}".strip()
+        sleep_notes = f"Bedtime {bedtime}, wake {wake_time}, duration {sleep_duration}, quality {sleep_quality}/10.\nChallenges: {sleep_challenges}".strip()
+        eating_notes = f"Eating schedule: first meal {first_meal}, last meal {last_meal}, {meals_per_day}, eating out {eating_out}.\nDietary restrictions: {restrictions}\nFood preferences / what to eat or avoid: {food_prefs}".strip()
+        stress_notes = f"Stress level: {stress_level}/10. Stressors: {stressors}\nCurrent symptoms: {symptoms}\nOther notes: {anything_else}".strip()
+        save_notes_sections(user_id, {
+            "Activity & Exercise": activity_notes,
+            "Sleep": sleep_notes,
+            "Eating Schedule & Food Preferences": eating_notes,
+            "Stress & Symptoms": stress_notes,
+        })
         if restrictions.strip():
             db_upsert("profiles", {"id": user_id, "allergies": restrictions.strip()})
         if has_cycle and cycle_last_start and cycle_avg_len:
@@ -1837,6 +1877,8 @@ def show_profile(user_id, profile):
 
 def show_profile_user(user_id, profile):
     p = profile or {}
+    notes_row = db_get_single("profile_notes", user_id)
+    notes_sections = parse_notes_sections((notes_row or {}).get("notes", ""))
     c1, c2 = st.columns(2)
     with c1:
         with st.container(border=True):
@@ -1910,6 +1952,12 @@ def show_profile_user(user_id, profile):
                 if st.button("Add medication", key="add_med") and new_med:
                     db_insert("medications", {"user_id": user_id, "name": new_med, "dose": med_dose, "frequency": med_freq, "active": True})
                     st.rerun()
+            with st.expander("Family history & past surgeries"):
+                bg_text = st.text_area("Family history & past surgeries", value=notes_sections.get("Health Background", ""), height=90, key="ed_health_bg", label_visibility="collapsed")
+                if st.button("Save", key="save_health_bg"):
+                    save_notes_sections(user_id, {"Health Background": bg_text})
+                    st.success("Saved.")
+                    st.rerun()
 
     with st.expander("Goals", expanded=True):
         goals = db_get("goals", user_id)
@@ -1948,14 +1996,38 @@ def show_profile_user(user_id, profile):
             db_upsert("profiles", {"id": user_id, "eating_pattern": eating_pattern, "allergies": allergies})
             st.success("Saved.")
             st.rerun()
-
-    with st.expander("Lifestyle — activity, sleep, stress"):
-        notes = db_get_single("profile_notes", user_id)
-        lifestyle_text = st.text_area("Lifestyle notes", value=(notes or {}).get("notes", ""), height=160, key="ed_lifestyle")
-        if st.button("Save lifestyle notes", key="save_lifestyle"):
-            db_upsert("profile_notes", {"user_id": user_id, "notes": lifestyle_text}, on_conflict="user_id")
+        st.markdown("---")
+        eating_text = st.text_area("Eating schedule & food preferences — what you eat, avoid, meal times, eating out", value=notes_sections.get("Eating Schedule & Food Preferences", ""), height=120, key="ed_eating")
+        if st.button("Save eating notes", key="save_eating"):
+            save_notes_sections(user_id, {"Eating Schedule & Food Preferences": eating_text})
             st.success("Saved.")
             st.rerun()
+
+    with st.expander("Lifestyle — activity, sleep, stress"):
+        st.markdown("**Activity & exercise**")
+        activity_text = st.text_area("Activity & exercise", value=notes_sections.get("Activity & Exercise", ""), height=100, key="ed_activity", label_visibility="collapsed")
+        if st.button("Save activity notes", key="save_activity"):
+            save_notes_sections(user_id, {"Activity & Exercise": activity_text})
+            st.success("Saved.")
+            st.rerun()
+        st.markdown("---")
+        st.markdown("**Sleep**")
+        sleep_text = st.text_area("Sleep", value=notes_sections.get("Sleep", ""), height=100, key="ed_sleep", label_visibility="collapsed")
+        if st.button("Save sleep notes", key="save_sleep"):
+            save_notes_sections(user_id, {"Sleep": sleep_text})
+            st.success("Saved.")
+            st.rerun()
+        st.markdown("---")
+        st.markdown("**Stress & symptoms**")
+        stress_text = st.text_area("Stress & symptoms", value=notes_sections.get("Stress & Symptoms", ""), height=100, key="ed_stress", label_visibility="collapsed")
+        if st.button("Save stress notes", key="save_stress"):
+            save_notes_sections(user_id, {"Stress & Symptoms": stress_text})
+            st.success("Saved.")
+            st.rerun()
+        if notes_sections.get("Other notes"):
+            st.markdown("---")
+            st.caption("Saved before this account had separate sections — edit and re-save under the fields above once you've moved it over.")
+            st.markdown(f"**Other notes**\n\n{notes_sections['Other notes']}")
 
     if p.get("has_cycle"):
         with st.expander("Cycle tracking"):
