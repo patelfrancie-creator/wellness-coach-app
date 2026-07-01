@@ -26,6 +26,27 @@ CLAUDE_MODEL = "claude-sonnet-4-6"
 
 MAX_HISTORY = 20
 
+COUNTRIES = [
+    "India", "United States", "United Kingdom", "Canada", "Australia", "New Zealand",
+    "Ireland", "Singapore", "United Arab Emirates", "Saudi Arabia", "Qatar", "Kuwait",
+    "Germany", "France", "Netherlands", "Switzerland", "Sweden", "Norway", "Denmark",
+    "Finland", "Spain", "Italy", "Portugal", "Belgium", "Austria", "Poland",
+    "Japan", "South Korea", "China", "Hong Kong", "Taiwan", "Thailand", "Malaysia",
+    "Indonesia", "Philippines", "Vietnam", "Sri Lanka", "Bangladesh", "Pakistan", "Nepal",
+    "South Africa", "Nigeria", "Kenya", "Egypt", "Israel", "Turkey",
+    "Brazil", "Mexico", "Argentina", "Chile", "Colombia",
+    "Other",
+]
+
+
+def split_location(location):
+    if not location:
+        return "", ""
+    parts = [p.strip() for p in location.split(",")]
+    if len(parts) >= 2:
+        return parts[0], ", ".join(parts[1:])
+    return location.strip(), ""
+
 PLAN_MODES = {
     "Reset":     {"duration_days": 30,  "subtitle": "Foundation · 1 month",
                   "desc": "Break a pattern. Build a baseline. Understand your body for the first time. The coach is investigative — high-frequency check-ins, establishing rhythms, calibrating your picture."},
@@ -99,6 +120,10 @@ html, body, [class*="css"] {{ font-family: 'Inter', sans-serif; }}
 .stApp {{ background-color: {'#111214' if auth_mode else 'var(--bone)'} !important; }}
 [data-testid="stSidebar"] {{ background-color: #111214 !important; }}
 [data-testid="stSidebar"] * {{ color: #F7F5F2; }}
+[data-testid="stSidebar"] button {{ background-color: rgba(247,245,242,0.06) !important; border: 1px solid rgba(247,245,242,0.14) !important; color: #F7F5F2 !important; }}
+[data-testid="stSidebar"] button:hover {{ background-color: rgba(247,245,242,0.12) !important; border-color: rgba(247,245,242,0.24) !important; }}
+[data-testid="stSidebar"] button[kind="primary"] {{ background-color: var(--copper) !important; border-color: var(--copper) !important; color: #111214 !important; }}
+[data-testid="stSidebar"] button[kind="primary"] * {{ color: #111214 !important; }}
 [data-testid="stHeader"] {{ background: transparent; }}
 #MainMenu, footer {{ visibility: hidden; }}
 
@@ -220,9 +245,17 @@ def db_get_single(table, user_id):
         return None
 
 
-def db_upsert(table, data):
+def db_upsert(table, data, on_conflict=None):
+    """on_conflict must name the table's actual unique constraint columns —
+    without it, postgrest upserts against the primary key only, so a table
+    keyed by user_id (no id in `data`) silently inserts a duplicate row
+    instead of updating, or errors against a unique constraint it didn't
+    know to target."""
     try:
-        return supabase.table(table).upsert(data).execute()
+        q = supabase.table(table)
+        if on_conflict:
+            return q.upsert(data, on_conflict=on_conflict).execute()
+        return q.upsert(data).execute()
     except Exception as e:
         st.error(f"Save error: {e}")
         return None
@@ -279,7 +312,7 @@ def get_onboarding_state(user_id):
 def save_onboarding_state(user_id, data):
     try:
         data["user_id"] = user_id
-        supabase.table("onboarding").upsert(data).execute()
+        supabase.table("onboarding").upsert(data, on_conflict="user_id").execute()
     except Exception as e:
         st.error(f"Save error: {e}")
 
@@ -339,6 +372,33 @@ def find_col(cols, candidates):
             return cols_lower[c.lower()]
     return None
 
+
+def import_whoop_csvs(user_id, files):
+    """Shared by onboarding Step 4 (optional) and Profile & Data > Wearable Data."""
+    import pandas as pd
+    merged = {}
+    for f in files:
+        try:
+            df = pd.read_csv(f)
+        except Exception:
+            continue
+        date_col = find_col(df.columns, COL_MAP["date"])
+        if not date_col:
+            continue
+        for _, row in df.iterrows():
+            try:
+                d = str(row[date_col])[:10]
+            except Exception:
+                continue
+            merged.setdefault(d, {"user_id": user_id, "data_date": d})
+            for field in ["recovery_score", "hrv", "resting_hr", "strain", "sleep_performance", "sleep_efficiency", "sleep_duration"]:
+                col = find_col(df.columns, COL_MAP[field])
+                if col and col in row and pd.notna(row[col]):
+                    merged[d][field] = float(row[col])
+    for d, rec in merged.items():
+        db_upsert("wearable_data", rec, on_conflict="user_id,data_date")
+    return len(merged)
+
 # ── AI Helpers ────────────────────────────────────────────────────────────────
 def ai_generate(system_prompt, user_prompt, max_tokens=4096):
     try:
@@ -362,6 +422,26 @@ def ai_chat(system_prompt, messages, max_tokens=4096):
         return resp.content[0].text
     except Exception as e:
         return f"_Coach is temporarily unavailable: {e}_"
+
+
+def lab_file_to_text(lab_file):
+    """Read an uploaded lab report file and return a text block for the AI to interpret."""
+    import base64
+    file_bytes = lab_file.read()
+    b64 = base64.b64encode(file_bytes).decode()
+    ext = lab_file.name.split(".")[-1].lower()
+    kind = "PDF lab report" if ext == "pdf" else "Lab report image"
+    return f"[{kind} uploaded — filename: {lab_file.name}. Please extract and interpret all lab markers and values you can identify from the following base64-encoded content.]\n{b64[:8000]}"
+
+
+def save_lab_report(user_id, report_date, text_to_analyse):
+    """Shared by onboarding Step 4 and Profile & Data > Lab Reports & Documents."""
+    with st.spinner("Interpreting against functional ranges..."):
+        summary = ai_generate(
+            "You are OneSattva, interpreting lab values against functional (optimal) ranges, not conventional population reference ranges. Give a concise 2-4 sentence clinical summary.",
+            text_to_analyse, max_tokens=500)
+    db_insert("lab_reports", {"user_id": user_id, "report_date": report_date.isoformat(), "raw_values": text_to_analyse[:2000], "summary": summary})
+    return summary
 
 # ── System Prompt Builder — bio-individual: no hard-coded clinical rules ──────
 # NOTE ON A CONFLICT BETWEEN THE TWO BRIEFS:
@@ -414,6 +494,7 @@ RULE 6 — Be specific when the data supports it: exact dose, exact timing, exac
 RULE 7 — Never deflect to "ask your doctor" without giving a complete expert answer first.
 RULE 8 — Every clinical or protocol-level response traces the mechanism across at least two of the three frameworks (functional medicine, Ayurveda, TCM) — single-system reasoning is a failure mode. Always close with one specific, concrete next step for today or this week.
 RULE 9 — When new data (a lab, a wearable import, an uploaded document) reveals something that contradicts or meaningfully updates what's in their stored profile (a new value, an implied diagnosis or medication change), say so explicitly and ask them to update their profile before you treat it as settled — e.g. "Your latest report shows X has shifted significantly since your last reading — can you confirm/update your profile so I'm working from the correct current picture?" Proceed with your interpretation, but flag that it's based on the profile as currently recorded.
+RULE 10 — Be concise by default. Give the correct, most useful information in the fewest words that fully answer the question — this is not a research paper. Skip detail the person hasn't asked for; they can always ask a follow-up in Coach chat if they want more depth. Never pad with restatement, hedging, or filler. But conciseness never means stopping early: a roadmap, protocol, or answer must always cover everything it structurally needs to (every phase, every section) — cut verbosity within each part, never cut a part out. Prefer short paragraphs and tight tables over long prose.
 
 ═══════════════════════════════════════════════════════
 LANGUAGE AND SAFETY STANDARDS — NON-NEGOTIABLE
@@ -600,6 +681,7 @@ For complex questions, structure as: (1) what is happening — mechanism across 
 def show_auth():
     inject_css(auth_mode=True)
     mode = st.session_state.get("auth_mode", "login")
+    flash = st.session_state.pop("auth_flash", None)
 
     # st.container(key=...) emits a real DOM node with a stable class
     # (.st-key-auth_card) — this lets the bone card background wrap the
@@ -626,6 +708,9 @@ def show_auth():
 <div style="font-family:'Newsreader',serif;font-style:italic;font-size:12.5px;color:var(--copper)">Health, understood.</div>
 </div>
 """, unsafe_allow_html=True)
+
+        if flash:
+            st.success(flash)
 
         if True:
             if mode == "login":
@@ -684,7 +769,7 @@ def show_auth():
                             st.error(f"Couldn't create account: {err}")
                         else:
                             db_upsert("profiles", {"id": user.id, "full_name": full_name, "email": email, "onboarding_complete": False})
-                            st.success("Account created! Check your inbox to verify your email before signing in. Check your spam folder if you don't see it within a minute.")
+                            st.session_state.auth_flash = "Account created! Check your inbox to verify your email before signing in. Check your spam folder if you don't see it within a minute."
                             st.session_state.auth_mode = "login"
                             st.rerun()
                 st.markdown('<div style="text-align:center;margin-top:8px;font-size:12.5px;color:var(--mid)">Already have an account?</div>', unsafe_allow_html=True)
@@ -733,9 +818,19 @@ def onboarding_progress(current_step):
 </div>""", unsafe_allow_html=True)
     st.markdown('<div style="border-bottom:1px solid var(--line);margin:16px 0 22px"></div>', unsafe_allow_html=True)
 # ── Onboarding ────────────────────────────────────────────────────────────────
+def set_ob_step(user_id, step):
+    """Advance the onboarding step and persist it, so a forced logout or a
+    server restart mid-onboarding resumes here instead of restarting at step 1."""
+    st.session_state.ob_step = step
+    save_onboarding_state(user_id, {"current_step": step})
+
+
 def show_onboarding(user_id, profile):
     inject_css(auth_mode=False)
-    step = st.session_state.get("ob_step", 1)
+    if "ob_step" not in st.session_state:
+        ob_state = get_onboarding_state(user_id)
+        st.session_state.ob_step = (ob_state or {}).get("current_step") or 1
+    step = st.session_state.ob_step
     st.markdown('<div style="max-width:820px;margin:0 auto;padding-top:18px">', unsafe_allow_html=True)
     onboarding_progress(step)
 
@@ -762,7 +857,7 @@ def ob_nav(back_step=None, back_label="← Back", continue_label="Continue →",
     with c1:
         if back_step:
             if st.button(back_label, key=f"back_{back_step}"):
-                st.session_state.ob_step = back_step
+                set_ob_step(st.session_state.user_id, back_step)
                 st.rerun()
     with c2:
         st.markdown('<div style="text-align:right">', unsafe_allow_html=True)
@@ -778,10 +873,13 @@ def onboarding_step1(user_id, profile):
     st.markdown('<div class="pg-sub">This personalises everything. You can edit any of this from Profile & Data later.</div>', unsafe_allow_html=True)
 
     p = profile or {}
+    existing_city, existing_country = split_location(p.get("location", ""))
     c1, c2 = st.columns(2)
     with c1:
         dob = st.date_input("Date of birth", value=date.fromisoformat(p["dob"]) if p.get("dob") else date(1990, 1, 1), min_value=date(1920, 1, 1), max_value=date.today())
-        location = st.text_input("Location (city, country)", value=p.get("location", ""))
+        cc1, cc2 = st.columns(2)
+        country = cc1.selectbox("Country", COUNTRIES, index=COUNTRIES.index(existing_country) if existing_country in COUNTRIES else len(COUNTRIES) - 1)
+        city = cc2.text_input("City", value=existing_city)
         height_cm = st.number_input("Height (cm)", min_value=100, max_value=230, value=int(p.get("height_cm") or 170))
         weight_kg = st.number_input("Weight (kg)", min_value=30, max_value=250, value=int(p.get("weight_kg") or 70))
     with c2:
@@ -797,12 +895,11 @@ def onboarding_step1(user_id, profile):
                                  index={"Yes": 0, "No": 1, "Not sure": 2}.get(st.session_state.get("ob_cycle_answer"), None))
         has_cycle = cycle_answer == "Yes"
         st.session_state.ob_cycle_answer = cycle_answer
-        if has_cycle:
-            st.caption("You'll enter your last period start date and actual average cycle length in the next steps.")
-        else:
+        if not has_cycle:
             st.caption("No cycle-related UI, prompts, or coaching will be shown anywhere in the app. You can change this later in Profile & Data.")
 
     def go_next():
+        location = ", ".join(x for x in [city.strip(), country] if x)
         db_upsert("profiles", {
             "id": user_id, "dob": dob.isoformat(), "location": location,
             "height_cm": height_cm, "weight_kg": weight_kg, "sex": sex,
@@ -810,7 +907,7 @@ def onboarding_step1(user_id, profile):
             "has_cycle": bool(has_cycle) if has_cycle is not None else False,
             "full_name": p.get("full_name") or st.session_state.get("user_email", ""),
         })
-        st.session_state.ob_step = 2
+        set_ob_step(user_id, 2)
         st.rerun()
 
     ob_nav(back_step=None, on_continue=go_next)
@@ -842,21 +939,26 @@ def onboarding_step2(user_id):
     def go_next():
         st.session_state.ob_family_history = family_history
         st.session_state.ob_surgeries = surgeries
+        # Re-visiting this step (e.g. after a forced logout mid-onboarding) must not
+        # re-insert rows already saved from a prior pass — check by name first.
+        existing_conditions = {c.get("condition", "").strip().lower() for c in db_get("medical_history", user_id)}
+        existing_meds = {m.get("name", "").strip().lower() for m in db_get("medications", user_id)}
+        existing_supps = {s.get("name", "").strip().lower() for s in db_get("supplements", user_id)}
         for row in st.session_state.ob_conditions:
-            if row.get("Condition", "").strip():
+            if row.get("Condition", "").strip() and row["Condition"].strip().lower() not in existing_conditions:
                 db_insert("medical_history", {"user_id": user_id, "condition": row["Condition"], "notes": row.get("Since / notes", "")})
         for row in st.session_state.ob_meds:
-            if row.get("Medication", "").strip():
+            if row.get("Medication", "").strip() and row["Medication"].strip().lower() not in existing_meds:
                 db_insert("medications", {"user_id": user_id, "name": row["Medication"], "dose": row.get("Dose", ""), "frequency": row.get("Timing", ""), "active": True})
         for row in st.session_state.ob_supps:
-            if row.get("Supplement", "").strip():
+            if row.get("Supplement", "").strip() and row["Supplement"].strip().lower() not in existing_supps:
                 db_insert("supplements", {"user_id": user_id, "name": row["Supplement"], "dose": row.get("Dose", ""), "timing": row.get("Timing", ""), "active": True})
         notes_text = f"Family history: {family_history}\nPast surgeries/events: {surgeries}" if (family_history or surgeries) else ""
         if notes_text:
             existing = db_get_single("profile_notes", user_id)
             combined = (existing.get("notes", "") + "\n\n" if existing else "") + notes_text
-            db_upsert("profile_notes", {"user_id": user_id, "notes": combined})
-        st.session_state.ob_step = 3
+            db_upsert("profile_notes", {"user_id": user_id, "notes": combined}, on_conflict="user_id")
+        set_ob_step(user_id, 3)
         st.rerun()
 
     ob_nav(back_step=1, on_continue=go_next)
@@ -941,11 +1043,13 @@ Other notes: {anything_else}
 """.strip()
         existing = db_get_single("profile_notes", user_id)
         combined = (existing.get("notes", "") + "\n\n" if existing else "") + lifestyle_notes
-        db_upsert("profile_notes", {"user_id": user_id, "notes": combined})
+        db_upsert("profile_notes", {"user_id": user_id, "notes": combined}, on_conflict="user_id")
+        if restrictions.strip():
+            db_upsert("profiles", {"id": user_id, "allergies": restrictions.strip()})
         if has_cycle and cycle_last_start and cycle_avg_len:
             db_upsert("cycle_data", {"user_id": user_id, "last_period_start": cycle_last_start.isoformat(),
-                                      "avg_cycle_length": int(cycle_avg_len), "period_duration": int(cycle_period_dur or 5)})
-        st.session_state.ob_step = 4
+                                      "avg_cycle_length": int(cycle_avg_len), "period_duration": int(cycle_period_dur or 5)}, on_conflict="user_id")
+        set_ob_step(user_id, 4)
         st.rerun()
 
     ob_nav(back_step=2, on_continue=go_next)
@@ -968,38 +1072,36 @@ def onboarding_step4(user_id):
 
     with st.expander("Upload or paste your lab values", expanded=True):
         report_date = st.date_input("Report date", value=date.today())
-        lab_file = st.file_uploader("Upload lab report (PDF or image)", type=["pdf", "png", "jpg", "jpeg"], help="We'll extract and interpret the values automatically.")
+        lab_files = st.file_uploader("Upload lab report(s) (PDF or image)", type=["pdf", "png", "jpg", "jpeg"], accept_multiple_files=True, help="We'll extract and interpret the values automatically. You can upload more than one file.")
         raw_values = st.text_area("Or paste values directly (marker: value, one per line, or freeform)", height=120)
 
         if st.button("Analyse and save"):
-            text_to_analyse = raw_values.strip()
-            if lab_file and not text_to_analyse:
-                # Read file bytes and pass as base64 text block for the AI to parse
-                import base64
-                file_bytes = lab_file.read()
-                b64 = base64.b64encode(file_bytes).decode()
-                ext = lab_file.name.split(".")[-1].lower()
-                if ext == "pdf":
-                    text_to_analyse = f"[PDF lab report uploaded — filename: {lab_file.name}. Please extract and interpret all lab markers and values you can identify from the following base64-encoded content.]\n{b64[:8000]}"
-                else:
-                    text_to_analyse = f"[Lab report image uploaded — filename: {lab_file.name}. Please extract and interpret all lab markers and values visible in the image from the following base64-encoded content.]\n{b64[:8000]}"
-            if text_to_analyse:
-                with st.spinner("Interpreting against functional ranges..."):
-                    summary = ai_generate(
-                        "You are OneSattva, interpreting lab values against functional (optimal) ranges, not conventional population reference ranges. Give a concise 2-4 sentence clinical summary.",
-                        text_to_analyse, max_tokens=500)
-                db_insert("lab_reports", {"user_id": user_id, "report_date": report_date.isoformat(), "raw_values": text_to_analyse[:2000], "summary": summary})
+            saved = 0
+            if raw_values.strip():
+                save_lab_report(user_id, report_date, raw_values.strip())
+                saved += 1
+            for lab_file in (lab_files or []):
+                save_lab_report(user_id, report_date, lab_file_to_text(lab_file))
+                saved += 1
+            if saved:
                 st.session_state.ob_labs_uploaded = True
-                st.success("Lab report saved and interpreted.")
+                st.success(f"{saved} lab report{'s' if saved != 1 else ''} saved and interpreted.")
             else:
                 st.warning("Upload a file or paste your values first.")
+
+    with st.expander("Optional: add wearable data (WHOOP CSV export)"):
+        st.caption("Not required to continue — you can also add this later from Profile & Data.")
+        wearable_files = st.file_uploader("Upload cycles.csv / sleep.csv / workout.csv / journal.csv", accept_multiple_files=True, type="csv", key="ob_wearable_files")
+        if wearable_files and st.button("Upload files", key="ob_wearable_upload_btn"):
+            imported = import_whoop_csvs(user_id, wearable_files)
+            st.success(f"Uploaded {imported} days of data.")
 
     skipped = not st.session_state.get("ob_labs_uploaded", False)
     if skipped:
         st.caption("No labs yet — that's fine. You have 7 days. Your assessment will be marked provisional until labs are in.")
 
     def go_next():
-        st.session_state.ob_step = 5
+        set_ob_step(user_id, 5)
         st.rerun()
 
     ob_nav(back_step=3, on_continue=go_next)
@@ -1041,7 +1143,7 @@ Write a short, direct, first-person clinical read (180-280 words) in your voice:
 </div>""", unsafe_allow_html=True)
 
     def go_next():
-        st.session_state.ob_step = 6
+        set_ob_step(user_id, 6)
         st.rerun()
 
     ob_nav(back_step=4, on_continue=go_next)
@@ -1075,8 +1177,8 @@ def onboarding_step6(user_id):
                 st.rerun()
 
     def go_next():
-        db_upsert("roadmaps", {"user_id": user_id, "plan_mode": st.session_state.get("ob_plan_mode", recommended), "committed": False})
-        st.session_state.ob_step = 7
+        db_upsert("roadmaps", {"user_id": user_id, "plan_mode": st.session_state.get("ob_plan_mode", recommended), "committed": False}, on_conflict="user_id")
+        set_ob_step(user_id, 7)
         st.rerun()
 
     ob_nav(back_step=5, on_continue=go_next)
@@ -1093,31 +1195,33 @@ def onboarding_step7(user_id, profile):
         has_cycle = prof.get("has_cycle", False)
         sys_prompt = build_system_prompt(user_id, prof, has_cycle=has_cycle)
         labs_present = bool(db_get("lab_reports", user_id))
-        prompt = f"""Generate a comprehensive {plan_mode} programme roadmap, duration {dur_label}.
+        phase_count = {"Reset": 2, "Restore": 3, "Transform": 4, "Sustain": 3}.get(plan_mode, 3)
+        prompt = f"""Generate a {plan_mode} programme roadmap, duration {dur_label}, in exactly {phase_count} phases.
 {'Labs are not yet available — generate this roadmap clearly marked PROVISIONAL, with a note it becomes definitive once labs are analysed.' if not labs_present else ''}
 
-FORMAT:
+Be concise and systematic — this must cover all {phase_count} phases completely within the length budget. Favour short paragraphs and tight bullet points over prose. Do not let earlier phases run long at the expense of later ones: budget roughly equal space per phase and stop elaborating once the essential change, mechanism, and action are stated.
+
+FORMAT (keep to this structure exactly, {phase_count} phases total):
 ## Your {plan_mode} Programme — Generated {date.today().strftime('%-d %B %Y')}
 One sentence on what this programme addresses, grounded in this specific person's data — not generic.
 
 ## Phase Timeline
-Table: Phase | Focus | Key milestones | Checkpoint
-(phases matching the plan duration — fewer/shorter phases for Reset, more for Transform/Sustain)
+Table: Phase | Focus | Key milestones | Checkpoint — one row per phase, all {phase_count} phases, terse.
 
 ## Phase 1 — [Title]: [duration]
-What changes and why, reasoned from this person's actual data. Specific supplements/nutrition/training with exact doses where the data supports it.
-**Retest at checkpoint:** [markers chosen for this person]
-**What success looks like:** [outcomes specific to their stated goals]
+3-5 bullet points max: what changes, why (root mechanism in one clause), specific supplement/nutrition/training changes with exact doses where the data supports it.
+**Retest at checkpoint:** [markers chosen for this person, comma-separated]
+**What success looks like:** [one line, specific to their stated goals]
 
-[Repeat per phase]
+[Repeat this exact structure for every phase up to Phase {phase_count} — do not skip or truncate any phase]
 
-## If Phase 1 Shows No Progress
-[Escalation path]
+## If Progress Stalls
+[Escalation path, 2-3 sentences]
 
 **Start today:** [one specific immediate action]
 """
         with st.spinner(f"Building your {plan_mode} roadmap..."):
-            st.session_state.ob_roadmap_text = ai_generate(sys_prompt, prompt, max_tokens=4096)
+            st.session_state.ob_roadmap_text = ai_generate(sys_prompt, prompt, max_tokens=8000)
 
     first_name = (profile or {}).get("full_name", "").split(" ")[0] or "there"
     st.markdown(f"""
@@ -1136,7 +1240,7 @@ What changes and why, reasoned from this person's actual data. Specific suppleme
 """, unsafe_allow_html=True)
 
     def go_back():
-        st.session_state.ob_step = 6
+        set_ob_step(user_id, 6)
         st.session_state.pop("ob_roadmap_text", None)
         st.rerun()
 
@@ -1146,7 +1250,7 @@ What changes and why, reasoned from this person's actual data. Specific suppleme
             "user_id": user_id, "plan_mode": plan_mode, "roadmap_text": st.session_state.ob_roadmap_text,
             "committed": True, "generated_at": date.today().isoformat(), "phase_start_date": date.today().isoformat(),
             "provisional": not labs_present,
-        })
+        }, on_conflict="user_id")
         db_upsert("profiles", {"id": user_id, "onboarding_complete": True})
         for key in list(st.session_state.keys()):
             if key.startswith("ob_"):
@@ -1253,7 +1357,7 @@ triage "now" = act today, "watch" = monitor closely, "background" = lower urgenc
         priorities = json.loads(match.group(0) if match else raw)
     except Exception:
         priorities = [{"triage": "background", "title": "Coach is still building today's read", "body": raw[:200]}]
-    supabase.table("daily_priorities").upsert({"user_id": user_id, "for_date": today_str, "priorities_json": json.dumps(priorities)}).execute()
+    supabase.table("daily_priorities").upsert({"user_id": user_id, "for_date": today_str, "priorities_json": json.dumps(priorities)}, on_conflict="user_id,for_date").execute()
     return priorities
 
 
@@ -1376,7 +1480,7 @@ def show_home(user_id, profile):
         st.markdown(f"""
 <div class="trend-card">
 <div class="tc-title">HRV trajectory · 30 days</div>
-<div class="tc-insight">{f"{len(wearable_30)} days of wearable data in the last 30 days." if wearable_30 else "Import wearable data from Profile & Data to see this trend."}</div>
+<div class="tc-insight">{f"{len(wearable_30)} days of wearable data in the last 30 days." if wearable_30 else "Upload wearable data from Profile & Data to see this trend."}</div>
 <div class="tc-bars">{make_bars(hrv_vals, max_hrv)}</div>
 </div>""", unsafe_allow_html=True)
 # ── Materiality flags — the single gate for any plan change (Brief §6) ───────
@@ -1408,7 +1512,7 @@ def get_or_generate(table, user_id, build_fn, force=False):
         if existing and existing.get("content"):
             return existing["content"]
     content = build_fn()
-    db_upsert(table, {"user_id": user_id, "content": content, "generated_at": date.today().isoformat()})
+    db_upsert(table, {"user_id": user_id, "content": content, "generated_at": date.today().isoformat()}, on_conflict="user_id")
     return content
 
 
@@ -1430,7 +1534,41 @@ def show_protocol(user_id, profile):
     with tabs[0]:
         render_materiality_flag(get_open_materiality_flag(user_id, "roadmap"))
         plan = get_plan_info(user_id, profile)
-        st.markdown(f'<div class="sl first">{roadmap.get("plan_mode","")} · roadmap · Committed {roadmap.get("generated_at","")}</div>', unsafe_allow_html=True)
+        rc1, rc2 = st.columns([5, 1])
+        rc1.markdown(f'<div class="sl first">{roadmap.get("plan_mode","")} · roadmap · Committed {roadmap.get("generated_at","")}</div>', unsafe_allow_html=True)
+        if rc2.button("Regenerate", key="regen_roadmap"):
+            with st.spinner("Rebuilding your roadmap..."):
+                phase_count = {"Reset": 2, "Restore": 3, "Transform": 4, "Sustain": 3}.get(roadmap.get("plan_mode", "Restore"), 3)
+                info = PLAN_MODES.get(roadmap.get("plan_mode", "Restore"), PLAN_MODES["Restore"])
+                dur_label = f"{info['duration_days']} days" if info["duration_days"] else "ongoing"
+                labs_present = bool(db_get("lab_reports", user_id))
+                prompt = f"""Generate a {roadmap.get('plan_mode','Restore')} programme roadmap, duration {dur_label}, in exactly {phase_count} phases.
+{'Labs are not yet available — generate this roadmap clearly marked PROVISIONAL, with a note it becomes definitive once labs are analysed.' if not labs_present else ''}
+
+Be concise and systematic — this must cover all {phase_count} phases completely within the length budget. Favour short paragraphs and tight bullet points over prose.
+
+FORMAT (keep to this structure exactly, {phase_count} phases total):
+## Your {roadmap.get('plan_mode','Restore')} Programme — Generated {date.today().strftime('%-d %B %Y')}
+One sentence on what this programme addresses, grounded in this specific person's data — not generic.
+
+## Phase Timeline
+Table: Phase | Focus | Key milestones | Checkpoint — one row per phase, all {phase_count} phases, terse.
+
+## Phase 1 — [Title]: [duration]
+3-5 bullet points max: what changes, why (root mechanism in one clause), specific supplement/nutrition/training changes with exact doses where the data supports it.
+**Retest at checkpoint:** [markers chosen for this person, comma-separated]
+**What success looks like:** [one line, specific to their stated goals]
+
+[Repeat this exact structure for every phase up to Phase {phase_count} — do not skip or truncate any phase]
+
+## If Progress Stalls
+[Escalation path, 2-3 sentences]
+
+**Start today:** [one specific immediate action]
+"""
+                new_text = ai_generate(sys_prompt, prompt, max_tokens=8000)
+                db_upsert("roadmaps", {"user_id": user_id, "roadmap_text": new_text, "provisional": not labs_present}, on_conflict="user_id")
+            st.rerun()
         if roadmap.get("provisional"):
             st.warning("This roadmap is provisional — labs were not yet available when it was generated.")
         st.markdown(roadmap.get("roadmap_text", "_No roadmap text._"))
@@ -1439,16 +1577,24 @@ def show_protocol(user_id, profile):
     with tabs[1]:
         render_materiality_flag(get_open_materiality_flag(user_id, "monthly_focus"))
         def build_monthly():
-            prompt = "Generate this phase's Monthly Goal focus: one italic-style focus statement (1-2 sentences) plus a 4-week breakdown table (Week | Focus). Base this on the committed roadmap's current phase. Keep it tight — this is displayed as a small card, not a long document."
-            return ai_generate(sys_prompt, prompt, max_tokens=900)
+            prompt = "Generate this phase's Monthly Goal focus: one italic-style focus statement (1-2 sentences) plus a 4-week breakdown table (Week | Focus), covering all 4 weeks. Base this on the committed roadmap's current phase. Be concise but always complete all 4 rows — never truncate the table."
+            return ai_generate(sys_prompt, prompt, max_tokens=1200)
+        mc1, mc2 = st.columns([5, 1])
+        if mc2.button("Regenerate", key="regen_monthly"):
+            get_or_generate("monthly_focus", user_id, build_monthly, force=True)
+            st.rerun()
         monthly = get_or_generate("monthly_focus", user_id, build_monthly)
         st.markdown(f'<div class="goal-card"><div class="gc-lbl">Current phase focus</div><div class="gc-goal" style="font-style:normal;font-size:13.5px">{monthly}</div></div>', unsafe_allow_html=True)
 
     with tabs[2]:
         render_materiality_flag(get_open_materiality_flag(user_id, "supplements"))
         def build_supps():
-            prompt = "Generate this week's committed supplement schedule as a markdown table: Time | Supplement | Dose | Clinical notes. Derive dose, brand suitability, and timing from this person's actual labs, medications, and absorption considerations — explain timing rationale in the notes column. If a thyroid medication is present, reason explicitly about its absorption timing relative to other supplements."
-            return ai_generate(sys_prompt, prompt, max_tokens=1200)
+            prompt = "Generate this week's committed supplement schedule as a markdown table: Time | Supplement | Dose | Clinical notes. Derive dose, brand suitability, and timing from this person's actual labs, medications, and absorption considerations — explain timing rationale concisely in the notes column. If a thyroid medication is present, reason explicitly about its absorption timing relative to other supplements. Cover every supplement/timing slot that applies — never cut the table short; keep each note to one tight sentence rather than dropping rows."
+            return ai_generate(sys_prompt, prompt, max_tokens=2000)
+        sc1, sc2 = st.columns([5, 1])
+        if sc2.button("Regenerate", key="regen_supps"):
+            get_or_generate("supplement_plan", user_id, build_supps, force=True)
+            st.rerun()
         supps = get_or_generate("supplement_plan", user_id, build_supps)
         st.markdown(supps)
         with st.expander("Want to adjust something?"):
@@ -1461,8 +1607,12 @@ def show_protocol(user_id, profile):
     with tabs[3]:
         render_materiality_flag(get_open_materiality_flag(user_id, "nutrition"))
         def build_nutrition():
-            prompt = "Generate this week's committed 7-day nutrition plan. Start with a short info box on this phase's nutrition focus, reasoned from this person's actual gut/digestion check-in data, goals, and dietary preferences — not a generic rule. Then a markdown table: Meal | Focus | Examples. Respect their stated dietary pattern and restrictions exactly."
-            return ai_generate(sys_prompt, prompt, max_tokens=1400)
+            prompt = "Generate this week's committed 7-day nutrition plan. Start with a short info box (2-3 sentences) on this phase's nutrition focus, reasoned from this person's actual gut/digestion check-in data, goals, and dietary preferences — not a generic rule. Then a markdown table: Meal | Focus | Examples, covering all 7 days. Respect their stated dietary pattern and restrictions exactly. Keep each row tight (a few words per cell) so all 7 days fit — completeness across all 7 days matters more than detail in any one day."
+            return ai_generate(sys_prompt, prompt, max_tokens=2200)
+        nc1, nc2 = st.columns([5, 1])
+        if nc2.button("Regenerate", key="regen_nutr"):
+            get_or_generate("nutrition_plan", user_id, build_nutrition, force=True)
+            st.rerun()
         nutrition = get_or_generate("nutrition_plan", user_id, build_nutrition)
         st.markdown(nutrition)
         with st.expander("Want to adjust something?"):
@@ -1475,8 +1625,12 @@ def show_protocol(user_id, profile):
     with tabs[4]:
         render_materiality_flag(get_open_materiality_flag(user_id, "workouts"))
         def build_workouts():
-            prompt = "Generate this week's committed 7-day training plan. Start with a short info box on this phase's training principle, reasoned from this person's recovery/wearable data and goals. Then a markdown table: Day | Session type | Focus & exercises | Target duration. Calibrate intensity to recovery data if available."
-            return ai_generate(sys_prompt, prompt, max_tokens=1200)
+            prompt = "Generate this week's committed 7-day training plan. Start with a short info box (2-3 sentences) on this phase's training principle, reasoned from this person's recovery/wearable data and goals. Then a markdown table: Day | Session type | Focus & exercises | Target duration, covering all 7 days. Calibrate intensity to recovery data if available. Keep each row tight so all 7 days fit — completeness across the full week matters more than depth on any single day."
+            return ai_generate(sys_prompt, prompt, max_tokens=2000)
+        wc1, wc2 = st.columns([5, 1])
+        if wc2.button("Regenerate", key="regen_workouts"):
+            get_or_generate("workout_plan", user_id, build_workouts, force=True)
+            st.rerun()
         workouts = get_or_generate("workout_plan", user_id, build_workouts)
         st.markdown(workouts)
 # ── Materiality check — runs after new data is submitted, not on a timer ─────
@@ -1507,7 +1661,7 @@ def get_or_generate_checkin_insight(user_id, sys_prompt, force=False):
         if existing.data:
             return existing.data[0]["insight_text"]
     insight = ai_generate(sys_prompt, "Generate one short clinical observation (2-4 sentences, your voice) from today's check-in data in the context of recent patterns. Be specific and reference actual numbers.", max_tokens=300)
-    supabase.table("checkin_insights").upsert({"user_id": user_id, "for_date": today_str, "insight_text": insight}).execute()
+    supabase.table("checkin_insights").upsert({"user_id": user_id, "for_date": today_str, "insight_text": insight}, on_conflict="user_id,for_date").execute()
     return insight
 
 
@@ -1581,7 +1735,7 @@ def show_checkin(user_id, profile):
 
     if st.button("Save today's check-in →", type="primary"):
         row = {"user_id": user_id, "checkin_date": today_str, "sleep_hours": sleep_hours, "workout": workout, "notes": notes, **vals}
-        db_upsert("checkins", row)
+        db_upsert("checkins", row, on_conflict="user_id,checkin_date")
         supabase.table("checkin_insights").delete().eq("user_id", user_id).eq("for_date", today_str).execute()
         st.session_state.checkin_editing = False
         has_cycle2 = profile.get("has_cycle", False) if profile else False
@@ -1708,14 +1862,18 @@ def show_profile_user(user_id, profile):
             with st.expander("Edit demographics"):
                 height = st.number_input("Height (cm)", 100, 230, int(p.get("height_cm") or 170), key="ed_h")
                 weight = st.number_input("Weight (kg)", 30, 250, int(p.get("weight_kg") or 70), key="ed_w")
-                location = st.text_input("Location", value=p.get("location", ""), key="ed_loc")
+                ed_existing_city, ed_existing_country = split_location(p.get("location", ""))
+                edc1, edc2 = st.columns(2)
+                ed_country = edc1.selectbox("Country", COUNTRIES, index=COUNTRIES.index(ed_existing_country) if ed_existing_country in COUNTRIES else len(COUNTRIES) - 1, key="ed_country")
+                ed_city = edc2.text_input("City", value=ed_existing_city, key="ed_city")
                 occupation = st.text_input("Occupation", value=p.get("occupation", ""), key="ed_occ")
                 has_cycle_now = p.get("has_cycle", False)
                 new_has_cycle = has_cycle_now
                 if p.get("sex") in ("Female", "Intersex"):
                     new_has_cycle = st.checkbox("I currently have a menstrual cycle to track", value=bool(has_cycle_now), key="ed_hc")
                 if st.button("Save changes", key="save_demo"):
-                    db_upsert("profiles", {"id": user_id, "height_cm": height, "weight_kg": weight, "location": location, "occupation": occupation, "has_cycle": bool(new_has_cycle)})
+                    ed_location = ", ".join(x for x in [ed_city.strip(), ed_country] if x)
+                    db_upsert("profiles", {"id": user_id, "height_cm": height, "weight_kg": weight, "location": ed_location, "occupation": occupation, "has_cycle": bool(new_has_cycle)})
                     st.success("Saved.")
                     st.rerun()
     with c2:
@@ -1725,10 +1883,18 @@ def show_profile_user(user_id, profile):
             meds = db_get("medications", user_id)
             if conditions:
                 for c in conditions:
-                    st.markdown(f'<div class="pr"><span class="pr-k">{c.get("condition","")}</span><span class="pr-v">{c.get("notes","")}</span></div>', unsafe_allow_html=True)
+                    cc1, cc2 = st.columns([5, 1])
+                    cc1.markdown(f'<div class="pr"><span class="pr-k">{c.get("condition","")}</span><span class="pr-v">{c.get("notes","")}</span></div>', unsafe_allow_html=True)
+                    if cc2.button("Delete", key=f"del_cond_{c['id']}"):
+                        db_delete("medical_history", c["id"])
+                        st.rerun()
             if meds:
                 for m in meds:
-                    st.markdown(f'<div class="pr"><span class="pr-k">{m.get("name","")}</span><span class="pr-v">{m.get("dose","")} · {m.get("frequency","")}</span></div>', unsafe_allow_html=True)
+                    mc1, mc2 = st.columns([5, 1])
+                    mc1.markdown(f'<div class="pr"><span class="pr-k">{m.get("name","")}</span><span class="pr-v">{m.get("dose","")} · {m.get("frequency","")}</span></div>', unsafe_allow_html=True)
+                    if mc2.button("Delete", key=f"del_med_{m['id']}"):
+                        db_delete("medications", m["id"])
+                        st.rerun()
             if not conditions and not meds:
                 st.caption("No conditions or medications on file.")
             with st.expander("Add condition or medication"):
@@ -1787,7 +1953,7 @@ def show_profile_user(user_id, profile):
         notes = db_get_single("profile_notes", user_id)
         lifestyle_text = st.text_area("Lifestyle notes", value=(notes or {}).get("notes", ""), height=160, key="ed_lifestyle")
         if st.button("Save lifestyle notes", key="save_lifestyle"):
-            db_upsert("profile_notes", {"user_id": user_id, "notes": lifestyle_text})
+            db_upsert("profile_notes", {"user_id": user_id, "notes": lifestyle_text}, on_conflict="user_id")
             st.success("Saved.")
             st.rerun()
 
@@ -1801,11 +1967,11 @@ def show_profile_user(user_id, profile):
             last_start = c1.date_input("Last period start", value=date.fromisoformat(cd["last_period_start"]) if cd.get("last_period_start") else date.today(), key="ed_cycle_start")
             avg_len = c2.number_input("Actual average cycle length (days)", 15, 60, int(cd.get("avg_cycle_length") or 28), key="ed_cycle_len")
             if st.button("Save cycle data", key="save_cycle"):
-                db_upsert("cycle_data", {"user_id": user_id, "last_period_start": last_start.isoformat(), "avg_cycle_length": int(avg_len)})
+                db_upsert("cycle_data", {"user_id": user_id, "last_period_start": last_start.isoformat(), "avg_cycle_length": int(avg_len)}, on_conflict="user_id")
                 st.success("Saved.")
                 st.rerun()
             if st.button("New period started today", key="new_period"):
-                db_upsert("cycle_data", {"user_id": user_id, "last_period_start": date.today().isoformat(), "avg_cycle_length": int(cd.get("avg_cycle_length") or 28)})
+                db_upsert("cycle_data", {"user_id": user_id, "last_period_start": date.today().isoformat(), "avg_cycle_length": int(cd.get("avg_cycle_length") or 28)}, on_conflict="user_id")
                 st.rerun()
     # has_cycle False/unset: accordion deliberately absent — not collapsed, not greyed out.
 
@@ -1823,19 +1989,22 @@ def show_profile_user(user_id, profile):
 def show_profile_labs(user_id, profile):
     st.markdown('<div class="sl first">Upload a new report</div>', unsafe_allow_html=True)
     report_date = st.date_input("Report date", value=date.today(), key="lab_date")
-    raw_values = st.text_area("Paste lab values", height=140, key="lab_raw")
+    lab_files = st.file_uploader("Upload lab report(s) (PDF or image)", type=["pdf", "png", "jpg", "jpeg"], accept_multiple_files=True, key="lab_files", help="You can upload more than one file.")
+    raw_values = st.text_area("Or paste lab values", height=140, key="lab_raw")
     if st.button("Analyse and save", key="lab_save"):
+        saved_summaries = []
         if raw_values.strip():
-            with st.spinner("Interpreting against functional ranges..."):
-                summary = ai_generate(
-                    "You are OneSattva, interpreting lab values against functional (optimal) ranges, not conventional population reference ranges. Give a concise 2-4 sentence clinical summary.",
-                    raw_values, max_tokens=500)
-            db_insert("lab_reports", {"user_id": user_id, "report_date": report_date.isoformat(), "raw_values": raw_values, "summary": summary})
+            saved_summaries.append(save_lab_report(user_id, report_date, raw_values.strip()))
+        for lab_file in (lab_files or []):
+            saved_summaries.append(save_lab_report(user_id, report_date, lab_file_to_text(lab_file)))
+        if saved_summaries:
             has_cycle = profile.get("has_cycle", False) if profile else False
             sys_prompt = build_system_prompt(user_id, profile, has_cycle=has_cycle)
-            check_materiality(user_id, sys_prompt, f"New lab report uploaded: {summary}")
-            st.success("Lab report saved and interpreted.")
+            check_materiality(user_id, sys_prompt, f"New lab report(s) uploaded: {'; '.join(saved_summaries)}")
+            st.success(f"{len(saved_summaries)} lab report{'s' if len(saved_summaries) != 1 else ''} saved and interpreted.")
             st.rerun()
+        else:
+            st.warning("Upload a file or paste your values first.")
 
     st.markdown('<div class="sl">Saved reports</div>', unsafe_allow_html=True)
     labs = db_get("lab_reports", user_id, order_col="report_date")
@@ -1878,36 +2047,13 @@ def show_profile_wearable(user_id, profile):
 <div class="wc"><div class="wc-lbl">{lbl}</div><div class="wc-val">{wk if wk is not None else '—'}{unit}</div>
 <div class="wc-sub">30d avg: {mo if mo is not None else '—'}{unit}</div></div>""", unsafe_allow_html=True)
     else:
-        st.caption("No wearable data imported yet.")
+        st.caption("No wearable data uploaded yet.")
 
-    st.markdown('<div class="sl">Import WHOOP CSV export</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sl">Upload wearable data (WHOOP CSV export)</div>', unsafe_allow_html=True)
     files = st.file_uploader("Upload cycles.csv / sleep.csv / workout.csv / journal.csv", accept_multiple_files=True, type="csv")
-    if files and st.button("Import files"):
-        import pandas as pd
-        imported = 0
-        merged = {}
-        for f in files:
-            try:
-                df = pd.read_csv(f)
-            except Exception:
-                continue
-            date_col = find_col(df.columns, COL_MAP["date"])
-            if not date_col:
-                continue
-            for _, row in df.iterrows():
-                try:
-                    d = str(row[date_col])[:10]
-                except Exception:
-                    continue
-                merged.setdefault(d, {"user_id": user_id, "data_date": d})
-                for field in ["recovery_score", "hrv", "resting_hr", "strain", "sleep_performance", "sleep_efficiency", "sleep_duration"]:
-                    col = find_col(df.columns, COL_MAP[field])
-                    if col and col in row and pd.notna(row[col]):
-                        merged[d][field] = float(row[col])
-        for d, rec in merged.items():
-            db_upsert("wearable_data", rec)
-            imported += 1
-        st.success(f"Imported {imported} days of data.")
+    if files and st.button("Upload files"):
+        imported = import_whoop_csvs(user_id, files)
+        st.success(f"Uploaded {imported} days of data.")
         st.rerun()
 
     with st.expander("Manual entry"):
@@ -1917,7 +2063,7 @@ def show_profile_wearable(user_id, profile):
         recovery = c2.number_input("Recovery (%)", 0, 100, 60, key="manual_rec")
         sleep_perf = c3.number_input("Sleep performance (%)", 0, 100, 75, key="manual_sleep")
         if st.button("Save manual entry"):
-            db_upsert("wearable_data", {"user_id": user_id, "data_date": m_date.isoformat(), "hrv": hrv, "recovery_score": recovery, "sleep_performance": sleep_perf})
+            db_upsert("wearable_data", {"user_id": user_id, "data_date": m_date.isoformat(), "hrv": hrv, "recovery_score": recovery, "sleep_performance": sleep_perf}, on_conflict="user_id,data_date")
             st.success("Saved.")
             st.rerun()
 
