@@ -234,3 +234,36 @@ alter table profiles add column if not exists stress_level int;
 alter table profiles add column if not exists stressors text;
 alter table profiles add column if not exists symptoms text;
 alter table profiles add column if not exists anything_else text;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Round 6: let account deletion cascade through the newer tables.
+--
+-- daily_priorities, checkin_insights, materiality_flags, monthly_focus,
+-- supplement_plan, nutrition_plan, and workout_plan all reference
+-- auth.users(id) with no ON DELETE action, which defaults to blocking the
+-- delete. That's why "delete user" in Authentication > Users started
+-- failing once these tables had rows — they didn't exist before this round
+-- of fixes. This drops and re-adds each FK with ON DELETE CASCADE so
+-- deleting the auth user cleans up everywhere, restoring the old
+-- delete-and-restart workflow. Safe to re-run.
+-- ═══════════════════════════════════════════════════════════════════════════
+alter table daily_priorities drop constraint if exists daily_priorities_user_id_fkey;
+alter table daily_priorities add constraint daily_priorities_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade;
+
+alter table checkin_insights drop constraint if exists checkin_insights_user_id_fkey;
+alter table checkin_insights add constraint checkin_insights_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade;
+
+alter table materiality_flags drop constraint if exists materiality_flags_user_id_fkey;
+alter table materiality_flags add constraint materiality_flags_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade;
+
+alter table monthly_focus drop constraint if exists monthly_focus_user_id_fkey;
+alter table monthly_focus add constraint monthly_focus_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade;
+
+alter table supplement_plan drop constraint if exists supplement_plan_user_id_fkey;
+alter table supplement_plan add constraint supplement_plan_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade;
+
+alter table nutrition_plan drop constraint if exists nutrition_plan_user_id_fkey;
+alter table nutrition_plan add constraint nutrition_plan_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade;
+
+alter table workout_plan drop constraint if exists workout_plan_user_id_fkey;
+alter table workout_plan add constraint workout_plan_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade;
