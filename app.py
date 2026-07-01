@@ -398,30 +398,57 @@ def find_col(cols, candidates):
 
 
 def import_whoop_csvs(user_id, files):
-    """Shared by onboarding Step 4 (optional) and Profile & Data > Wearable Data."""
+    """Shared by onboarding Step 4 (optional) and Profile & Data > Wearable Data.
+    Returns (days_imported, file_results) — file_results lets the caller show
+    per-file diagnostics instead of a silent "Uploaded 0 days" with no
+    explanation of why a file wasn't recognized."""
     import pandas as pd
     merged = {}
+    file_results = []
     for f in files:
         try:
             df = pd.read_csv(f)
         except Exception:
+            file_results.append({"name": f.name, "status": "Couldn't read this as a CSV file.", "rows": 0})
             continue
         date_col = find_col(df.columns, COL_MAP["date"])
         if not date_col:
+            file_results.append({"name": f.name, "status": "No recognizable date column — is this a WHOOP export?", "rows": 0})
             continue
+        rows_matched = 0
         for _, row in df.iterrows():
             try:
                 d = str(row[date_col])[:10]
             except Exception:
                 continue
             merged.setdefault(d, {"user_id": user_id, "data_date": d})
+            matched_any = False
             for field in ["recovery_score", "hrv", "resting_hr", "strain", "sleep_performance", "sleep_efficiency", "sleep_duration"]:
                 col = find_col(df.columns, COL_MAP[field])
                 if col and col in row and pd.notna(row[col]):
                     merged[d][field] = float(row[col])
+                    matched_any = True
+            if matched_any:
+                rows_matched += 1
+        file_results.append({"name": f.name, "status": "ok" if rows_matched else "Date column found, but no recognizable metric columns.", "rows": rows_matched})
     for d, rec in merged.items():
         db_upsert("wearable_data", rec, on_conflict="user_id,data_date")
-    return len(merged)
+    return len(merged), file_results
+
+
+def show_whoop_import_result(imported, file_results):
+    """Shared by onboarding Step 4 and Profile & Data > Wearable Data — shows
+    per-file diagnostics instead of a silent 'Uploaded 0 days' with no
+    explanation of why a file wasn't recognized."""
+    if imported:
+        st.success(f"Uploaded {imported} day{'s' if imported != 1 else ''} of data.")
+    else:
+        st.warning("No importable data found in the uploaded file(s) — see details below.")
+    for r in file_results:
+        if r["status"] == "ok":
+            st.caption(f"✓ {r['name']} — {r['rows']} day(s) recognized")
+        else:
+            st.caption(f"✗ {r['name']} — {r['status']}")
 
 # ── AI Helpers ────────────────────────────────────────────────────────────────
 def ai_generate(system_prompt, user_prompt, max_tokens=4096):
@@ -466,21 +493,32 @@ def lab_file_to_content_block(lab_file):
 def save_lab_report(user_id, report_date, text=None, file_block=None, file_label=None):
     """Shared by onboarding Step 4 and Profile & Data > Lab Reports & Documents.
     Pass either `text` (pasted values) or `file_block` + `file_label` (an uploaded
-    file, built with lab_file_to_content_block)."""
+    file, built with lab_file_to_content_block).
+
+    For file uploads this runs two passes: first extract every marker/value/range
+    as plain text (stored as raw_values — this is what the coach actually reasons
+    from later), then a short interpretive summary for the list preview. Storing
+    only the summary would leave no real numbers anywhere for the coach to cite."""
     if file_block:
-        user_content = [file_block, {"type": "text", "text": "Extract and interpret every lab marker and value visible in this document/image."}]
-        raw_values = f"[Uploaded file: {file_label}]"
+        with st.spinner("Extracting lab values..."):
+            raw_values = ai_generate(
+                "You are OneSattva extracting lab data from an uploaded document/image. List every lab marker you can identify, one per line, "
+                "in the format 'Marker: value unit (reference range if shown)'. Be exhaustive and precise — include every marker present, "
+                "even ones without an obvious flag. Output nothing else: no commentary, no headers, no markdown.",
+                [file_block, {"type": "text", "text": "Extract every lab marker and its value from this document/image."}],
+                max_tokens=1500)
+        interpret_input = raw_values
     else:
-        user_content = text
         raw_values = text
+        interpret_input = text
     with st.spinner("Interpreting against functional ranges..."):
         summary = ai_generate(
             "You are OneSattva, interpreting lab values against functional (optimal) ranges, not conventional population reference ranges. "
             "Respond with exactly 2-4 sentences of plain prose — no headers, no markdown formatting (no #, *, bullet points, section titles), "
             "no restating the patient's name or demographics. Just the clinical interpretation itself: what's notable and why it matters. "
             "This is a short list-preview summary, not a full report — the full protocol reasoning happens elsewhere.",
-            user_content, max_tokens=400)
-    db_insert("lab_reports", {"user_id": user_id, "report_date": report_date.isoformat(), "raw_values": raw_values[:2000], "summary": summary})
+            interpret_input, max_tokens=400)
+    db_insert("lab_reports", {"user_id": user_id, "report_date": report_date.isoformat(), "raw_values": raw_values[:4000], "summary": summary})
     return summary
 
 # ── System Prompt Builder — bio-individual: no hard-coded clinical rules ──────
@@ -541,7 +579,7 @@ LANGUAGE AND SAFETY STANDARDS — NON-NEGOTIABLE
 ═══════════════════════════════════════════════════════
 You adjust wellness protocols. You do not make medical decisions, diagnose, or prescribe.
 - Urgency/triage: say "adjusts your plan," "flags for attention," "worth watching," "I'm noting this for our next checkpoint." Never say "urgent," "dangerous," "seek immediate care," "this is an emergency," or otherwise make a clinical urgency determination.
-- Medical advice: say "discuss this with your physician — here is the mechanism and why this conversation is worth having." Never say "change your medication," "stop taking X," "increase your dose," or make any prescription-level decision.
+- Medical advice (PRESCRIPTION MEDICATION ONLY): say "discuss this with your physician — here is the mechanism and why this conversation is worth having." Never say "change your medication," "stop taking X," "increase your dose," or make any prescription-level decision. This rule applies to prescription drugs only — it does NOT apply to supplements. Supplements are your domain: recommend them directly, with exact dose, form, and timing, the way a functional nutritionist or integrative practitioner would. Do not defer supplement dosing to "discuss with your physician" — that hedge is reserved for prescription medication changes.
 - Diagnosis: say "this pattern is consistent with...", "your functional picture suggests...", "the data points toward...". Never say "you have X condition" or assert a diagnosis as settled.
 - Outcomes: say "supports," "may help," "research associates X with Y." Never say "cures," "treats," "eliminates," "reverses," or claim a guaranteed therapeutic outcome.
 - Research: describe mechanism and established clinical consensus; state plainly when evidence is emerging vs well-established. Never cite a specific study you aren't certain exists and says what you claim.
@@ -646,7 +684,7 @@ For complex questions, structure as: (1) what is happening — mechanism across 
         if current_labs:
             base += "CURRENT (≤90 days — primary reference):\n"
             for l in current_labs:
-                base += f"- {l.get('report_date','')}: {l.get('summary','')} | Raw: {str(l.get('raw_values',''))[:400]}\n"
+                base += f"- {l.get('report_date','')}: {l.get('summary','')}\n  Values: {str(l.get('raw_values',''))[:1200]}\n"
         else:
             base += "⚠️ NO CURRENT LABS. Flag this to the patient explicitly — do not treat older values as current status.\n"
         if recent_labs:
@@ -1139,8 +1177,8 @@ def onboarding_step4(user_id):
         st.caption("Not required to continue — you can also add this later from Profile & Data.")
         wearable_files = st.file_uploader("Upload cycles.csv / sleep.csv / workout.csv / journal.csv", accept_multiple_files=True, type="csv", key="ob_wearable_files")
         if wearable_files and st.button("Upload files", key="ob_wearable_upload_btn"):
-            imported = import_whoop_csvs(user_id, wearable_files)
-            st.success(f"Uploaded {imported} days of data.")
+            imported, file_results = import_whoop_csvs(user_id, wearable_files)
+            show_whoop_import_result(imported, file_results)
 
     skipped = not st.session_state.get("ob_labs_uploaded", False)
     if skipped:
@@ -1538,17 +1576,29 @@ def get_open_materiality_flag(user_id, level):
         return None
 
 
-def render_materiality_flag(flag):
+def resolve_materiality_flag(flag_id):
+    try:
+        supabase.table("materiality_flags").update({"resolved": True}).eq("id", flag_id).execute()
+    except Exception:
+        pass
+
+
+def render_materiality_flag(flag, on_regenerate=None):
     if not flag:
         return
     st.markdown(f"""
 <div class="material-flag">
-<div class="mf-lbl">✦ Coach flag — possible material change</div>
+<div class="mf-lbl">✦ Coach flag — needs updating</div>
 <div class="mf-txt">{flag.get('flag_text','')}</div>
 </div>""", unsafe_allow_html=True)
-    if st.button("Discuss with coach →", key=f"flag_discuss_{flag.get('id')}"):
+    fc1, fc2 = st.columns(2)
+    if fc1.button("Discuss with coach →", key=f"flag_discuss_{flag.get('id')}"):
         st.session_state.page = "coach"
         st.session_state.coach_seed = f"You flagged something about my {flag.get('level')} — let's talk about it."
+        st.rerun()
+    if on_regenerate and fc2.button("↻ Regenerate now", key=f"flag_regen_{flag.get('id')}", type="primary"):
+        on_regenerate()
+        resolve_materiality_flag(flag["id"])
         st.rerun()
 
 
@@ -1562,33 +1612,10 @@ def get_or_generate(table, user_id, build_fn, force=False):
     return content
 
 
-# ── Protocol Page ─────────────────────────────────────────────────────────────
-def show_protocol(user_id, profile):
-    st.markdown('<div class="pg-title">Protocol</div>', unsafe_allow_html=True)
-    st.markdown('<div class="pg-sub">Generated from your roadmap. Stable by default — only changes when your coach\'s judgment says something is material and you agree. Everything here is built by OneSattva, not entered by you.</div>', unsafe_allow_html=True)
-
-    roadmap = db_get_single("roadmaps", user_id)
-    if not roadmap or not roadmap.get("committed"):
-        st.info("No committed roadmap yet — complete onboarding to generate your protocol.")
-        return
-
-    has_cycle = profile.get("has_cycle", False) if profile else False
-    sys_prompt = build_system_prompt(user_id, profile, has_cycle=has_cycle)
-
-    tabs = st.tabs(["Treatment Roadmap", "Monthly Goal", "Supplements", "Nutrition", "Workouts"])
-
-    with tabs[0]:
-        render_materiality_flag(get_open_materiality_flag(user_id, "roadmap"))
-        plan = get_plan_info(user_id, profile)
-        rc1, rc2 = st.columns([5, 1])
-        rc1.markdown(f'<div class="sl first">{roadmap.get("plan_mode","")} · roadmap · Committed {roadmap.get("generated_at","")}</div>', unsafe_allow_html=True)
-        if rc2.button("Regenerate", key="regen_roadmap"):
-            with st.spinner("Rebuilding your roadmap..."):
-                phase_count = {"Reset": 2, "Restore": 3, "Transform": 4, "Sustain": 3}.get(roadmap.get("plan_mode", "Restore"), 3)
-                info = PLAN_MODES.get(roadmap.get("plan_mode", "Restore"), PLAN_MODES["Restore"])
-                dur_label = f"{info['duration_days']} days" if info["duration_days"] else "ongoing"
-                labs_present = bool(db_get("lab_reports", user_id))
-                prompt = f"""Generate a {roadmap.get('plan_mode','Restore')} programme roadmap, duration {dur_label}, in exactly {phase_count} phases.
+def regenerate_roadmap(user_id, sys_prompt, roadmap):
+    phase_count = {"Reset": 2, "Restore": 3, "Transform": 4, "Sustain": 3}.get(roadmap.get("plan_mode", "Restore"), 3)
+    labs_present = bool(db_get("lab_reports", user_id))
+    prompt = f"""Generate a {roadmap.get('plan_mode','Restore')} programme roadmap, duration {PLAN_MODES.get(roadmap.get('plan_mode','Restore'), PLAN_MODES['Restore'])['duration_days'] or 'ongoing'} days, in exactly {phase_count} phases.
 {'Labs are not yet available — generate this roadmap clearly marked PROVISIONAL, with a note it becomes definitive once labs are analysed.' if not labs_present else ''}
 
 Be concise and systematic — this must cover all {phase_count} phases completely within the length budget. Favour short paragraphs and tight bullet points over prose.
@@ -1612,8 +1639,33 @@ Table: Phase | Focus | Key milestones | Checkpoint — one row per phase, all {p
 
 **Start today:** [one specific immediate action]
 """
-                new_text = ai_generate(sys_prompt, prompt, max_tokens=8000)
-                db_upsert("roadmaps", {"user_id": user_id, "roadmap_text": new_text, "provisional": not labs_present}, on_conflict="user_id")
+    with st.spinner("Rebuilding your roadmap..."):
+        new_text = ai_generate(sys_prompt, prompt, max_tokens=8000)
+        db_upsert("roadmaps", {"user_id": user_id, "roadmap_text": new_text, "provisional": not labs_present}, on_conflict="user_id")
+
+
+# ── Protocol Page ─────────────────────────────────────────────────────────────
+def show_protocol(user_id, profile):
+    st.markdown('<div class="pg-title">Protocol</div>', unsafe_allow_html=True)
+    st.markdown('<div class="pg-sub">Generated from your roadmap. Stable by default — only changes when your coach\'s judgment says something is material and you agree. Everything here is built by OneSattva, not entered by you.</div>', unsafe_allow_html=True)
+
+    roadmap = db_get_single("roadmaps", user_id)
+    if not roadmap or not roadmap.get("committed"):
+        st.info("No committed roadmap yet — complete onboarding to generate your protocol.")
+        return
+
+    has_cycle = profile.get("has_cycle", False) if profile else False
+    sys_prompt = build_system_prompt(user_id, profile, has_cycle=has_cycle)
+
+    tabs = st.tabs(["Treatment Roadmap", "Monthly Goal", "Supplements", "Nutrition", "Workouts"])
+
+    with tabs[0]:
+        render_materiality_flag(get_open_materiality_flag(user_id, "roadmap"), on_regenerate=lambda: regenerate_roadmap(user_id, sys_prompt, roadmap))
+        plan = get_plan_info(user_id, profile)
+        rc1, rc2 = st.columns([5, 1])
+        rc1.markdown(f'<div class="sl first">{roadmap.get("plan_mode","")} · roadmap · Committed {roadmap.get("generated_at","")}</div>', unsafe_allow_html=True)
+        if rc2.button("Regenerate", key="regen_roadmap"):
+            regenerate_roadmap(user_id, sys_prompt, roadmap)
             st.rerun()
         if roadmap.get("provisional"):
             st.warning("This roadmap is provisional — labs were not yet available when it was generated.")
@@ -1621,10 +1673,10 @@ Table: Phase | Focus | Key milestones | Checkpoint — one row per phase, all {p
         st.download_button("Download roadmap", roadmap.get("roadmap_text", ""), file_name="onesattva_roadmap.md")
 
     with tabs[1]:
-        render_materiality_flag(get_open_materiality_flag(user_id, "monthly_focus"))
         def build_monthly():
             prompt = "Generate this phase's Monthly Goal focus: one italic-style focus statement (1-2 sentences) plus a 4-week breakdown table (Week | Focus), covering all 4 weeks. Base this on the committed roadmap's current phase. Be concise but always complete all 4 rows — never truncate the table."
             return ai_generate(sys_prompt, prompt, max_tokens=1200)
+        render_materiality_flag(get_open_materiality_flag(user_id, "monthly_focus"), on_regenerate=lambda: get_or_generate("monthly_focus", user_id, build_monthly, force=True))
         mc1, mc2 = st.columns([5, 1])
         if mc2.button("Regenerate", key="regen_monthly"):
             get_or_generate("monthly_focus", user_id, build_monthly, force=True)
@@ -1633,10 +1685,10 @@ Table: Phase | Focus | Key milestones | Checkpoint — one row per phase, all {p
         st.markdown(f'<div class="goal-card"><div class="gc-lbl">Current phase focus</div><div class="gc-goal" style="font-style:normal;font-size:13.5px">{monthly}</div></div>', unsafe_allow_html=True)
 
     with tabs[2]:
-        render_materiality_flag(get_open_materiality_flag(user_id, "supplements"))
         def build_supps():
             prompt = "Generate this week's committed supplement schedule as a markdown table: Time | Supplement | Dose | Clinical notes. Derive dose, brand suitability, and timing from this person's actual labs, medications, and absorption considerations — explain timing rationale concisely in the notes column. If a thyroid medication is present, reason explicitly about its absorption timing relative to other supplements. Cover every supplement/timing slot that applies — never cut the table short; keep each note to one tight sentence rather than dropping rows."
             return ai_generate(sys_prompt, prompt, max_tokens=2000)
+        render_materiality_flag(get_open_materiality_flag(user_id, "supplements"), on_regenerate=lambda: get_or_generate("supplement_plan", user_id, build_supps, force=True))
         sc1, sc2 = st.columns([5, 1])
         if sc2.button("Regenerate", key="regen_supps"):
             get_or_generate("supplement_plan", user_id, build_supps, force=True)
@@ -1651,10 +1703,10 @@ Table: Phase | Focus | Key milestones | Checkpoint — one row per phase, all {p
                 st.rerun()
 
     with tabs[3]:
-        render_materiality_flag(get_open_materiality_flag(user_id, "nutrition"))
         def build_nutrition():
             prompt = "Generate this week's committed 7-day nutrition plan. Start with a short info box (2-3 sentences) on this phase's nutrition focus, reasoned from this person's actual gut/digestion check-in data, goals, and dietary preferences — not a generic rule. Then a markdown table: Meal | Focus | Examples, covering all 7 days. Respect their stated dietary pattern and restrictions exactly. Keep each row tight (a few words per cell) so all 7 days fit — completeness across all 7 days matters more than detail in any one day."
             return ai_generate(sys_prompt, prompt, max_tokens=2200)
+        render_materiality_flag(get_open_materiality_flag(user_id, "nutrition"), on_regenerate=lambda: get_or_generate("nutrition_plan", user_id, build_nutrition, force=True))
         nc1, nc2 = st.columns([5, 1])
         if nc2.button("Regenerate", key="regen_nutr"):
             get_or_generate("nutrition_plan", user_id, build_nutrition, force=True)
@@ -1669,10 +1721,10 @@ Table: Phase | Focus | Key milestones | Checkpoint — one row per phase, all {p
                 st.rerun()
 
     with tabs[4]:
-        render_materiality_flag(get_open_materiality_flag(user_id, "workouts"))
         def build_workouts():
             prompt = "Generate this week's committed 7-day training plan. Start with a short info box (2-3 sentences) on this phase's training principle, reasoned from this person's recovery/wearable data and goals. Then a markdown table: Day | Session type | Focus & exercises | Target duration, covering all 7 days. Calibrate intensity to recovery data if available. Keep each row tight so all 7 days fit — completeness across the full week matters more than depth on any single day."
             return ai_generate(sys_prompt, prompt, max_tokens=2000)
+        render_materiality_flag(get_open_materiality_flag(user_id, "workouts"), on_regenerate=lambda: get_or_generate("workout_plan", user_id, build_workouts, force=True))
         wc1, wc2 = st.columns([5, 1])
         if wc2.button("Regenerate", key="regen_workouts"):
             get_or_generate("workout_plan", user_id, build_workouts, force=True)
@@ -1690,8 +1742,16 @@ Respond with ONLY valid JSON: {{"material": true/false, "level": "roadmap"|"mont
         result = json.loads(match.group(0) if match else raw)
     except Exception:
         return
-    if result.get("material") and result.get("level"):
-        db_insert("materiality_flags", {"user_id": user_id, "level": result["level"], "flag_text": result.get("flag_text", ""), "resolved": False, "created_at": datetime.now().isoformat()})
+    if result.get("material"):
+        # Today's Home page priorities are cached once per calendar day, so a
+        # material event (new labs, a materially different check-in) would
+        # otherwise keep showing stale "no labs on file"-style content until
+        # the cache naturally expires tomorrow. Clear it so Home regenerates
+        # with the full picture on the next visit.
+        today_str = date.today().isoformat()
+        supabase.table("daily_priorities").delete().eq("user_id", user_id).eq("for_date", today_str).execute()
+        if result.get("level"):
+            db_insert("materiality_flags", {"user_id": user_id, "level": result["level"], "flag_text": result.get("flag_text", ""), "resolved": False, "created_at": datetime.now().isoformat()})
 
 
 # ── Check-In Page ─────────────────────────────────────────────────────────────
@@ -2155,6 +2215,10 @@ def show_profile_labs(user_id, profile):
         if lc3.button("Delete", key=f"del_lab_{l['id']}"):
             db_delete("lab_reports", l["id"])
             st.rerun()
+        with st.expander("View full interpretation & extracted values", key=f"lab_detail_{l['id']}"):
+            st.markdown(f"**Coach interpretation**\n\n{l.get('summary','') or '_None._'}")
+            st.markdown("---")
+            st.markdown(f"**Extracted values**\n\n{l.get('raw_values','') or '_None._'}")
 
 
 def show_profile_wearable(user_id, profile):
@@ -2185,9 +2249,19 @@ def show_profile_wearable(user_id, profile):
     st.markdown('<div class="sl">Upload wearable data (WHOOP CSV export)</div>', unsafe_allow_html=True)
     files = st.file_uploader("Upload cycles.csv / sleep.csv / workout.csv / journal.csv", accept_multiple_files=True, type="csv")
     if files and st.button("Upload files"):
-        imported = import_whoop_csvs(user_id, files)
-        st.success(f"Uploaded {imported} days of data.")
-        st.rerun()
+        imported, file_results = import_whoop_csvs(user_id, files)
+        show_whoop_import_result(imported, file_results)
+
+    # Re-fetch fresh (rather than reusing the `wearable` list from the top of
+    # this function) so a just-completed upload shows up here immediately —
+    # without a st.rerun(), which would wipe the diagnostics message above
+    # before the user can read it.
+    wearable_current = db_get("wearable_data", user_id, order_col="data_date", limit=14)
+    if wearable_current:
+        st.markdown('<div class="sl">Recent days on file</div>', unsafe_allow_html=True)
+        for w in wearable_current:
+            metrics = " · ".join(f"{k.replace('_',' ')}: {w[k]}" for k in ["hrv", "recovery_score", "sleep_performance", "strain"] if w.get(k) is not None)
+            st.markdown(f"<div class=\"pr\"><span class=\"pr-k\">{w.get('data_date','')}</span><span class=\"pr-v\">{metrics or '—'}</span></div>", unsafe_allow_html=True)
 
     with st.expander("Manual entry"):
         m_date = st.date_input("Date", value=date.today(), key="manual_w_date")
