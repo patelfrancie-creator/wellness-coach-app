@@ -434,23 +434,36 @@ def ai_chat(system_prompt, messages, max_tokens=4096):
         return f"_Coach is temporarily unavailable: {e}_"
 
 
-def lab_file_to_text(lab_file):
-    """Read an uploaded lab report file and return a text block for the AI to interpret."""
+def lab_file_to_content_block(lab_file):
+    """Build a proper Claude document/image content block from an uploaded lab
+    file. A base64 string embedded in plain text is NOT a document Claude can
+    read — it just sees a wall of characters — so this must go through the
+    API's document/image content-block types instead."""
     import base64
     file_bytes = lab_file.read()
     b64 = base64.b64encode(file_bytes).decode()
     ext = lab_file.name.split(".")[-1].lower()
-    kind = "PDF lab report" if ext == "pdf" else "Lab report image"
-    return f"[{kind} uploaded — filename: {lab_file.name}. Please extract and interpret all lab markers and values you can identify from the following base64-encoded content.]\n{b64[:8000]}"
+    if ext == "pdf":
+        return {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}}
+    media_type = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg"}.get(ext, "image/jpeg")
+    return {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}}
 
 
-def save_lab_report(user_id, report_date, text_to_analyse):
-    """Shared by onboarding Step 4 and Profile & Data > Lab Reports & Documents."""
+def save_lab_report(user_id, report_date, text=None, file_block=None, file_label=None):
+    """Shared by onboarding Step 4 and Profile & Data > Lab Reports & Documents.
+    Pass either `text` (pasted values) or `file_block` + `file_label` (an uploaded
+    file, built with lab_file_to_content_block)."""
+    if file_block:
+        user_content = [file_block, {"type": "text", "text": "Extract and interpret every lab marker and value visible in this document/image."}]
+        raw_values = f"[Uploaded file: {file_label}]"
+    else:
+        user_content = text
+        raw_values = text
     with st.spinner("Interpreting against functional ranges..."):
         summary = ai_generate(
             "You are OneSattva, interpreting lab values against functional (optimal) ranges, not conventional population reference ranges. Give a concise 2-4 sentence clinical summary.",
-            text_to_analyse, max_tokens=500)
-    db_insert("lab_reports", {"user_id": user_id, "report_date": report_date.isoformat(), "raw_values": text_to_analyse[:2000], "summary": summary})
+            user_content, max_tokens=500)
+    db_insert("lab_reports", {"user_id": user_id, "report_date": report_date.isoformat(), "raw_values": raw_values[:2000], "summary": summary})
     return summary
 
 # ── System Prompt Builder — bio-individual: no hard-coded clinical rules ──────
@@ -1094,10 +1107,10 @@ def onboarding_step4(user_id):
         if st.button("Analyse and save"):
             saved = 0
             if raw_values.strip():
-                save_lab_report(user_id, report_date, raw_values.strip())
+                save_lab_report(user_id, report_date, text=raw_values.strip())
                 saved += 1
             for lab_file in (lab_files or []):
-                save_lab_report(user_id, report_date, lab_file_to_text(lab_file))
+                save_lab_report(user_id, report_date, file_block=lab_file_to_content_block(lab_file), file_label=lab_file.name)
                 saved += 1
             if saved:
                 st.session_state.ob_labs_uploaded = True
@@ -2097,9 +2110,9 @@ def show_profile_labs(user_id, profile):
     if st.button("Analyse and save", key="lab_save"):
         saved_summaries = []
         if raw_values.strip():
-            saved_summaries.append(save_lab_report(user_id, report_date, raw_values.strip()))
+            saved_summaries.append(save_lab_report(user_id, report_date, text=raw_values.strip()))
         for lab_file in (lab_files or []):
-            saved_summaries.append(save_lab_report(user_id, report_date, lab_file_to_text(lab_file)))
+            saved_summaries.append(save_lab_report(user_id, report_date, file_block=lab_file_to_content_block(lab_file), file_label=lab_file.name))
         if saved_summaries:
             has_cycle = profile.get("has_cycle", False) if profile else False
             sys_prompt = build_system_prompt(user_id, profile, has_cycle=has_cycle)
