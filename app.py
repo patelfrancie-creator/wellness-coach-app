@@ -57,6 +57,20 @@ EATING_OUT_LEVELS = ["Rarely (home-cooked most days)", "Once a week", "2–3× p
 def selectbox_index(options, value, default=0):
     return options.index(value) if value in options else default
 
+
+def plain_preview(text, limit=140):
+    """Strip markdown control characters and collapse whitespace before
+    truncating for a one-line preview. A naive char-slice of raw markdown can
+    cut mid-heading (e.g. "## Critical Findings" -> "## Critical Fin"), which
+    Streamlit then renders as a giant, cut-off heading instead of a preview."""
+    if not text:
+        return ""
+    cleaned = re.sub(r'[#*_`>]+', '', text)
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[:limit].rsplit(' ', 1)[0] + "…"
+
 PLAN_MODES = {
     "Reset":     {"duration_days": 30,  "subtitle": "Foundation · 1 month",
                   "desc": "Break a pattern. Build a baseline. Understand your body for the first time. The coach is investigative — high-frequency check-ins, establishing rhythms, calibrating your picture."},
@@ -461,8 +475,11 @@ def save_lab_report(user_id, report_date, text=None, file_block=None, file_label
         raw_values = text
     with st.spinner("Interpreting against functional ranges..."):
         summary = ai_generate(
-            "You are OneSattva, interpreting lab values against functional (optimal) ranges, not conventional population reference ranges. Give a concise 2-4 sentence clinical summary.",
-            user_content, max_tokens=500)
+            "You are OneSattva, interpreting lab values against functional (optimal) ranges, not conventional population reference ranges. "
+            "Respond with exactly 2-4 sentences of plain prose — no headers, no markdown formatting (no #, *, bullet points, section titles), "
+            "no restating the patient's name or demographics. Just the clinical interpretation itself: what's notable and why it matters. "
+            "This is a short list-preview summary, not a full report — the full protocol reasoning happens elsewhere.",
+            user_content, max_tokens=400)
     db_insert("lab_reports", {"user_id": user_id, "report_date": report_date.isoformat(), "raw_values": raw_values[:2000], "summary": summary})
     return summary
 
@@ -2133,7 +2150,7 @@ def show_profile_labs(user_id, profile):
         except Exception:
             freshness = "—"
         lc1, lc2, lc3 = st.columns([3, 1, 1])
-        lc1.markdown(f"**{l.get('report_date','')}** — {l.get('summary','')[:100]}")
+        lc1.markdown(f"**{l.get('report_date','')}** — {plain_preview(l.get('summary',''))}")
         lc2.markdown(f"`{freshness}`")
         if lc3.button("Delete", key=f"del_lab_{l['id']}"):
             db_delete("lab_reports", l["id"])
