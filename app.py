@@ -2405,6 +2405,12 @@ def show_profile_labs(user_id, profile):
                 refresh_lab_trends(user_id)
             trends = db_get_single("lab_trends", user_id)
             st.markdown((trends or {}).get("content") or "No overlapping markers to compare yet.")
+        with st.expander("Clarify or ask your coach about these trends"):
+            trend_q = st.text_area("If the coach flagged something it wants to check with you (e.g. did you start a new supplement between reports?), answer here — or ask anything about the pattern.", key="trend_clarify")
+            if st.button("Send to your coach", key="trend_clarify_btn") and trend_q:
+                st.session_state.page = "coach"
+                st.session_state.coach_seed = f"About the trend pattern across my lab reports: {trend_q}"
+                st.rerun()
 
     st.markdown('<div class="sl">Saved reports</div>', unsafe_allow_html=True)
     if labs:
@@ -2428,6 +2434,12 @@ def show_profile_labs(user_id, profile):
             st.markdown(f"**Coach interpretation**\n\n{l.get('summary','') or '_None._'}")
             st.markdown("---")
             st.markdown(f"**Extracted values**\n\n{l.get('raw_values','') or '_None._'}")
+            st.markdown("---")
+            report_q = st.text_area("Ask your coach about this specific report", key=f"lab_clarify_{l['id']}")
+            if st.button("Send to your coach", key=f"lab_clarify_btn_{l['id']}") and report_q:
+                st.session_state.page = "coach"
+                st.session_state.coach_seed = f"About my lab report from {l.get('report_date','')}: {report_q}"
+                st.rerun()
 
 
 def show_profile_wearable(user_id, profile):
