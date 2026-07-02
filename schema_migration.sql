@@ -267,3 +267,13 @@ alter table nutrition_plan add constraint nutrition_plan_user_id_fkey foreign ke
 
 alter table workout_plan drop constraint if exists workout_plan_user_id_fkey;
 alter table workout_plan add constraint workout_plan_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Round 7: capture workout name/strain from WHOOP's workouts.csv export
+-- (columns were already mapped in COL_MAP but never actually stored).
+-- ═══════════════════════════════════════════════════════════════════════════
+alter table wearable_data add column if not exists workout_name text;
+alter table wearable_data add column if not exists workout_strain numeric;
+
+-- protocol start-date confirmation (item 9)
+alter table roadmaps add column if not exists start_confirmed boolean default false;

@@ -47,6 +47,45 @@ def split_location(location):
         return parts[0], ", ".join(parts[1:])
     return location.strip(), ""
 
+
+COUNTRY_TIMEZONES = {
+    "India": "Asia/Kolkata", "United States": "America/New_York", "United Kingdom": "Europe/London",
+    "Canada": "America/Toronto", "Australia": "Australia/Sydney", "New Zealand": "Pacific/Auckland",
+    "Ireland": "Europe/Dublin", "Singapore": "Asia/Singapore", "United Arab Emirates": "Asia/Dubai",
+    "Saudi Arabia": "Asia/Riyadh", "Qatar": "Asia/Qatar", "Kuwait": "Asia/Kuwait",
+    "Germany": "Europe/Berlin", "France": "Europe/Paris", "Netherlands": "Europe/Amsterdam",
+    "Switzerland": "Europe/Zurich", "Sweden": "Europe/Stockholm", "Norway": "Europe/Oslo",
+    "Denmark": "Europe/Copenhagen", "Finland": "Europe/Helsinki", "Spain": "Europe/Madrid",
+    "Italy": "Europe/Rome", "Portugal": "Europe/Lisbon", "Belgium": "Europe/Brussels",
+    "Austria": "Europe/Vienna", "Poland": "Europe/Warsaw", "Japan": "Asia/Tokyo",
+    "South Korea": "Asia/Seoul", "China": "Asia/Shanghai", "Hong Kong": "Asia/Hong_Kong",
+    "Taiwan": "Asia/Taipei", "Thailand": "Asia/Bangkok", "Malaysia": "Asia/Kuala_Lumpur",
+    "Indonesia": "Asia/Jakarta", "Philippines": "Asia/Manila", "Vietnam": "Asia/Ho_Chi_Minh",
+    "Sri Lanka": "Asia/Colombo", "Bangladesh": "Asia/Dhaka", "Pakistan": "Asia/Karachi",
+    "Nepal": "Asia/Kathmandu", "South Africa": "Africa/Johannesburg", "Nigeria": "Africa/Lagos",
+    "Kenya": "Africa/Nairobi", "Egypt": "Africa/Cairo", "Israel": "Asia/Jerusalem",
+    "Turkey": "Europe/Istanbul", "Brazil": "America/Sao_Paulo", "Mexico": "America/Mexico_City",
+    "Argentina": "America/Argentina/Buenos_Aires", "Chile": "America/Santiago", "Colombia": "America/Bogota",
+}
+
+
+def user_now(profile):
+    """Best-effort local time for the user, derived from their onboarding
+    Country selection. The server (Streamlit Cloud) runs in its own
+    timezone, not the user's — without this, "Good morning" shows at
+    whatever hour it is on the server, which can be wildly wrong (e.g.
+    showing at 4am for someone in India while the server is on US time).
+    Falls back to server time if the country isn't mapped or is unset."""
+    country = split_location((profile or {}).get("location", ""))[1]
+    tz_name = COUNTRY_TIMEZONES.get(country)
+    if tz_name:
+        try:
+            from zoneinfo import ZoneInfo
+            return datetime.now(ZoneInfo(tz_name))
+        except Exception:
+            pass
+    return datetime.now()
+
 ACTIVITY_LEVELS = ["Sedentary", "Lightly active", "Moderately active", "Very active"]
 ALCOHOL_LEVELS = ["None", "Rarely (special occasions)", "1–2× per month", "Once a week", "2–3× per week", "Daily"]
 SMOKING_LEVELS = ["Non-smoker", "Former smoker", "Occasional (social)", "Regular smoker", "Vaping / e-cigarettes"]
@@ -417,20 +456,32 @@ def import_whoop_csvs(user_id, files):
             continue
         rows_matched = 0
         for _, row in df.iterrows():
+            if pd.isna(row[date_col]):
+                continue  # a blank/NaN date cell would otherwise become the literal string "nan", which Postgres rejects as an invalid date
             try:
                 d = str(row[date_col])[:10]
             except Exception:
                 continue
             merged.setdefault(d, {"user_id": user_id, "data_date": d})
             matched_any = False
-            for field in ["recovery_score", "hrv", "resting_hr", "strain", "sleep_performance", "sleep_efficiency", "sleep_duration"]:
+            for field in ["recovery_score", "hrv", "resting_hr", "strain", "sleep_performance", "sleep_efficiency", "sleep_duration", "workout_strain"]:
                 col = find_col(df.columns, COL_MAP[field])
                 if col and col in row and pd.notna(row[col]):
                     merged[d][field] = float(row[col])
                     matched_any = True
+            name_col = find_col(df.columns, COL_MAP["workout_name"])
+            if name_col and name_col in row and pd.notna(row[name_col]):
+                merged[d]["workout_name"] = str(row[name_col])
+                matched_any = True
             if matched_any:
                 rows_matched += 1
-        file_results.append({"name": f.name, "status": "ok" if rows_matched else "Date column found, but no recognizable metric columns.", "rows": rows_matched})
+        if rows_matched:
+            status = "ok"
+        elif "journal" in f.name.lower():
+            status = "This is your WHOOP journal (subjective daily logs) — not imported as structured data, no action needed."
+        else:
+            status = "Date column found, but no recognizable metric columns."
+        file_results.append({"name": f.name, "status": status, "rows": rows_matched})
     for d, rec in merged.items():
         db_upsert("wearable_data", rec, on_conflict="user_id,data_date")
     return len(merged), file_results
@@ -499,26 +550,34 @@ def save_lab_report(user_id, report_date, text=None, file_block=None, file_label
     as plain text (stored as raw_values — this is what the coach actually reasons
     from later), then a short interpretive summary for the list preview. Storing
     only the summary would leave no real numbers anywhere for the coach to cite."""
+    label = file_label or "your pasted values"
     if file_block:
-        with st.spinner("Extracting lab values..."):
+        with st.spinner(f"Extracting lab values from {label}..."):
             raw_values = ai_generate(
                 "You are OneSattva extracting lab data from an uploaded document/image. List every lab marker you can identify, one per line, "
                 "in the format 'Marker: value unit (reference range if shown)'. Be exhaustive and precise — include every marker present, "
                 "even ones without an obvious flag. Output nothing else: no commentary, no headers, no markdown.",
                 [file_block, {"type": "text", "text": "Extract every lab marker and its value from this document/image."}],
                 max_tokens=1500)
+        if raw_values.startswith("_Coach is temporarily unavailable"):
+            st.error(f"Couldn't extract values from {label} — the AI service had an error. Try again in a moment.")
+            return None
         interpret_input = raw_values
     else:
         raw_values = text
         interpret_input = text
-    with st.spinner("Interpreting against functional ranges..."):
+    with st.spinner(f"Interpreting {label} against functional ranges..."):
         summary = ai_generate(
             "You are OneSattva, interpreting lab values against functional (optimal) ranges, not conventional population reference ranges. "
             "Respond with exactly 2-4 sentences of plain prose — no headers, no markdown formatting (no #, *, bullet points, section titles), "
             "no restating the patient's name or demographics. Just the clinical interpretation itself: what's notable and why it matters. "
             "This is a short list-preview summary, not a full report — the full protocol reasoning happens elsewhere.",
             interpret_input, max_tokens=400)
-    db_insert("lab_reports", {"user_id": user_id, "report_date": report_date.isoformat(), "raw_values": raw_values[:4000], "summary": summary})
+    result = db_insert("lab_reports", {"user_id": user_id, "report_date": report_date.isoformat(), "raw_values": raw_values[:4000], "summary": summary})
+    if result is None:
+        st.error(f"{label} was analyzed but failed to save — please try uploading it again.")
+        return None
+    st.success(f"✓ {label} uploaded and analyzed.")
     return summary
 
 # ── System Prompt Builder — bio-individual: no hard-coded clinical rules ──────
@@ -1159,23 +1218,26 @@ def onboarding_step4(user_id):
         lab_files = st.file_uploader("Upload lab report(s) (PDF or image)", type=["pdf", "png", "jpg", "jpeg"], accept_multiple_files=True, help="We'll extract and interpret the values automatically. You can upload more than one file.")
         raw_values = st.text_area("Or paste values directly (marker: value, one per line, or freeform)", height=120)
 
-        if st.button("Analyse and save"):
+        if st.button("Upload & analyse"):
+            attempted = 0
             saved = 0
             if raw_values.strip():
-                save_lab_report(user_id, report_date, text=raw_values.strip())
-                saved += 1
+                attempted += 1
+                if save_lab_report(user_id, report_date, text=raw_values.strip()) is not None:
+                    saved += 1
             for lab_file in (lab_files or []):
-                save_lab_report(user_id, report_date, file_block=lab_file_to_content_block(lab_file), file_label=lab_file.name)
-                saved += 1
-            if saved:
-                st.session_state.ob_labs_uploaded = True
-                st.success(f"{saved} lab report{'s' if saved != 1 else ''} saved and interpreted.")
-            else:
+                attempted += 1
+                if save_lab_report(user_id, report_date, file_block=lab_file_to_content_block(lab_file), file_label=lab_file.name) is not None:
+                    saved += 1
+            if attempted == 0:
                 st.warning("Upload a file or paste your values first.")
+            elif saved:
+                st.session_state.ob_labs_uploaded = True
 
     with st.expander("Optional: add wearable data (WHOOP CSV export)"):
         st.caption("Not required to continue — you can also add this later from Profile & Data.")
-        wearable_files = st.file_uploader("Upload cycles.csv / sleep.csv / workout.csv / journal.csv", accept_multiple_files=True, type="csv", key="ob_wearable_files")
+        wearable_files = st.file_uploader("Upload your WHOOP export CSVs", accept_multiple_files=True, type="csv", key="ob_wearable_files",
+                                           help="Typically named physiological_cycles.csv, sleeps.csv, workouts.csv, journal_entries.csv — these are just examples of what WHOOP usually calls them, the filenames don't need to match exactly. We match by column headers inside each file, not the filename.")
         if wearable_files and st.button("Upload files", key="ob_wearable_upload_btn"):
             imported, file_results = import_whoop_csvs(user_id, wearable_files)
             show_whoop_import_result(imported, file_results)
@@ -1208,10 +1270,15 @@ Plan modes available:
 
 Labs {'have' if labs_present else 'have NOT'} been uploaded yet — {'note this explicitly and say the recommendation may sharpen once labs are in' if not labs_present else 'use them as primary reference'}.
 
-Write a short, direct, first-person clinical read (180-280 words) in your voice: what you see in the picture, the likely root drivers reasoned across functional medicine, Ayurveda and TCM, and which ONE plan mode you recommend with explicit reasoning. End with one line stating the recommended mode name clearly, e.g. "I'd recommend Restore, our 90-day programme."
+Write a short, direct, first-person clinical read in your voice, covering:
+1. What you see in the picture — the likely root drivers, reasoned across functional medicine, Ayurveda and TCM.
+{"2. Explicitly connect what your labs show to the specific symptoms you described — for each notable/flagged marker, say plainly what it likely explains about how you've been feeling, not just that the marker is off. This correlation is the most important part of this read." if labs_present else "2. What your symptoms suggest is likely happening even without labs yet, and which specific markers would confirm it."}
+3. Which ONE plan mode you recommend with explicit reasoning.
+
+{"220-320" if labs_present else "180-280"} words. End with one line stating the recommended mode name clearly, e.g. "I'd recommend Restore, our 90-day programme."
 """
         with st.spinner("Your coach is reading your full picture..."):
-            analysis = ai_generate(sys_prompt, prompt, max_tokens=900)
+            analysis = ai_generate(sys_prompt, prompt, max_tokens=1100)
         st.session_state.ob_coach_analysis = analysis
         recommended = "Restore"
         for m in PLAN_MODES:
@@ -1333,7 +1400,7 @@ Table: Phase | Focus | Key milestones | Checkpoint — one row per phase, all {p
         db_upsert("roadmaps", {
             "user_id": user_id, "plan_mode": plan_mode, "roadmap_text": st.session_state.ob_roadmap_text,
             "committed": True, "generated_at": date.today().isoformat(), "phase_start_date": date.today().isoformat(),
-            "provisional": not labs_present,
+            "provisional": not labs_present, "start_confirmed": False,
         }, on_conflict="user_id")
         db_upsert("profiles", {"id": user_id, "onboarding_complete": True})
         for key in list(st.session_state.keys()):
@@ -1445,8 +1512,8 @@ triage "now" = act today, "watch" = monitor closely, "background" = lower urgenc
     return priorities
 
 
-def greeting():
-    h = datetime.now().hour
+def greeting(profile=None):
+    h = user_now(profile).hour
     return "Good morning" if h < 12 else "Good afternoon" if h < 18 else "Good evening"
 
 
@@ -1470,9 +1537,22 @@ def show_home(user_id, profile):
     else:
         st.markdown('<div style="border:1.5px dashed var(--stone);border-radius:10px;padding:18px;text-align:center;color:var(--mid);margin-bottom:14px">No committed roadmap yet.</div>', unsafe_allow_html=True)
 
+    if plan and not plan["roadmap"].get("start_confirmed"):
+        with st.container(border=True):
+            st.markdown(f"**Ready to begin your {plan['mode']} programme?** Set the date you want Day 1 to start — until you confirm, we're using today by default for your Week/Phase calculations.")
+            sc1, sc2 = st.columns([3, 1])
+            try:
+                default_start = date.fromisoformat(plan["roadmap"].get("phase_start_date") or "")
+            except Exception:
+                default_start = date.today()
+            start_date_input = sc1.date_input("Start date", value=default_start, key="confirm_start_date", label_visibility="collapsed")
+            if sc2.button("Confirm start date →", key="confirm_start_btn", type="primary"):
+                db_upsert("roadmaps", {"user_id": user_id, "phase_start_date": start_date_input.isoformat(), "start_confirmed": True}, on_conflict="user_id")
+                st.rerun()
+
     first_name = (profile.get("full_name", "") if profile else "").split(" ")[0] or "there"
-    st.markdown(f'<div class="pg-title" style="margin-bottom:2px">{greeting()}, {first_name}.</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="pg-sub">{datetime.now().strftime("%A, %d %B %Y")} · Here\'s what matters today.</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="pg-title" style="margin-bottom:2px">{greeting(profile)}, {first_name}.</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="pg-sub">{user_now(profile).strftime("%A, %d %B %Y")} · Here\'s what matters today.</div>', unsafe_allow_html=True)
 
     goals = db_get("goals", user_id)
     primary_goals = [g for g in goals if g.get("timeframe") == "Primary"]
@@ -1497,6 +1577,23 @@ def show_home(user_id, profile):
             with st.expander(f"View all goals ({len(other_goals)} more)"):
                 for g in other_goals:
                     st.markdown(f"- {g['goal']} *{('· ' + g['timeframe']) if g.get('timeframe') else ''}*")
+
+    st.markdown('<div class="sl">Lab highlights</div>', unsafe_allow_html=True)
+    latest_lab_list = db_get("lab_reports", user_id, order_col="report_date", limit=1)
+    if latest_lab_list:
+        latest_lab = latest_lab_list[0]
+        try:
+            lab_days_old = (date.today() - date.fromisoformat(latest_lab["report_date"])).days
+        except Exception:
+            lab_days_old = None
+        staleness_note = "" if (lab_days_old is not None and lab_days_old <= 90) else " · more than 90 days old, a retest would sharpen this"
+        st.markdown(f"""
+<div class="insight-box">
+<div class="ib-lbl">✦ From your labs — {latest_lab.get('report_date','')}{staleness_note}</div>
+<div class="ib-txt">{latest_lab.get('summary','') or 'No interpretation on file yet.'}</div>
+</div>""", unsafe_allow_html=True)
+    else:
+        st.markdown('<div style="border:1.5px dashed var(--stone);border-radius:10px;padding:16px;text-align:center;color:var(--mid);margin-bottom:14px">No labs on file yet — upload from Profile & Data to see flagged findings here.</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="sl">Today\'s priorities</div>', unsafe_allow_html=True)
     has_cycle = profile.get("has_cycle", False) if profile else False
@@ -1657,11 +1754,23 @@ def show_protocol(user_id, profile):
     has_cycle = profile.get("has_cycle", False) if profile else False
     sys_prompt = build_system_prompt(user_id, profile, has_cycle=has_cycle)
 
+    # Compute the canonical current week once and inject it into every tab's
+    # generation prompt below, so Supplements/Nutrition/Workouts/Monthly Goal
+    # all reference the same week instead of each independently inventing its
+    # own week number or calendar-date framing (which is how one tab ended up
+    # saying "Week of 2 July 2026" while another said "Week 1").
+    plan = get_plan_info(user_id, profile)
+    week_context = ""
+    if plan:
+        week_label = f"Week {plan['week_num']}" + (f" of {plan['total_weeks']}" if plan["total_weeks"] else "")
+        week_context = (f"\n\nCanonical current week: this is {week_label} of the {plan['mode']} programme. "
+                         f'Always label this as "{week_label}" if you reference the week at all — do not invent a '
+                         f'different week number or a calendar-date framing (e.g. do not say "Week of [date]").')
+
     tabs = st.tabs(["Treatment Roadmap", "Monthly Goal", "Supplements", "Nutrition", "Workouts"])
 
     with tabs[0]:
         render_materiality_flag(get_open_materiality_flag(user_id, "roadmap"), on_regenerate=lambda: regenerate_roadmap(user_id, sys_prompt, roadmap))
-        plan = get_plan_info(user_id, profile)
         rc1, rc2 = st.columns([5, 1])
         rc1.markdown(f'<div class="sl first">{roadmap.get("plan_mode","")} · roadmap · Committed {roadmap.get("generated_at","")}</div>', unsafe_allow_html=True)
         if rc2.button("Regenerate", key="regen_roadmap"):
@@ -1686,7 +1795,7 @@ def show_protocol(user_id, profile):
 
     with tabs[2]:
         def build_supps():
-            prompt = "Generate this week's committed supplement schedule as a markdown table: Time | Supplement | Dose | Clinical notes. Derive dose, brand suitability, and timing from this person's actual labs, medications, and absorption considerations — explain timing rationale concisely in the notes column. If a thyroid medication is present, reason explicitly about its absorption timing relative to other supplements. Cover every supplement/timing slot that applies — never cut the table short; keep each note to one tight sentence rather than dropping rows."
+            prompt = "Generate this week's committed supplement schedule as a markdown table: Time | Supplement | Dose | Clinical notes. Derive dose, brand suitability, and timing from this person's actual labs, medications, and absorption considerations — explain timing rationale concisely in the notes column. If a thyroid medication is present, reason explicitly about its absorption timing relative to other supplements. Cover every supplement/timing slot that applies — never cut the table short; keep each note to one tight sentence rather than dropping rows." + week_context
             return ai_generate(sys_prompt, prompt, max_tokens=2000)
         render_materiality_flag(get_open_materiality_flag(user_id, "supplements"), on_regenerate=lambda: get_or_generate("supplement_plan", user_id, build_supps, force=True))
         sc1, sc2 = st.columns([5, 1])
@@ -1704,7 +1813,7 @@ def show_protocol(user_id, profile):
 
     with tabs[3]:
         def build_nutrition():
-            prompt = "Generate this week's committed 7-day nutrition plan. Start with a short info box (2-3 sentences) on this phase's nutrition focus, reasoned from this person's actual gut/digestion check-in data, goals, and dietary preferences — not a generic rule. Then a markdown table: Meal | Focus | Examples, covering all 7 days. Respect their stated dietary pattern and restrictions exactly. Keep each row tight (a few words per cell) so all 7 days fit — completeness across all 7 days matters more than detail in any one day."
+            prompt = "Generate this week's committed 7-day nutrition plan. Start with a short info box (2-3 sentences) on this phase's nutrition focus, reasoned from this person's actual gut/digestion check-in data, goals, and dietary preferences — not a generic rule. Then a markdown table: Meal | Focus | Examples, covering all 7 days. Respect their stated dietary pattern and restrictions exactly. Keep each row tight (a few words per cell) so all 7 days fit — completeness across all 7 days matters more than detail in any one day." + week_context
             return ai_generate(sys_prompt, prompt, max_tokens=2200)
         render_materiality_flag(get_open_materiality_flag(user_id, "nutrition"), on_regenerate=lambda: get_or_generate("nutrition_plan", user_id, build_nutrition, force=True))
         nc1, nc2 = st.columns([5, 1])
@@ -1722,7 +1831,7 @@ def show_protocol(user_id, profile):
 
     with tabs[4]:
         def build_workouts():
-            prompt = "Generate this week's committed 7-day training plan. Start with a short info box (2-3 sentences) on this phase's training principle, reasoned from this person's recovery/wearable data and goals. Then a markdown table: Day | Session type | Focus & exercises | Target duration, covering all 7 days. Calibrate intensity to recovery data if available. Keep each row tight so all 7 days fit — completeness across the full week matters more than depth on any single day."
+            prompt = "Generate this week's committed 7-day training plan. Start with a short info box (2-3 sentences) on this phase's training principle, reasoned from this person's recovery/wearable data and goals. Then a markdown table: Day | Session type | Focus & exercises | Target duration, covering all 7 days. Calibrate intensity to recovery data if available. Keep each row tight so all 7 days fit — completeness across the full week matters more than depth on any single day." + week_context
             return ai_generate(sys_prompt, prompt, max_tokens=2000)
         render_materiality_flag(get_open_materiality_flag(user_id, "workouts"), on_regenerate=lambda: get_or_generate("workout_plan", user_id, build_workouts, force=True))
         wc1, wc2 = st.columns([5, 1])
@@ -1779,14 +1888,14 @@ def show_checkin(user_id, profile):
         if cycle_day:
             cycle_str = f" · Cycle Day {cycle_day}"
 
-    today_str = date.today().isoformat()
+    local_now = user_now(profile)
+    today_str = local_now.date().isoformat()
     checkins = db_get("checkins", user_id, order_col="checkin_date", limit=1)
     today_checkin = checkins[0] if checkins and checkins[0].get("checkin_date") == today_str else None
 
     st.markdown('<div class="pg-title">Daily Check-In</div>', unsafe_allow_html=True)
-    h = datetime.now().hour
-    tod = "Morning" if h < 12 else "Afternoon" if h < 18 else "Evening"
-    st.markdown(f'<div class="pg-sub">{tod} check-in · {datetime.now().strftime("%A, %d %B")}{cycle_str} · Pre-filled from yesterday. Edit anything that has changed today. Takes less than 2 minutes.</div>', unsafe_allow_html=True)
+    tod = "Morning" if local_now.hour < 12 else "Afternoon" if local_now.hour < 18 else "Evening"
+    st.markdown(f'<div class="pg-sub">{tod} check-in · {local_now.strftime("%A, %d %B")}{cycle_str} · Pre-filled from yesterday. Edit anything that has changed today. Takes less than 2 minutes.</div>', unsafe_allow_html=True)
 
     editing = st.session_state.get("checkin_editing", False)
 
@@ -2184,24 +2293,32 @@ def show_profile_labs(user_id, profile):
     report_date = st.date_input("Report date", value=date.today(), key="lab_date")
     lab_files = st.file_uploader("Upload lab report(s) (PDF or image)", type=["pdf", "png", "jpg", "jpeg"], accept_multiple_files=True, key="lab_files", help="You can upload more than one file.")
     raw_values = st.text_area("Or paste lab values", height=140, key="lab_raw")
-    if st.button("Analyse and save", key="lab_save"):
+    if st.button("Upload & analyse", key="lab_save"):
+        attempted = 0
         saved_summaries = []
         if raw_values.strip():
-            saved_summaries.append(save_lab_report(user_id, report_date, text=raw_values.strip()))
+            attempted += 1
+            result = save_lab_report(user_id, report_date, text=raw_values.strip())
+            if result is not None:
+                saved_summaries.append(result)
         for lab_file in (lab_files or []):
-            saved_summaries.append(save_lab_report(user_id, report_date, file_block=lab_file_to_content_block(lab_file), file_label=lab_file.name))
-        if saved_summaries:
+            attempted += 1
+            result = save_lab_report(user_id, report_date, file_block=lab_file_to_content_block(lab_file), file_label=lab_file.name)
+            if result is not None:
+                saved_summaries.append(result)
+        if attempted == 0:
+            st.warning("Upload a file or paste your values first.")
+        elif saved_summaries:
             has_cycle = profile.get("has_cycle", False) if profile else False
             sys_prompt = build_system_prompt(user_id, profile, has_cycle=has_cycle)
             check_materiality(user_id, sys_prompt, f"New lab report(s) uploaded: {'; '.join(saved_summaries)}")
-            st.success(f"{len(saved_summaries)} lab report{'s' if len(saved_summaries) != 1 else ''} saved and interpreted.")
             st.rerun()
-        else:
-            st.warning("Upload a file or paste your values first.")
 
     st.markdown('<div class="sl">Saved reports</div>', unsafe_allow_html=True)
     labs = db_get("lab_reports", user_id, order_col="report_date")
-    if not labs:
+    if labs:
+        st.caption("✓ Current (≤90 days) = your coach's primary reference. Recent (91-180 days) = trend context only. Historical (>180 days) = background only, a retest is flagged as needed.")
+    else:
         st.caption("No lab reports yet.")
     for l in labs:
         try:
@@ -2247,7 +2364,8 @@ def show_profile_wearable(user_id, profile):
         st.caption("No wearable data uploaded yet.")
 
     st.markdown('<div class="sl">Upload wearable data (WHOOP CSV export)</div>', unsafe_allow_html=True)
-    files = st.file_uploader("Upload cycles.csv / sleep.csv / workout.csv / journal.csv", accept_multiple_files=True, type="csv")
+    files = st.file_uploader("Upload your WHOOP export CSVs", accept_multiple_files=True, type="csv",
+                              help="Typically named physiological_cycles.csv, sleeps.csv, workouts.csv, journal_entries.csv — these are just examples of what WHOOP usually calls them, the filenames don't need to match exactly. We match by column headers inside each file, not the filename.")
     if files and st.button("Upload files"):
         imported, file_results = import_whoop_csvs(user_id, files)
         show_whoop_import_result(imported, file_results)
