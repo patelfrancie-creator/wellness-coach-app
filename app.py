@@ -1718,19 +1718,25 @@ def render_materiality_flag(flag, on_regenerate=None):
         st.rerun()
 
 
-def get_or_generate(table, user_id, build_fn, force=False):
-    if not force:
-        existing = db_get_single(table, user_id)
-        if existing and existing.get("content"):
-            return existing["content"]
-    content = build_fn()
+def get_or_generate(table, user_id, build_fn, force=False, reason=None):
+    """build_fn(existing_content, reason) — on a forced regeneration, the
+    prior content and the specific reason are passed in so the rebuild can
+    make a targeted change instead of a fresh, unconstrained re-roll. A
+    from-scratch regeneration has no memory of the previous version, so
+    unrelated details (like row ordering) can drift for no real reason —
+    which reads as the coach being inconsistent."""
+    existing = db_get_single(table, user_id)
+    if not force and existing and existing.get("content"):
+        return existing["content"]
+    content = build_fn(existing.get("content") if existing else None, reason)
     db_upsert(table, {"user_id": user_id, "content": content, "generated_at": date.today().isoformat()}, on_conflict="user_id")
     return content
 
 
-def regenerate_roadmap(user_id, sys_prompt, roadmap):
+def regenerate_roadmap(user_id, sys_prompt, roadmap, reason=None):
     phase_count = {"Reset": 2, "Restore": 3, "Transform": 4, "Sustain": 3}.get(roadmap.get("plan_mode", "Restore"), 3)
     labs_present = bool(db_get("lab_reports", user_id))
+    existing_text = roadmap.get("roadmap_text", "")
     prompt = f"""Generate a {roadmap.get('plan_mode','Restore')} programme roadmap, duration {PLAN_MODES.get(roadmap.get('plan_mode','Restore'), PLAN_MODES['Restore'])['duration_days'] or 'ongoing'} days, in exactly {phase_count} phases.
 {'Labs are not yet available — generate this roadmap clearly marked PROVISIONAL, with a note it becomes definitive once labs are analysed.' if not labs_present else ''}
 
@@ -1755,7 +1761,12 @@ Table: Phase | Focus | Key milestones | Checkpoint — one row per phase, all {p
 
 **Start today:** [one specific immediate action]
 """
-    with st.spinner("Rebuilding your roadmap..."):
+    if existing_text:
+        prompt += (f"\n\nThis is a REVISION of the current committed roadmap below, not a fresh document. "
+                   f"Reason for this update: {reason or 'general refresh requested'}. "
+                   f"Make ONLY the changes required by this reason — preserve the existing phase structure, wording, doses, and order for everything else exactly as they were. "
+                   f"Do not reorder, rephrase, or restate content that this reason doesn't touch.\n\nCURRENT COMMITTED ROADMAP:\n{existing_text}")
+    with st.spinner("Updating your roadmap..."):
         new_text = ai_generate(sys_prompt, prompt, max_tokens=8000)
         db_upsert("roadmaps", {"user_id": user_id, "roadmap_text": new_text, "provisional": not labs_present}, on_conflict="user_id")
 
@@ -1788,88 +1799,97 @@ def show_protocol(user_id, profile):
 
     tabs = st.tabs(["Treatment Roadmap", "Monthly Goal", "Supplements", "Nutrition", "Workouts"])
 
+    def adjust_flow(label, key_prefix):
+        """Shared by every tab's 'Want to adjust something?' expander. Runs the
+        change through the coach's own materiality judgment instead of either
+        silently regenerating or silently doing nothing — if it's genuinely
+        material, a flag appears (with a Regenerate option) next visit; if
+        not, the user gets a direct "no change needed" answer instead of
+        wondering what happened."""
+        with st.expander("Want to adjust something?"):
+            adj = st.text_area("Describe what you'd like to change", key=f"adj_{key_prefix}")
+            if st.button("Tell your coach", key=f"adj_{key_prefix}_btn") and adj:
+                result = check_materiality(user_id, sys_prompt, f"User says about their {label}: {adj}")
+                if result is None:
+                    st.warning("Couldn't evaluate that just now — try again in a moment.")
+                elif result.get("material"):
+                    st.success(f"Flagged for update — reopen this tab to see the Regenerate option. {result.get('flag_text','')}")
+                else:
+                    st.info(f"No change needed: {result.get('flag_text') or 'this does not change your current protocol.'}")
+
     with tabs[0]:
-        render_materiality_flag(get_open_materiality_flag(user_id, "roadmap"), on_regenerate=lambda: regenerate_roadmap(user_id, sys_prompt, roadmap))
-        rc1, rc2 = st.columns([5, 1])
-        rc1.markdown(f'<div class="sl first">{roadmap.get("plan_mode","")} · roadmap · Committed {roadmap.get("generated_at","")}</div>', unsafe_allow_html=True)
-        if rc2.button("Regenerate", key="regen_roadmap"):
-            regenerate_roadmap(user_id, sys_prompt, roadmap)
-            st.rerun()
+        roadmap_flag = get_open_materiality_flag(user_id, "roadmap")
+        render_materiality_flag(roadmap_flag, on_regenerate=lambda: regenerate_roadmap(user_id, sys_prompt, roadmap, reason=roadmap_flag.get("flag_text") if roadmap_flag else None))
+        st.markdown(f'<div class="sl first">{roadmap.get("plan_mode","")} · roadmap · Committed {roadmap.get("generated_at","")}</div>', unsafe_allow_html=True)
         if roadmap.get("provisional"):
             st.warning("This roadmap is provisional — labs were not yet available when it was generated.")
         st.markdown(roadmap.get("roadmap_text", "_No roadmap text._"))
         st.download_button("Download roadmap", roadmap.get("roadmap_text", ""), file_name="onesattva_roadmap.md")
+        adjust_flow("overall roadmap", "roadmap")
 
     with tabs[1]:
-        def build_monthly():
+        def build_monthly(existing=None, reason=None):
             prompt = "Generate this phase's Monthly Goal focus: one italic-style focus statement (1-2 sentences) plus a 4-week breakdown table (Week | Focus), covering all 4 weeks. Base this on the committed roadmap's current phase. Be concise but always complete all 4 rows — never truncate the table."
+            if existing:
+                prompt += f"\n\nThis is a revision of the current version, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT VERSION:\n{existing}"
             return ai_generate(sys_prompt, prompt, max_tokens=1200)
-        render_materiality_flag(get_open_materiality_flag(user_id, "monthly_focus"), on_regenerate=lambda: get_or_generate("monthly_focus", user_id, build_monthly, force=True))
-        mc1, mc2 = st.columns([5, 1])
-        if mc2.button("Regenerate", key="regen_monthly"):
-            get_or_generate("monthly_focus", user_id, build_monthly, force=True)
-            st.rerun()
+        monthly_flag = get_open_materiality_flag(user_id, "monthly_focus")
+        render_materiality_flag(monthly_flag, on_regenerate=lambda: get_or_generate("monthly_focus", user_id, build_monthly, force=True, reason=monthly_flag.get("flag_text") if monthly_flag else None))
         monthly = get_or_generate("monthly_focus", user_id, build_monthly)
         st.markdown(f'<div class="goal-card"><div class="gc-lbl">Current phase focus</div><div class="gc-goal" style="font-style:normal;font-size:13.5px">{monthly}</div></div>', unsafe_allow_html=True)
+        adjust_flow("monthly goal focus", "monthly")
 
     with tabs[2]:
-        def build_supps():
+        def build_supps(existing=None, reason=None):
             prompt = "Generate this week's committed supplement schedule as a markdown table: Time | Supplement | Dose | Clinical notes. Derive dose, brand suitability, and timing from this person's actual labs, medications, and absorption considerations — explain timing rationale concisely in the notes column. If a thyroid medication is present, reason explicitly about its absorption timing relative to other supplements. Cover every supplement/timing slot that applies — never cut the table short; keep each note to one tight sentence rather than dropping rows." + week_context
+            if existing:
+                prompt += f"\n\nThis is a revision of the current committed schedule, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve the existing row order, wording, and doses for everything else exactly as they were. Do not reorder or rephrase rows this reason doesn't touch.\n\nCURRENT COMMITTED SCHEDULE:\n{existing}"
             return ai_generate(sys_prompt, prompt, max_tokens=2000)
-        render_materiality_flag(get_open_materiality_flag(user_id, "supplements"), on_regenerate=lambda: get_or_generate("supplement_plan", user_id, build_supps, force=True))
-        sc1, sc2 = st.columns([5, 1])
-        if sc2.button("Regenerate", key="regen_supps"):
-            get_or_generate("supplement_plan", user_id, build_supps, force=True)
-            st.rerun()
+        supps_flag = get_open_materiality_flag(user_id, "supplements")
+        render_materiality_flag(supps_flag, on_regenerate=lambda: get_or_generate("supplement_plan", user_id, build_supps, force=True, reason=supps_flag.get("flag_text") if supps_flag else None))
         supps = get_or_generate("supplement_plan", user_id, build_supps)
         st.markdown(supps)
-        with st.expander("Want to adjust something?"):
-            adj = st.text_area("Describe what you'd like to change", key="adj_supp")
-            if st.button("Discuss with coach", key="adj_supp_btn") and adj:
-                st.session_state.page = "coach"
-                st.session_state.coach_seed = f"About my supplement schedule: {adj}"
-                st.rerun()
+        adjust_flow("supplement schedule", "supp")
 
     with tabs[3]:
-        def build_nutrition():
+        def build_nutrition(existing=None, reason=None):
             prompt = "Generate this week's committed 7-day nutrition plan. Start with a short info box (2-3 sentences) on this phase's nutrition focus, reasoned from this person's actual gut/digestion check-in data, goals, and dietary preferences — not a generic rule. Then a markdown table: Meal | Focus | Examples, covering all 7 days. Respect their stated dietary pattern and restrictions exactly. Keep each row tight (a few words per cell) so all 7 days fit — completeness across all 7 days matters more than detail in any one day." + week_context
+            if existing:
+                prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
             return ai_generate(sys_prompt, prompt, max_tokens=2200)
-        render_materiality_flag(get_open_materiality_flag(user_id, "nutrition"), on_regenerate=lambda: get_or_generate("nutrition_plan", user_id, build_nutrition, force=True))
-        nc1, nc2 = st.columns([5, 1])
-        if nc2.button("Regenerate", key="regen_nutr"):
-            get_or_generate("nutrition_plan", user_id, build_nutrition, force=True)
-            st.rerun()
+        nutrition_flag = get_open_materiality_flag(user_id, "nutrition")
+        render_materiality_flag(nutrition_flag, on_regenerate=lambda: get_or_generate("nutrition_plan", user_id, build_nutrition, force=True, reason=nutrition_flag.get("flag_text") if nutrition_flag else None))
         nutrition = get_or_generate("nutrition_plan", user_id, build_nutrition)
         st.markdown(nutrition)
-        with st.expander("Want to adjust something?"):
-            adj = st.text_area("Describe what you'd like to change", key="adj_nutr")
-            if st.button("Discuss with coach", key="adj_nutr_btn") and adj:
-                st.session_state.page = "coach"
-                st.session_state.coach_seed = f"About my nutrition plan: {adj}"
-                st.rerun()
+        adjust_flow("nutrition plan", "nutr")
 
     with tabs[4]:
-        def build_workouts():
+        def build_workouts(existing=None, reason=None):
             prompt = "Generate this week's committed 7-day training plan. Start with a short info box (2-3 sentences) on this phase's training principle, reasoned from this person's recovery/wearable data and goals. Then a markdown table: Day | Session type | Focus & exercises | Target duration, covering all 7 days. Calibrate intensity to recovery data if available. Keep each row tight so all 7 days fit — completeness across the full week matters more than depth on any single day." + week_context
+            if existing:
+                prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
             return ai_generate(sys_prompt, prompt, max_tokens=2000)
-        render_materiality_flag(get_open_materiality_flag(user_id, "workouts"), on_regenerate=lambda: get_or_generate("workout_plan", user_id, build_workouts, force=True))
-        wc1, wc2 = st.columns([5, 1])
-        if wc2.button("Regenerate", key="regen_workouts"):
-            get_or_generate("workout_plan", user_id, build_workouts, force=True)
-            st.rerun()
+        workouts_flag = get_open_materiality_flag(user_id, "workouts")
+        render_materiality_flag(workouts_flag, on_regenerate=lambda: get_or_generate("workout_plan", user_id, build_workouts, force=True, reason=workouts_flag.get("flag_text") if workouts_flag else None))
         workouts = get_or_generate("workout_plan", user_id, build_workouts)
         st.markdown(workouts)
+        adjust_flow("training plan", "workout")
 # ── Materiality check — runs after new data is submitted, not on a timer ─────
 def check_materiality(user_id, sys_prompt, trigger_desc):
+    """Returns the parsed {"material": bool, "level": str|None, "flag_text": str|None}
+    verdict (or None if the judgment call itself failed to parse), so a caller that
+    needs to react immediately — e.g. a user directly telling the coach something
+    changed — can show the verdict right there instead of only silently inserting
+    a flag that's easy to miss."""
     prompt = f"""A new data point just came in: {trigger_desc}.
-Given everything you know about this patient, is there anything here material enough that the committed roadmap, this phase's monthly focus, or a weekly protocol (supplements/nutrition/workouts) should be revisited? Use your own clinical judgment — there is no fixed checklist. A change that's material for one patient may be irrelevant for another.
-Respond with ONLY valid JSON: {{"material": true/false, "level": "roadmap"|"monthly_focus"|"supplements"|"nutrition"|"workouts"|null, "flag_text": "what changed, why it's material for this person specifically, what level should change, what you're proposing" or null}}"""
+Given everything you know about this patient, is there anything here material enough that the committed roadmap, this phase's monthly focus, or a weekly protocol (supplements/nutrition/workouts) should be revisited? Use your own clinical judgment — there is no fixed checklist. A change that's material for one patient may be irrelevant for another. Most single data points are NOT material — only flag genuine, protocol-relevant changes.
+Respond with ONLY valid JSON: {{"material": true/false, "level": "roadmap"|"monthly_focus"|"supplements"|"nutrition"|"workouts"|null, "flag_text": "what changed, why it's material for this person specifically, what level should change, what you're proposing" or "why this doesn't require a change" if not material}}"""
     raw = ai_generate(sys_prompt, prompt, max_tokens=500)
     try:
         match = re.search(r"\{.*\}", raw, re.DOTALL)
         result = json.loads(match.group(0) if match else raw)
     except Exception:
-        return
+        return None
     if result.get("material"):
         # Today's Home page priorities are cached once per calendar day, so a
         # material event (new labs, a materially different check-in) would
@@ -1880,6 +1900,7 @@ Respond with ONLY valid JSON: {{"material": true/false, "level": "roadmap"|"mont
         supabase.table("daily_priorities").delete().eq("user_id", user_id).eq("for_date", today_str).execute()
         if result.get("level"):
             db_insert("materiality_flags", {"user_id": user_id, "level": result["level"], "flag_text": result.get("flag_text", ""), "resolved": False, "created_at": datetime.now().isoformat()})
+    return result
 
 
 # ── Check-In Page ─────────────────────────────────────────────────────────────
