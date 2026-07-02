@@ -551,17 +551,34 @@ def save_lab_report(user_id, report_date, text=None, file_block=None, file_label
     from later), then a short interpretive summary for the list preview. Storing
     only the summary would leave no real numbers anywhere for the coach to cite."""
     label = file_label or "your pasted values"
+    date_note = ""
     if file_block:
         with st.spinner(f"Extracting lab values from {label}..."):
-            raw_values = ai_generate(
-                "You are OneSattva extracting lab data from an uploaded document/image. List every lab marker you can identify, one per line, "
+            raw_output = ai_generate(
+                "You are OneSattva extracting lab data from an uploaded document/image. "
+                "On the FIRST line, output the report/collection date printed on the document in the exact format "
+                "'REPORT_DATE: YYYY-MM-DD' — if no date is visible anywhere on the document, output 'REPORT_DATE: UNKNOWN'. "
+                "Then, starting on the next line, list every lab marker you can identify, one per line, "
                 "in the format 'Marker: value unit (reference range if shown)'. Be exhaustive and precise — include every marker present, "
                 "even ones without an obvious flag. Output nothing else: no commentary, no headers, no markdown.",
-                [file_block, {"type": "text", "text": "Extract every lab marker and its value from this document/image."}],
+                [file_block, {"type": "text", "text": "Extract the report date and every lab marker/value from this document/image."}],
                 max_tokens=1500)
-        if raw_values.startswith("_Coach is temporarily unavailable"):
+        if raw_output.startswith("_Coach is temporarily unavailable"):
             st.error(f"Couldn't extract values from {label} — the AI service had an error. Try again in a moment.")
             return None
+        first_line, _, rest = raw_output.partition("\n")
+        date_match = re.match(r"REPORT_DATE:\s*(\d{4}-\d{2}-\d{2})", first_line.strip())
+        raw_values = rest.strip() if date_match else raw_output.strip()
+        if date_match:
+            try:
+                detected_date = date.fromisoformat(date_match.group(1))
+                if detected_date != report_date:
+                    date_note = f" — report dated {detected_date.isoformat()} (detected from the document)"
+                report_date = detected_date
+            except Exception:
+                pass
+        else:
+            date_note = f" — no date found on the document, using {report_date.isoformat()}"
         interpret_input = raw_values
     else:
         raw_values = text
@@ -577,7 +594,7 @@ def save_lab_report(user_id, report_date, text=None, file_block=None, file_label
     if result is None:
         st.error(f"{label} was analyzed but failed to save — please try uploading it again.")
         return None
-    st.success(f"✓ {label} uploaded and analyzed.")
+    st.success(f"✓ {label} uploaded and analyzed{date_note}.")
     return summary
 
 # ── System Prompt Builder — bio-individual: no hard-coded clinical rules ──────
@@ -749,11 +766,13 @@ For complex questions, structure as: (1) what is happening — mechanism across 
         if recent_labs:
             base += "RECENT (91-180 days — trend only):\n"
             for l in recent_labs:
-                base += f"- {l.get('report_date','')}: {l.get('summary','')}\n"
+                base += f"- {l.get('report_date','')}: {l.get('summary','')}\n  Values: {str(l.get('raw_values',''))[:800]}\n"
         if historical_labs:
             base += "HISTORICAL (>180 days — context only, retest needed):\n"
             for l in historical_labs:
-                base += f"- {l.get('report_date','')}: {l.get('summary','')}\n"
+                base += f"- {l.get('report_date','')}: {l.get('summary','')}\n  Values: {str(l.get('raw_values',''))[:800]}\n"
+        if len(current_labs) + len(recent_labs) + len(historical_labs) > 1:
+            base += "When the same marker appears in more than one report above, explicitly compare the values and state the direction of change (improving/worsening/stable) — don't just describe each report in isolation.\n"
     else:
         base += "\n⚠️ NO LAB REPORTS UPLOADED. Recommendations are provisional/general until labs are provided — say this plainly.\n"
 
@@ -1214,7 +1233,7 @@ def onboarding_step4(user_id):
     st.markdown(st.session_state.ob_recommended_panel)
 
     with st.expander("Upload or paste your lab values", expanded=True):
-        report_date = st.date_input("Report date", value=date.today())
+        report_date = st.date_input("Report date", value=date.today(), help="For uploaded files, we'll try to read the actual date off the document and use that instead — this is only the fallback if we can't find one, or if you're pasting values instead of uploading a file.")
         lab_files = st.file_uploader("Upload lab report(s) (PDF or image)", type=["pdf", "png", "jpg", "jpeg"], accept_multiple_files=True, help="We'll extract and interpret the values automatically. You can upload more than one file.")
         raw_values = st.text_area("Or paste values directly (marker: value, one per line, or freeform)", height=120)
 
@@ -2290,7 +2309,7 @@ def show_profile_user(user_id, profile):
 
 def show_profile_labs(user_id, profile):
     st.markdown('<div class="sl first">Upload a new report</div>', unsafe_allow_html=True)
-    report_date = st.date_input("Report date", value=date.today(), key="lab_date")
+    report_date = st.date_input("Report date", value=date.today(), key="lab_date", help="For uploaded files, we'll try to read the actual date off the document and use that instead — this is only the fallback if we can't find one, or if you're pasting values instead of uploading a file.")
     lab_files = st.file_uploader("Upload lab report(s) (PDF or image)", type=["pdf", "png", "jpg", "jpeg"], accept_multiple_files=True, key="lab_files", help="You can upload more than one file.")
     raw_values = st.text_area("Or paste lab values", height=140, key="lab_raw")
     if st.button("Upload & analyse", key="lab_save"):
