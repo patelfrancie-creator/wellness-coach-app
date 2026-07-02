@@ -594,8 +594,40 @@ def save_lab_report(user_id, report_date, text=None, file_block=None, file_label
     if result is None:
         st.error(f"{label} was analyzed but failed to save — please try uploading it again.")
         return None
+    refresh_lab_trends(user_id)
     st.success(f"✓ {label} uploaded and analyzed{date_note}.")
     return summary
+
+
+def build_lab_trends(user_id):
+    labs = db_get("lab_reports", user_id, order_col="report_date")
+    if len(labs) < 2:
+        return ""
+    labs_desc = "\n\n".join(
+        f"Report dated {l.get('report_date','?')}:\n{l.get('raw_values','')}"
+        for l in reversed(labs)  # oldest first, chronological
+    )
+    prompt = f"""Here are this patient's lab reports across time, oldest first:
+
+{labs_desc}
+
+Identify every marker that appears in 2 or more of these reports (match markers by meaning even if the exact wording differs slightly across reports — e.g. "Vitamin D" and "25-OH Vitamin D" are the same marker). For each such marker, output one row of a markdown table: Marker | value at each date it appears (format "YYYY-MM-DD: value unit") | Direction — one tight clause on whether it's improving, worsening, or stable, reasoned against functional (optimal) ranges, not just raw numeric direction.
+Only include markers that genuinely appear in 2+ reports — skip markers unique to a single report. If no marker repeats across reports, output exactly this sentence and nothing else: "No overlapping markers to compare yet — your reports test different panels.\""""
+    return ai_generate(
+        "You are OneSattva, comparing a patient's lab markers across multiple reports over time to identify real trends.",
+        prompt, max_tokens=1500)
+
+
+def refresh_lab_trends(user_id):
+    """Called after any lab report is saved or deleted — a changed set of
+    reports is inherently something the trend view should reflect, so this
+    refreshes eagerly rather than waiting on a materiality judgment (this is
+    a factual comparison, not a protocol recommendation)."""
+    content = build_lab_trends(user_id)
+    if content:
+        db_upsert("lab_trends", {"user_id": user_id, "content": content, "generated_at": date.today().isoformat()}, on_conflict="user_id")
+    else:
+        supabase.table("lab_trends").delete().eq("user_id", user_id).execute()
 
 # ── System Prompt Builder — bio-individual: no hard-coded clinical rules ──────
 # NOTE ON A CONFLICT BETWEEN THE TWO BRIEFS:
@@ -2354,8 +2386,19 @@ def show_profile_labs(user_id, profile):
             check_materiality(user_id, sys_prompt, f"New lab report(s) uploaded: {'; '.join(saved_summaries)}")
             st.rerun()
 
-    st.markdown('<div class="sl">Saved reports</div>', unsafe_allow_html=True)
     labs = db_get("lab_reports", user_id, order_col="report_date")
+    if len(labs) >= 2:
+        st.markdown('<div class="sl">Trends across your reports</div>', unsafe_allow_html=True)
+        trends = db_get_single("lab_trends", user_id)
+        if trends and trends.get("content"):
+            st.markdown(trends["content"])
+        else:
+            with st.spinner("Comparing your reports..."):
+                refresh_lab_trends(user_id)
+            trends = db_get_single("lab_trends", user_id)
+            st.markdown((trends or {}).get("content") or "No overlapping markers to compare yet.")
+
+    st.markdown('<div class="sl">Saved reports</div>', unsafe_allow_html=True)
     if labs:
         st.caption("✓ Current (≤90 days) = your coach's primary reference. Recent (91-180 days) = trend context only. Historical (>180 days) = background only, a retest is flagged as needed.")
     else:
@@ -2371,6 +2414,7 @@ def show_profile_labs(user_id, profile):
         lc2.markdown(f"`{freshness}`")
         if lc3.button("Delete", key=f"del_lab_{l['id']}"):
             db_delete("lab_reports", l["id"])
+            refresh_lab_trends(user_id)
             st.rerun()
         with st.expander("View full interpretation & extracted values", key=f"lab_detail_{l['id']}"):
             st.markdown(f"**Coach interpretation**\n\n{l.get('summary','') or '_None._'}")

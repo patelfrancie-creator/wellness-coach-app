@@ -277,3 +277,17 @@ alter table wearable_data add column if not exists workout_strain numeric;
 
 -- protocol start-date confirmation (item 9)
 alter table roadmaps add column if not exists start_confirmed boolean default false;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Round 8: cross-report lab trend comparison, cached like monthly_focus etc.
+-- ═══════════════════════════════════════════════════════════════════════════
+create table if not exists lab_trends (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) unique on delete cascade,
+  content text not null,
+  generated_at date
+);
+
+alter table lab_trends enable row level security;
+create policy "Users can manage own lab trends" on lab_trends
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
