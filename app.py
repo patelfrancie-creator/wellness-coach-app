@@ -607,15 +607,23 @@ def build_lab_trends(user_id):
         f"Report dated {l.get('report_date','?')}:\n{l.get('raw_values','')}"
         for l in reversed(labs)  # oldest first, chronological
     )
+    # Use the full system prompt (not a narrow one-off) so this is a genuine
+    # coach's-perspective read — reasoned against this person's actual
+    # symptoms, goals, and current protocol — not just a bare number diff.
+    profile = db_get_single("profiles", user_id) or {}
+    sys_prompt = build_system_prompt(user_id, profile, has_cycle=profile.get("has_cycle", False))
     prompt = f"""Here are this patient's lab reports across time, oldest first:
 
 {labs_desc}
 
-Identify every marker that appears in 2 or more of these reports (match markers by meaning even if the exact wording differs slightly across reports — e.g. "Vitamin D" and "25-OH Vitamin D" are the same marker). For each such marker, output one row of a markdown table: Marker | value at each date it appears (format "YYYY-MM-DD: value unit") | Direction — one tight clause on whether it's improving, worsening, or stable, reasoned against functional (optimal) ranges, not just raw numeric direction.
-Only include markers that genuinely appear in 2+ reports — skip markers unique to a single report. If no marker repeats across reports, output exactly this sentence and nothing else: "No overlapping markers to compare yet — your reports test different panels.\""""
-    return ai_generate(
-        "You are OneSattva, comparing a patient's lab markers across multiple reports over time to identify real trends.",
-        prompt, max_tokens=1500)
+Write two things, in this order:
+
+1. **Coach's take** — 2-4 sentences in your own voice synthesizing the overall pattern across these reports: what's genuinely improving, worsening, or stable, and what that means for this person specifically given their symptoms, goals, and current protocol. Interpret, don't just restate numbers — this is the most important part.
+
+2. A markdown table: Marker | value at each date it appears (format "YYYY-MM-DD: value unit") | Direction — one tight clause per marker on whether it's improving, worsening, or stable, reasoned against functional (optimal) ranges, not just raw numeric direction. Identify every marker that appears in 2 or more of these reports (match markers by meaning even if the exact wording differs slightly across reports — e.g. "Vitamin D" and "25-OH Vitamin D" are the same marker). Only include markers that genuinely appear in 2+ reports — skip markers unique to a single report.
+
+If no marker repeats across reports, skip the table entirely and write only: "No overlapping markers to compare yet — your reports test different panels.\""""
+    return ai_generate(sys_prompt, prompt, max_tokens=1800)
 
 
 def refresh_lab_trends(user_id):
