@@ -283,7 +283,7 @@ alter table roadmaps add column if not exists start_confirmed boolean default fa
 -- ═══════════════════════════════════════════════════════════════════════════
 create table if not exists lab_trends (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) unique on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade unique,
   content text not null,
   generated_at date
 );
