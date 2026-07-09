@@ -1146,7 +1146,7 @@ def onboarding_step1(user_id, profile):
     st.markdown('<div class="pg-sub">This personalises everything. You can edit any of this from Profile & Data later.</div>', unsafe_allow_html=True)
 
     p = profile or {}
-    existing_city, existing_country = split_location(p.get("location", ""))
+    existing_city, existing_country = split_location((p.get("location") or ""))
     c1, c2 = st.columns(2)
     with c1:
         dob = st.date_input("Date of birth", value=date.fromisoformat(p["dob"]) if p.get("dob") else date(1990, 1, 1), min_value=date(1920, 1, 1), max_value=date.today())
@@ -1159,7 +1159,7 @@ def onboarding_step1(user_id, profile):
         sex = st.selectbox("Biological sex", ["Male", "Female", "Intersex", "Prefer not to say"], index=["Male", "Female", "Intersex", "Prefer not to say"].index(p.get("sex")) if p.get("sex") in ["Male", "Female", "Intersex", "Prefer not to say"] else 0)
         blood_group = st.selectbox("Blood group (optional)", BLOOD_GROUPS, index=selectbox_index(BLOOD_GROUPS, p.get("blood_group"), default=len(BLOOD_GROUPS) - 1))
         eating_pattern = st.selectbox("Eating pattern", ["Omnivore", "Vegetarian", "Vegan", "Pescatarian", "Other"], index=["Omnivore", "Vegetarian", "Vegan", "Pescatarian", "Other"].index(p.get("eating_pattern")) if p.get("eating_pattern") in ["Omnivore", "Vegetarian", "Vegan", "Pescatarian", "Other"] else 0)
-        occupation = st.text_input("Occupation (optional)", value=p.get("occupation", ""), placeholder="e.g. Software engineer, teacher, homemaker")
+        occupation = st.text_input("Occupation (optional)", value=(p.get("occupation") or ""), placeholder="e.g. Software engineer, teacher, homemaker")
 
     has_cycle = None
     if sex in ("Female", "Intersex"):
@@ -1252,32 +1252,32 @@ def onboarding_step3(user_id):
     st.markdown('<div class="sl">Diet & activity</div>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     activity_level = c1.selectbox("Activity level", ACTIVITY_LEVELS, index=selectbox_index(ACTIVITY_LEVELS, lp.get("activity_level")))
-    restrictions = c2.text_input("Dietary restrictions or intolerances", value=lp.get("allergies", ""), placeholder="e.g. Lactose intolerant, gluten-free, tree nut allergy")
+    restrictions = c2.text_input("Dietary restrictions or intolerances", value=(lp.get("allergies") or ""), placeholder="e.g. Lactose intolerant, gluten-free, tree nut allergy")
     alcohol = c1.selectbox("Alcohol consumption", ALCOHOL_LEVELS, index=selectbox_index(ALCOHOL_LEVELS, lp.get("alcohol")))
     smoking = c2.selectbox("Smoking / tobacco", SMOKING_LEVELS, index=selectbox_index(SMOKING_LEVELS, lp.get("smoking")))
-    exercise_routine = st.text_area("Exercise routine", value=lp.get("exercise_routine", ""), height=60, placeholder="e.g. Weight training 4x/week, occasional running")
+    exercise_routine = st.text_area("Exercise routine", value=(lp.get("exercise_routine") or ""), height=60, placeholder="e.g. Weight training 4x/week, occasional running")
 
     st.markdown('<div class="sl">Sleep</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
-    bedtime = dropdown_with_other(c1, "Typical bedtime", BEDTIME_OPTIONS, lp.get("sleep_bedtime", ""), key="ob_bedtime")
-    wake_time = dropdown_with_other(c2, "Typical wake time", WAKE_TIME_OPTIONS, lp.get("sleep_wake_time", ""), key="ob_wake_time")
-    sleep_duration = dropdown_with_other(c3, "Average sleep duration", SLEEP_DURATION_OPTIONS, lp.get("sleep_duration", ""), key="ob_sleep_duration", placeholder="e.g. 6.5 hrs")
+    bedtime = dropdown_with_other(c1, "Typical bedtime", BEDTIME_OPTIONS, (lp.get("sleep_bedtime") or ""), key="ob_bedtime")
+    wake_time = dropdown_with_other(c2, "Typical wake time", WAKE_TIME_OPTIONS, (lp.get("sleep_wake_time") or ""), key="ob_wake_time")
+    sleep_duration = dropdown_with_other(c3, "Average sleep duration", SLEEP_DURATION_OPTIONS, (lp.get("sleep_duration") or ""), key="ob_sleep_duration", placeholder="e.g. 6.5 hrs")
     sleep_quality = st.slider("Sleep quality (self-rated)", 1, 10, int(lp.get("sleep_quality") or 5))
-    sleep_challenges = st.text_area("Sleep challenges (optional)", value=lp.get("sleep_challenges", ""), height=50, placeholder="e.g. Wake around 3am and struggle to fall back asleep")
+    sleep_challenges = st.text_area("Sleep challenges (optional)", value=(lp.get("sleep_challenges") or ""), height=50, placeholder="e.g. Wake around 3am and struggle to fall back asleep")
 
     st.markdown('<div class="sl">Eating schedule</div>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
-    first_meal = dropdown_with_other(c1, "First meal time", FIRST_MEAL_OPTIONS, lp.get("first_meal", ""), key="ob_first_meal")
-    last_meal = dropdown_with_other(c2, "Last meal time", LAST_MEAL_OPTIONS, lp.get("last_meal", ""), key="ob_last_meal")
+    first_meal = dropdown_with_other(c1, "First meal time", FIRST_MEAL_OPTIONS, (lp.get("first_meal") or ""), key="ob_first_meal")
+    last_meal = dropdown_with_other(c2, "Last meal time", LAST_MEAL_OPTIONS, (lp.get("last_meal") or ""), key="ob_last_meal")
     meals_per_day = c1.selectbox("Meals per day", MEALS_PER_DAY_OPTIONS, index=selectbox_index(MEALS_PER_DAY_OPTIONS, lp.get("meals_per_day")))
     eating_out = c2.selectbox("Eating out / ordering in", EATING_OUT_LEVELS, index=selectbox_index(EATING_OUT_LEVELS, lp.get("eating_out")))
-    food_prefs = st.text_area("Food preferences or patterns the coach should know about (optional)", value=lp.get("food_prefs", ""), height=60, placeholder="e.g. Prefer home-cooked meals, avoid processed sugar, love spicy food")
+    food_prefs = st.text_area("Food preferences or patterns the coach should know about (optional)", value=(lp.get("food_prefs") or ""), height=60, placeholder="e.g. Prefer home-cooked meals, avoid processed sugar, love spicy food")
 
     st.markdown('<div class="sl">Stress & wellbeing</div>', unsafe_allow_html=True)
     stress_level = st.slider("Current stress level", 1, 10, int(lp.get("stress_level") or 5))
-    stressors = st.text_input("Primary stressors", value=lp.get("stressors", ""), placeholder="e.g. Work deadlines, financial pressure, caregiving")
-    symptoms = st.text_area("Current symptoms or main concerns — in your own words", value=lp.get("symptoms", ""), height=70, placeholder="e.g. Afternoon energy crashes, bloating after meals, brain fog")
-    anything_else = st.text_area("Anything else you'd like your coach to know (optional)", value=lp.get("anything_else", ""), height=50, placeholder="e.g. Upcoming travel, a recent life event, a specific worry")
+    stressors = st.text_input("Primary stressors", value=(lp.get("stressors") or ""), placeholder="e.g. Work deadlines, financial pressure, caregiving")
+    symptoms = st.text_area("Current symptoms or main concerns — in your own words", value=(lp.get("symptoms") or ""), height=70, placeholder="e.g. Afternoon energy crashes, bloating after meals, brain fog")
+    anything_else = st.text_area("Anything else you'd like your coach to know (optional)", value=(lp.get("anything_else") or ""), height=50, placeholder="e.g. Upcoming travel, a recent life event, a specific worry")
 
     st.markdown('<div class="sl">Additional goals</div>', unsafe_allow_html=True)
     if "ob_extra_goals" not in st.session_state:
@@ -1515,7 +1515,7 @@ Table: Phase | Focus | Key milestones | Checkpoint — one row per phase, all {p
         with st.spinner(f"Building your {plan_mode} roadmap..."):
             st.session_state.ob_roadmap_text = ai_generate(sys_prompt, prompt, max_tokens=8000)
 
-    first_name = (profile or {}).get("full_name", "").split(" ")[0] or "there"
+    first_name = ((profile or {}).get("full_name") or "").split(" ")[0] or "there"
     st.markdown(f"""
 <div style="background:var(--forest);border-radius:12px 12px 0 0;padding:24px 30px">
 <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:rgba(247,245,242,0.38);margin-bottom:6px">Your personalised {plan_mode} programme · {dur_label} · Generated {date.today().strftime('%-d %B %Y')}</div>
@@ -1592,7 +1592,7 @@ def show_sidebar(user_id, profile):
 <div>{wordmark_html(19)}</div>
 </div>""", unsafe_allow_html=True)
 
-        name = profile.get("full_name", "") if profile else ""
+        name = (profile.get("full_name") or "") if profile else ""
         loc = profile.get("location", "") if profile else ""
         sex = profile.get("sex", "") if profile else ""
         dob = profile.get("dob") if profile else None
@@ -1843,7 +1843,7 @@ def show_home(user_id, profile):
                 db_upsert("roadmaps", {"user_id": user_id, "phase_start_date": start_date_input.isoformat(), "start_confirmed": True}, on_conflict="user_id")
                 st.rerun()
 
-    first_name = (profile.get("full_name", "") if profile else "").split(" ")[0] or "there"
+    first_name = ((profile.get("full_name") or "") if profile else "").split(" ")[0] or "there"
     st.markdown(f'<div class="pg-title" style="margin-bottom:2px">{greeting(profile)}, {first_name}.</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="pg-sub">{user_now(profile).strftime("%A, %d %B %Y")} · Here\'s what matters today.</div>', unsafe_allow_html=True)
 
@@ -2383,7 +2383,7 @@ def show_checkin(user_id, profile):
     sleep_hours = c3.number_input("Sleep hours", min_value=0.0, max_value=14.0, step=0.5, value=float(prefill.get("sleep_hours", 7) or 7))
     workout = c4.selectbox("Today's workout", ["None", "Strength", "Cardio", "Mobility / Yoga", "Walk", "Rest day"],
                             index=["None", "Strength", "Cardio", "Mobility / Yoga", "Walk", "Rest day"].index(prefill.get("workout")) if prefill.get("workout") in ["None", "Strength", "Cardio", "Mobility / Yoga", "Walk", "Rest day"] else 0)
-    notes = st.text_area("Notes (optional)", value=prefill.get("notes", "") if today_checkin else "", placeholder="Anything notable today — symptoms, observations, questions for your coach...")
+    notes = st.text_area("Notes (optional)", value=(prefill.get("notes") or "") if today_checkin else "", placeholder="Anything notable today — symptoms, observations, questions for your coach...")
 
     if st.button("Save today's check-in →", type="primary"):
         row = {"user_id": user_id, "checkin_date": today_str, "sleep_hours": sleep_hours, "workout": workout, "notes": notes,
@@ -2407,7 +2407,7 @@ def show_coach(user_id, profile):
         st.session_state.coach_messages = []
 
     if not st.session_state.coach_messages:
-        first_name = (profile.get("full_name", "") if profile else "").split(" ")[0] or "there"
+        first_name = ((profile.get("full_name") or "") if profile else "").split(" ")[0] or "there"
         cycle_line = ""
         if has_cycle:
             cycle_day, phase, _ = calculate_cycle_status(user_id)
@@ -2495,7 +2495,7 @@ def show_profile_user(user_id, profile):
     with c1:
         with st.container(border=True):
             st.markdown('#### Demographics')
-            dob_str = p.get("dob", "")
+            dob_str = (p.get("dob") or "")
             age_str = ""
             if dob_str:
                 try:
@@ -2517,12 +2517,12 @@ def show_profile_user(user_id, profile):
             with st.expander("Edit demographics"):
                 height = st.number_input("Height (cm)", 100, 230, int(p.get("height_cm") or 170), key="ed_h")
                 weight = st.number_input("Weight (kg)", 30, 250, int(p.get("weight_kg") or 70), key="ed_w")
-                ed_existing_city, ed_existing_country = split_location(p.get("location", ""))
+                ed_existing_city, ed_existing_country = split_location((p.get("location") or ""))
                 edc1, edc2 = st.columns(2)
                 ed_country = edc1.selectbox("Country", COUNTRIES, index=COUNTRIES.index(ed_existing_country) if ed_existing_country in COUNTRIES else len(COUNTRIES) - 1, key="ed_country")
                 ed_city = edc2.text_input("City", value=ed_existing_city, key="ed_city")
                 ed_blood_group = st.selectbox("Blood group", BLOOD_GROUPS, index=selectbox_index(BLOOD_GROUPS, p.get("blood_group"), default=len(BLOOD_GROUPS) - 1), key="ed_bg")
-                occupation = st.text_input("Occupation", value=p.get("occupation", ""), key="ed_occ")
+                occupation = st.text_input("Occupation", value=(p.get("occupation") or ""), key="ed_occ")
                 has_cycle_now = p.get("has_cycle", False)
                 new_has_cycle = has_cycle_now
                 if p.get("sex") in ("Female", "Intersex"):
@@ -2568,7 +2568,7 @@ def show_profile_user(user_id, profile):
                     db_insert("medications", {"user_id": user_id, "name": new_med, "dose": med_dose, "frequency": med_freq, "active": True})
                     st.rerun()
             with st.expander("Family history & past surgeries"):
-                bg_text = st.text_area("Family history & past surgeries", value=(health_bg_row or {}).get("notes", ""), height=90, key="ed_health_bg", label_visibility="collapsed")
+                bg_text = st.text_area("Family history & past surgeries", value=((health_bg_row or {}).get("notes") or ""), height=90, key="ed_health_bg", label_visibility="collapsed")
                 if st.button("Save", key="save_health_bg"):
                     db_upsert("profile_notes", {"user_id": user_id, "notes": bg_text}, on_conflict="user_id")
                     st.success("Saved.")
@@ -2612,7 +2612,7 @@ def show_profile_user(user_id, profile):
         with st.expander("Edit dietary profile"):
             eating_pattern = st.selectbox("Eating pattern", ["Omnivore", "Vegetarian", "Vegan", "Pescatarian", "Other"],
                                            index=["Omnivore", "Vegetarian", "Vegan", "Pescatarian", "Other"].index(p.get("eating_pattern")) if p.get("eating_pattern") in ["Omnivore", "Vegetarian", "Vegan", "Pescatarian", "Other"] else 0, key="ed_diet")
-            allergies = st.text_input("Allergies / intolerances", value=p.get("allergies", ""), key="ed_allerg")
+            allergies = st.text_input("Allergies / intolerances", value=(p.get("allergies") or ""), key="ed_allerg")
             if st.button("Save dietary profile", key="save_diet"):
                 db_upsert("profiles", {"id": user_id, "eating_pattern": eating_pattern, "allergies": allergies})
                 st.success("Saved.")
@@ -2627,11 +2627,11 @@ def show_profile_user(user_id, profile):
 """, unsafe_allow_html=True)
         with st.expander("Edit eating schedule & food preferences"):
             ec1, ec2 = st.columns(2)
-            ed_first_meal = dropdown_with_other(ec1, "First meal time", FIRST_MEAL_OPTIONS, p.get("first_meal", ""), key="ed_first_meal")
-            ed_last_meal = dropdown_with_other(ec2, "Last meal time", LAST_MEAL_OPTIONS, p.get("last_meal", ""), key="ed_last_meal")
+            ed_first_meal = dropdown_with_other(ec1, "First meal time", FIRST_MEAL_OPTIONS, (p.get("first_meal") or ""), key="ed_first_meal")
+            ed_last_meal = dropdown_with_other(ec2, "Last meal time", LAST_MEAL_OPTIONS, (p.get("last_meal") or ""), key="ed_last_meal")
             ed_meals_per_day = ec1.selectbox("Meals per day", MEALS_PER_DAY_OPTIONS, index=selectbox_index(MEALS_PER_DAY_OPTIONS, p.get("meals_per_day")), key="ed_meals_per_day")
             ed_eating_out = ec2.selectbox("Eating out / ordering in", EATING_OUT_LEVELS, index=selectbox_index(EATING_OUT_LEVELS, p.get("eating_out")), key="ed_eating_out")
-            ed_food_prefs = st.text_area("Food preferences or patterns the coach should know about", value=p.get("food_prefs", ""), height=80, key="ed_food_prefs")
+            ed_food_prefs = st.text_area("Food preferences or patterns the coach should know about", value=(p.get("food_prefs") or ""), height=80, key="ed_food_prefs")
             if st.button("Save eating schedule", key="save_eating"):
                 db_upsert("profiles", {"id": user_id, "first_meal": ed_first_meal, "last_meal": ed_last_meal,
                                         "meals_per_day": ed_meals_per_day, "eating_out": ed_eating_out, "food_prefs": ed_food_prefs})
@@ -2652,7 +2652,7 @@ def show_profile_user(user_id, profile):
             ed_activity_level = ac1.selectbox("Activity level", ACTIVITY_LEVELS, index=selectbox_index(ACTIVITY_LEVELS, p.get("activity_level")), key="ed_activity_level")
             ed_alcohol = ac1.selectbox("Alcohol consumption", ALCOHOL_LEVELS, index=selectbox_index(ALCOHOL_LEVELS, p.get("alcohol")), key="ed_alcohol")
             ed_smoking = ac2.selectbox("Smoking / tobacco", SMOKING_LEVELS, index=selectbox_index(SMOKING_LEVELS, p.get("smoking")), key="ed_smoking")
-            ed_exercise_routine = st.text_area("Exercise routine", value=p.get("exercise_routine", ""), height=70, key="ed_exercise_routine")
+            ed_exercise_routine = st.text_area("Exercise routine", value=(p.get("exercise_routine") or ""), height=70, key="ed_exercise_routine")
             if st.button("Save activity", key="save_activity"):
                 db_upsert("profiles", {"id": user_id, "activity_level": ed_activity_level, "alcohol": ed_alcohol,
                                         "smoking": ed_smoking, "exercise_routine": ed_exercise_routine})
@@ -2670,11 +2670,11 @@ def show_profile_user(user_id, profile):
 """, unsafe_allow_html=True)
         with st.expander("Edit sleep"):
             sc1, sc2, sc3 = st.columns(3)
-            ed_bedtime = dropdown_with_other(sc1, "Typical bedtime", BEDTIME_OPTIONS, p.get("sleep_bedtime", ""), key="ed_bedtime")
-            ed_wake_time = dropdown_with_other(sc2, "Typical wake time", WAKE_TIME_OPTIONS, p.get("sleep_wake_time", ""), key="ed_wake_time")
-            ed_sleep_duration = dropdown_with_other(sc3, "Average sleep duration", SLEEP_DURATION_OPTIONS, p.get("sleep_duration", ""), key="ed_sleep_duration", placeholder="e.g. 6.5 hrs")
+            ed_bedtime = dropdown_with_other(sc1, "Typical bedtime", BEDTIME_OPTIONS, (p.get("sleep_bedtime") or ""), key="ed_bedtime")
+            ed_wake_time = dropdown_with_other(sc2, "Typical wake time", WAKE_TIME_OPTIONS, (p.get("sleep_wake_time") or ""), key="ed_wake_time")
+            ed_sleep_duration = dropdown_with_other(sc3, "Average sleep duration", SLEEP_DURATION_OPTIONS, (p.get("sleep_duration") or ""), key="ed_sleep_duration", placeholder="e.g. 6.5 hrs")
             ed_sleep_quality = st.slider("Sleep quality (self-rated)", 1, 10, int(p.get("sleep_quality") or 5), key="ed_sleep_quality")
-            ed_sleep_challenges = st.text_area("Sleep challenges", value=p.get("sleep_challenges", ""), height=60, key="ed_sleep_challenges")
+            ed_sleep_challenges = st.text_area("Sleep challenges", value=(p.get("sleep_challenges") or ""), height=60, key="ed_sleep_challenges")
             if st.button("Save sleep", key="save_sleep"):
                 db_upsert("profiles", {"id": user_id, "sleep_bedtime": ed_bedtime, "sleep_wake_time": ed_wake_time,
                                         "sleep_duration": ed_sleep_duration, "sleep_quality": int(ed_sleep_quality), "sleep_challenges": ed_sleep_challenges})
@@ -2691,9 +2691,9 @@ def show_profile_user(user_id, profile):
 """, unsafe_allow_html=True)
         with st.expander("Edit stress & symptoms"):
             ed_stress_level = st.slider("Current stress level", 1, 10, int(p.get("stress_level") or 5), key="ed_stress_level")
-            ed_stressors = st.text_input("Primary stressors", value=p.get("stressors", ""), key="ed_stressors")
-            ed_symptoms = st.text_area("Current symptoms or main concerns", value=p.get("symptoms", ""), height=70, key="ed_symptoms")
-            ed_anything_else = st.text_area("Anything else you'd like your coach to know", value=p.get("anything_else", ""), height=50, key="ed_anything_else")
+            ed_stressors = st.text_input("Primary stressors", value=(p.get("stressors") or ""), key="ed_stressors")
+            ed_symptoms = st.text_area("Current symptoms or main concerns", value=(p.get("symptoms") or ""), height=70, key="ed_symptoms")
+            ed_anything_else = st.text_area("Anything else you'd like your coach to know", value=(p.get("anything_else") or ""), height=50, key="ed_anything_else")
             if st.button("Save stress & symptoms", key="save_stress"):
                 db_upsert("profiles", {"id": user_id, "stress_level": int(ed_stress_level), "stressors": ed_stressors,
                                         "symptoms": ed_symptoms, "anything_else": ed_anything_else})
