@@ -281,6 +281,14 @@ html, body, [class*="css"] {{ font-family: 'Inter', sans-serif; }}
 .tc-dots     {{ display:flex; gap:5px; }}
 .tc-dot      {{ width:16px; height:16px; border-radius:50%; background:var(--copper); flex:1; max-width:20px; }}
 .tc-dot-legend {{ display:flex; justify-content:space-between; font-size:10px; color:var(--stone-dk,#B4B2A9); margin-top:6px; }}
+.wk-row      {{ display:flex; gap:14px; align-items:flex-end; height:90px; }}
+.wk-col      {{ display:flex; flex-direction:column; align-items:center; gap:5px; flex:1; }}
+.wk-bars     {{ display:flex; gap:3px; align-items:flex-end; height:66px; width:100%; justify-content:center; }}
+.bar-a       {{ width:9px; border-radius:2px 2px 0 0; background:var(--copper); }}
+.bar-b       {{ width:9px; border-radius:2px 2px 0 0; background:var(--stone); }}
+.wk-lbl      {{ font-size:10px; color:var(--mid); }}
+.wk-legend   {{ display:flex; gap:16px; margin-top:12px; font-size:11px; color:var(--mid); }}
+.wk-legend .leg-dot {{ display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:6px; }}
 
 .insight-box {{ background:var(--forest); border-radius:12px; padding:15px 18px; margin-bottom:14px; }}
 .ib-lbl      {{ font-size:10px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:rgba(247,245,242,0.34); margin-bottom:7px; }}
@@ -1714,6 +1722,69 @@ Write one short, direct, first-person note (2-3 sentences, your voice) naming th
     return nudge
 
 
+def compute_adherence_vs_outcome(user_id, profile, weeks=6):
+    """Weekly protocol adherence against the person's own outcome metric — their most
+    relevant personalized check-in metric if they have one, else energy — to show whether
+    following the plan actually correlates with feeling better for them, not just with
+    showing up. Returns None (card gets suppressed) until there's enough real history."""
+    metric_defs = sorted(db_get("checkin_metric_defs", user_id), key=lambda m: m.get("sort_order", 0))
+    outcome_key, outcome_label = "energy", "energy"
+    for m in metric_defs:
+        if m.get("input_type") == "slider":
+            outcome_key, outcome_label = m["metric_key"], m["label"].lower()
+            break
+
+    today = user_now(profile).date()
+    days_needed = weeks * 7
+    priority_rows = db_get("daily_priorities", user_id, order_col="for_date", limit=days_needed)
+    checkin_rows = db_get("checkins", user_id, order_col="checkin_date", limit=days_needed)
+
+    week_data = []
+    for w in range(weeks):
+        week_end = today - timedelta(days=7 * w)
+        week_start = week_end - timedelta(days=6)
+        p_rows = [r for r in priority_rows if r.get("for_date") and week_start.isoformat() <= r["for_date"] <= week_end.isoformat()]
+        c_rows = [r for r in checkin_rows if r.get("checkin_date") and week_start.isoformat() <= r["checkin_date"] <= week_end.isoformat()]
+
+        done_w = total_w = 0
+        for r in p_rows:
+            try:
+                items = json.loads(r.get("priorities_json") or "[]")
+            except Exception:
+                continue
+            for it in items:
+                wt = TRIAGE_WEIGHT.get(it.get("triage", "background"), 1)
+                total_w += wt
+                if it.get("done"):
+                    done_w += wt
+        adherence_pct = round(done_w / total_w * 100) if total_w else None
+
+        outcome_vals = []
+        for r in c_rows:
+            v = r.get("energy") if outcome_key == "energy" else json.loads(r.get("custom_metrics") or "{}").get(outcome_key)
+            if isinstance(v, (int, float)):
+                outcome_vals.append(v)
+        outcome_avg = round(statistics.mean(outcome_vals), 1) if outcome_vals else None
+
+        week_data.append({"adherence_pct": adherence_pct, "outcome_avg": outcome_avg})
+
+    week_data.reverse()
+    complete_weeks = [w for w in week_data if w["adherence_pct"] is not None and w["outcome_avg"] is not None]
+    if len(complete_weeks) < 3:
+        return None
+
+    high = [w["outcome_avg"] for w in complete_weeks if w["adherence_pct"] >= 70]
+    low = [w["outcome_avg"] for w in complete_weeks if w["adherence_pct"] < 70]
+    if high and low:
+        high_avg, low_avg = round(statistics.mean(high), 1), round(statistics.mean(low), 1)
+        insight = f"Weeks above 70% completion averaged {high_avg}/10 {outcome_label} — {round(abs(high_avg - low_avg), 1)} points {'higher' if high_avg > low_avg else 'lower'} than weeks below that."
+    else:
+        overall = round(statistics.mean([w["outcome_avg"] for w in complete_weeks]), 1)
+        insight = f"Averaging {overall}/10 {outcome_label} across the weeks tracked so far — need more variation in adherence to compare high vs low weeks."
+
+    return {"weeks": week_data, "outcome_label": outcome_label, "insight": insight}
+
+
 def render_consistency(user_id, profile):
     today = user_now(profile).date()
     checkins_30 = db_get("checkins", user_id, order_col="checkin_date", limit=30)
@@ -1954,6 +2025,21 @@ def show_home(user_id, profile):
 <div class="tc-insight">{insight}</div>
 <div class="tc-dots">{dots}</div>
 <div class="tc-dot-legend"><span>{options[0] if options else ''}</span><span>{options[-1] if options else ''}</span></div>
+</div>""", unsafe_allow_html=True)
+
+    outcome = compute_adherence_vs_outcome(user_id, profile)
+    if outcome:
+        bars_html = ""
+        for i, w in enumerate(outcome["weeks"]):
+            a_h = max(8, min(100, w["adherence_pct"] or 0))
+            b_h = max(8, min(100, round((w["outcome_avg"] or 0) / 10 * 100)))
+            bars_html += f'<div class="wk-col"><div class="wk-bars"><div class="bar-a" style="height:{a_h}%"></div><div class="bar-b" style="height:{b_h}%"></div></div><div class="wk-lbl">Wk {i+1}</div></div>'
+        st.markdown(f"""
+<div class="trend-card" style="margin-top:10px">
+<div class="tc-title">Protocol adherence vs. {outcome['outcome_label']} · last {len(outcome['weeks'])} weeks</div>
+<div class="tc-insight">{outcome['insight']}</div>
+<div class="wk-row">{bars_html}</div>
+<div class="wk-legend"><span><span class="leg-dot" style="background:var(--copper)"></span>Adherence %</span><span><span class="leg-dot" style="background:var(--stone)"></span>Avg {outcome['outcome_label']}</span></div>
 </div>""", unsafe_allow_html=True)
 # ── Materiality flags — the single gate for any plan change (Brief §6) ───────
 def get_open_materiality_flag(user_id, level):
