@@ -1854,6 +1854,11 @@ def show_home(user_id, profile):
 <div class="mf-lbl">From your coach</div>
 <div class="mf-txt" style="font-family:'Newsreader',serif;font-style:italic">{nudge}</div>
 </div>""", unsafe_allow_html=True)
+        adherence_reply = st.text_area("Tell your coach what's going on", key="adherence_reply", placeholder="e.g. The plan feels like too much right now, or life just got in the way this week...")
+        if st.button("Send to your coach", key="adherence_reply_btn") and adherence_reply:
+            st.session_state.page = "coach"
+            st.session_state.coach_seed = f"About my protocol completion dropping to {adherence['this_week_pct']}% this week: {adherence_reply}"
+            st.rerun()
 
     st.markdown('<div class="sl">Today\'s snapshot</div>', unsafe_allow_html=True)
     wearable = db_get("wearable_data", user_id, order_col="data_date", limit=30)
