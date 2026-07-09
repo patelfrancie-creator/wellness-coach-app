@@ -278,6 +278,9 @@ html, body, [class*="css"] {{ font-family: 'Inter', sans-serif; }}
 .tc-insight  {{ font-size:11.5px; color:var(--mid); line-height:1.5; margin-bottom:10px; }}
 .tc-bars     {{ height:40px; background:rgba(230,227,223,0.4); display:flex; align-items:flex-end; padding:0 4px 3px; gap:3px; border-radius:6px; }}
 .tb          {{ border-radius:2px 2px 0 0; background:var(--copper); opacity:0.55; flex:1; }}
+.tc-dots     {{ display:flex; gap:5px; }}
+.tc-dot      {{ width:16px; height:16px; border-radius:50%; background:var(--copper); flex:1; max-width:20px; }}
+.tc-dot-legend {{ display:flex; justify-content:space-between; font-size:10px; color:var(--stone-dk,#B4B2A9); margin-top:6px; }}
 
 .insight-box {{ background:var(--forest); border-radius:12px; padding:15px 18px; margin-bottom:14px; }}
 .ib-lbl      {{ font-size:10px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:rgba(247,245,242,0.34); margin-bottom:7px; }}
@@ -1911,6 +1914,46 @@ def show_home(user_id, profile):
 <div class="tc-title">HRV trajectory · 30 days</div>
 <div class="tc-insight">{f"{len(wearable_30)} days of wearable data in the last 30 days." if wearable_30 else "Upload wearable data from Profile & Data to see this trend."}</div>
 <div class="tc-bars">{make_bars(hrv_vals, max_hrv)}</div>
+</div>""", unsafe_allow_html=True)
+
+    metric_defs = sorted(db_get("checkin_metric_defs", user_id), key=lambda m: m.get("sort_order", 0))
+    custom_series = [json.loads(c.get("custom_metrics") or "{}") for c in checkins_30]
+
+    def week_avg(vals):
+        nums = [v for v in vals if isinstance(v, (int, float))]
+        return round(statistics.mean(nums), 1) if nums else None
+
+    pc1, pc2 = st.columns(2)
+    for i, m in enumerate(metric_defs[:2]):
+        key, label = m["metric_key"], m["label"]
+        with (pc1 if i == 0 else pc2):
+            vals = [s.get(key) for s in custom_series]
+            if m["input_type"] == "slider":
+                this_wk, prev_wk = week_avg(vals[-7:]), week_avg(vals[-14:-7])
+                if this_wk is not None and prev_wk is not None:
+                    insight = f"Averaging {this_wk}/10 this week, {'down' if this_wk < prev_wk else 'up' if this_wk > prev_wk else 'steady'} from {prev_wk}/10 last week."
+                elif this_wk is not None:
+                    insight = f"Averaging {this_wk}/10 this week."
+                else:
+                    insight = "Log a check-in to start building this trend."
+                st.markdown(f"""
+<div class="trend-card">
+<div class="tc-title">{label} · 30 days</div>
+<div class="tc-insight">{insight}</div>
+<div class="tc-bars">{make_bars(vals)}</div>
+</div>""", unsafe_allow_html=True)
+            else:
+                options = json.loads(m.get("options_json") or "[]")
+                logged = [v for v in vals[-14:] if v in options]
+                dots = "".join(f'<div class="tc-dot" style="opacity:{round((options.index(v)+1)/len(options), 2) if options else 1}"></div>' for v in vals[-14:] if v in options) or '<div style="color:var(--mid);font-size:11px;padding:10px">Not enough data yet.</div>'
+                mildest_count = sum(1 for v in logged if options and v == options[0])
+                insight = f"{mildest_count} of last {len(logged)} logged as \"{options[0]}\"." if logged and options else "Log a check-in to start building this trend."
+                st.markdown(f"""
+<div class="trend-card">
+<div class="tc-title">{label} · last 14 days</div>
+<div class="tc-insight">{insight}</div>
+<div class="tc-dots">{dots}</div>
+<div class="tc-dot-legend"><span>{options[0] if options else ''}</span><span>{options[-1] if options else ''}</span></div>
 </div>""", unsafe_allow_html=True)
 # ── Materiality flags — the single gate for any plan change (Brief §6) ───────
 def get_open_materiality_flag(user_id, level):
