@@ -97,6 +97,49 @@ def selectbox_index(options, value, default=0):
     return options.index(value) if value in options else default
 
 
+def _time_range(start_hour, start_min, end_hour, end_min, step=30):
+    """12-hour clock strings (e.g. '6:30 am') from start to end, wrapping past midnight if end < start."""
+    total_start = start_hour * 60 + start_min
+    total_end = end_hour * 60 + end_min
+    if total_end <= total_start:
+        total_end += 24 * 60
+    times = []
+    t = total_start
+    while t <= total_end:
+        h24, m = (t // 60) % 24, t % 60
+        period = "am" if h24 < 12 else "pm"
+        h12 = h24 % 12 or 12
+        times.append(f"{h12}:{m:02d} {period}")
+        t += step
+    return times
+
+
+WAKE_TIME_OPTIONS = _time_range(4, 30, 10, 0)
+BEDTIME_OPTIONS = _time_range(20, 0, 2, 0)
+FIRST_MEAL_OPTIONS = _time_range(5, 0, 12, 0)
+LAST_MEAL_OPTIONS = _time_range(16, 0, 23, 0)
+SLEEP_DURATION_OPTIONS = ["Less than 5 hrs", "5 hrs", "5.5 hrs", "6 hrs", "6.5 hrs", "7 hrs", "7.5 hrs", "8 hrs", "8.5 hrs", "9+ hrs"]
+BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "Don't know"]
+GOAL_SUGGESTIONS = ["Improve energy", "Better sleep quality", "Lose weight sustainably", "Build muscle / strength",
+                     "Improve gut health / digestion", "Balance hormones", "Reduce stress / anxiety", "Improve skin health"]
+
+
+def dropdown_with_other(container, label, options, existing_value, key, placeholder="e.g. 6:45 am"):
+    """Selectbox of common times plus an 'Other' option that reveals free text — faster than typing for most people, still flexible."""
+    choices = options + ["Other (type manually)"]
+    if existing_value in options:
+        idx = choices.index(existing_value)
+    elif existing_value:
+        idx = len(options)
+    else:
+        idx = 0
+    choice = container.selectbox(label, choices, index=idx, key=f"{key}_sel")
+    if choice == "Other (type manually)":
+        custom_default = existing_value if existing_value not in options else ""
+        return container.text_input(f"{label} (custom)", value=custom_default, key=f"{key}_custom", placeholder=placeholder, label_visibility="collapsed")
+    return choice
+
+
 def plain_preview(text, limit=140):
     """Strip markdown control characters and collapse whitespace before
     truncating for a one-line preview. A naive char-slice of raw markdown can
@@ -862,10 +905,14 @@ For complex questions, structure as: (1) what is happening — mechanism across 
         elif gap_days >= 3:
             base += f"Note: {gap_days}-day gap. Continue but note it.\n"
         base += "RECENT CHECK-INS (last 14 days):\n"
+        metric_labels = {m["metric_key"]: m["label"] for m in db_get("checkin_metric_defs", user_id)}
         for c in reversed(checkins[:14]):
+            custom = json.loads(c.get("custom_metrics") or "{}")
+            custom_str = " · ".join(f"{metric_labels.get(k, k)} {v}" for k, v in custom.items())
             base += (f"- {c.get('checkin_date','')}: Energy {c.get('energy','?')}/10 · Clarity {c.get('mental_clarity','?')}/10 · "
-                     f"Sleep quality {c.get('sleep_quality','?')}/10 ({c.get('sleep_hours','?')}hrs) · Mood {c.get('mood','?')}/10 · "
-                     f"Gut {c.get('gut','?')} · Libido {c.get('libido','?')} · Workout: {c.get('workout','?')} · Notes: {c.get('notes','')}\n")
+                     f"Sleep quality {c.get('sleep_quality','?')}/10 ({c.get('sleep_hours','?')}hrs) · Mood {c.get('mood','?')}/10"
+                     + (f" · {custom_str}" if custom_str else "") +
+                     f" · Workout: {c.get('workout','?')} · Notes: {c.get('notes','')}\n")
     else:
         base += "\nNo check-in data yet.\n"
 
@@ -1088,14 +1135,14 @@ def onboarding_step1(user_id, profile):
         dob = st.date_input("Date of birth", value=date.fromisoformat(p["dob"]) if p.get("dob") else date(1990, 1, 1), min_value=date(1920, 1, 1), max_value=date.today())
         cc1, cc2 = st.columns(2)
         country = cc1.selectbox("Country", COUNTRIES, index=COUNTRIES.index(existing_country) if existing_country in COUNTRIES else len(COUNTRIES) - 1)
-        city = cc2.text_input("City", value=existing_city)
+        city = cc2.text_input("City", value=existing_city, placeholder="e.g. Mumbai")
         height_cm = st.number_input("Height (cm)", min_value=100, max_value=230, value=int(p.get("height_cm") or 170))
         weight_kg = st.number_input("Weight (kg)", min_value=30, max_value=250, value=int(p.get("weight_kg") or 70))
     with c2:
         sex = st.selectbox("Biological sex", ["Male", "Female", "Intersex", "Prefer not to say"], index=["Male", "Female", "Intersex", "Prefer not to say"].index(p.get("sex")) if p.get("sex") in ["Male", "Female", "Intersex", "Prefer not to say"] else 0)
-        blood_group = st.text_input("Blood group (optional)", value=p.get("blood_group", ""))
+        blood_group = st.selectbox("Blood group (optional)", BLOOD_GROUPS, index=selectbox_index(BLOOD_GROUPS, p.get("blood_group"), default=len(BLOOD_GROUPS) - 1))
         eating_pattern = st.selectbox("Eating pattern", ["Omnivore", "Vegetarian", "Vegan", "Pescatarian", "Other"], index=["Omnivore", "Vegetarian", "Vegan", "Pescatarian", "Other"].index(p.get("eating_pattern")) if p.get("eating_pattern") in ["Omnivore", "Vegetarian", "Vegan", "Pescatarian", "Other"] else 0)
-        occupation = st.text_input("Occupation (optional)", value=p.get("occupation", ""))
+        occupation = st.text_input("Occupation (optional)", value=p.get("occupation", ""), placeholder="e.g. Software engineer, teacher, homemaker")
 
     has_cycle = None
     if sex in ("Female", "Intersex"):
@@ -1127,6 +1174,11 @@ def onboarding_step2(user_id):
     st.markdown('<div class="pg-title">Your health history</div>', unsafe_allow_html=True)
     st.markdown('<div class="pg-sub">Nothing here is mandatory — skip anything you\'re unsure about. More context means more precise coaching.</div>', unsafe_allow_html=True)
 
+    row_placeholders = {
+        ("ob_conditions", "Condition"): "e.g. Hypothyroidism", ("ob_conditions", "Since / notes"): "e.g. Diagnosed 2021, on medication",
+        ("ob_meds", "Medication"): "e.g. Metformin", ("ob_meds", "Dose"): "e.g. 500mg", ("ob_meds", "Timing"): "e.g. Twice daily, with food",
+        ("ob_supps", "Supplement"): "e.g. Vitamin D3", ("ob_supps", "Dose"): "e.g. 2000 IU", ("ob_supps", "Timing"): "e.g. Morning, with breakfast",
+    }
     for key, label, cols in [("ob_conditions", "Diagnosed conditions", ["Condition", "Since / notes"]),
                               ("ob_meds", "Current medications", ["Medication", "Dose", "Timing"]),
                               ("ob_supps", "Current supplements", ["Supplement", "Dose", "Timing"])]:
@@ -1136,14 +1188,14 @@ def onboarding_step2(user_id):
         for i, row in enumerate(st.session_state[key]):
             rcols = st.columns(len(cols))
             for j, c in enumerate(cols):
-                row[c] = rcols[j].text_input(c, value=row.get(c, ""), key=f"{key}_{i}_{j}", label_visibility="collapsed" if i > 0 else "visible", placeholder=c)
+                row[c] = rcols[j].text_input(c, value=row.get(c, ""), key=f"{key}_{i}_{j}", label_visibility="collapsed" if i > 0 else "visible", placeholder=row_placeholders.get((key, c), c))
         if st.button(f"+ Add another", key=f"add_{key}"):
             st.session_state[key].append({c: "" for c in cols})
             st.rerun()
 
     c1, c2 = st.columns(2)
-    family_history = c1.text_area("Family history (optional)", value=st.session_state.get("ob_family_history", ""))
-    surgeries = c2.text_area("Past surgeries or significant events (optional)", value=st.session_state.get("ob_surgeries", ""))
+    family_history = c1.text_area("Family history (optional)", value=st.session_state.get("ob_family_history", ""), placeholder="e.g. Mother: hypothyroidism · Father: type 2 diabetes")
+    surgeries = c2.text_area("Past surgeries or significant events (optional)", value=st.session_state.get("ob_surgeries", ""), placeholder="e.g. Appendectomy (2015), C-section (2019)")
 
     def go_next():
         st.session_state.ob_family_history = family_history
@@ -1176,46 +1228,54 @@ def onboarding_step3(user_id):
     st.markdown('<div class="pg-title">Your lifestyle and goals</div>', unsafe_allow_html=True)
     st.markdown('<div class="pg-sub">The more specific you are here, the more precisely the coach can build your protocol.</div>', unsafe_allow_html=True)
 
-    primary_goal = st.text_area("Primary health goal — in your own words", value=st.session_state.get("ob_primary_goal", ""), height=80)
+    primary_goal = st.text_area("Primary health goal — in your own words", value=st.session_state.get("ob_primary_goal", ""), height=80, placeholder="e.g. Improve energy and fix chronic bloating")
 
     lp = db_get_single("profiles", user_id) or {}
 
     st.markdown('<div class="sl">Diet & activity</div>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     activity_level = c1.selectbox("Activity level", ACTIVITY_LEVELS, index=selectbox_index(ACTIVITY_LEVELS, lp.get("activity_level")))
-    restrictions = c2.text_input("Dietary restrictions or intolerances", value=lp.get("allergies", ""))
+    restrictions = c2.text_input("Dietary restrictions or intolerances", value=lp.get("allergies", ""), placeholder="e.g. Lactose intolerant, gluten-free, tree nut allergy")
     alcohol = c1.selectbox("Alcohol consumption", ALCOHOL_LEVELS, index=selectbox_index(ALCOHOL_LEVELS, lp.get("alcohol")))
     smoking = c2.selectbox("Smoking / tobacco", SMOKING_LEVELS, index=selectbox_index(SMOKING_LEVELS, lp.get("smoking")))
-    exercise_routine = st.text_area("Exercise routine", value=lp.get("exercise_routine", ""), height=60)
+    exercise_routine = st.text_area("Exercise routine", value=lp.get("exercise_routine", ""), height=60, placeholder="e.g. Weight training 4x/week, occasional running")
 
     st.markdown('<div class="sl">Sleep</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
-    bedtime = c1.text_input("Typical bedtime", value=lp.get("sleep_bedtime", ""), placeholder="11:00 pm")
-    wake_time = c2.text_input("Typical wake time", value=lp.get("sleep_wake_time", ""), placeholder="6:30 am")
-    sleep_duration = c3.text_input("Average sleep duration", value=lp.get("sleep_duration", ""), placeholder="6.5 hrs")
+    bedtime = dropdown_with_other(c1, "Typical bedtime", BEDTIME_OPTIONS, lp.get("sleep_bedtime", ""), key="ob_bedtime")
+    wake_time = dropdown_with_other(c2, "Typical wake time", WAKE_TIME_OPTIONS, lp.get("sleep_wake_time", ""), key="ob_wake_time")
+    sleep_duration = dropdown_with_other(c3, "Average sleep duration", SLEEP_DURATION_OPTIONS, lp.get("sleep_duration", ""), key="ob_sleep_duration", placeholder="e.g. 6.5 hrs")
     sleep_quality = st.slider("Sleep quality (self-rated)", 1, 10, int(lp.get("sleep_quality") or 5))
-    sleep_challenges = st.text_area("Sleep challenges (optional)", value=lp.get("sleep_challenges", ""), height=50)
+    sleep_challenges = st.text_area("Sleep challenges (optional)", value=lp.get("sleep_challenges", ""), height=50, placeholder="e.g. Wake around 3am and struggle to fall back asleep")
 
     st.markdown('<div class="sl">Eating schedule</div>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
-    first_meal = c1.text_input("First meal time", value=lp.get("first_meal", ""), placeholder="8:00 am")
-    last_meal = c2.text_input("Last meal time", value=lp.get("last_meal", ""), placeholder="8:30 pm")
+    first_meal = dropdown_with_other(c1, "First meal time", FIRST_MEAL_OPTIONS, lp.get("first_meal", ""), key="ob_first_meal")
+    last_meal = dropdown_with_other(c2, "Last meal time", LAST_MEAL_OPTIONS, lp.get("last_meal", ""), key="ob_last_meal")
     meals_per_day = c1.selectbox("Meals per day", MEALS_PER_DAY_OPTIONS, index=selectbox_index(MEALS_PER_DAY_OPTIONS, lp.get("meals_per_day")))
     eating_out = c2.selectbox("Eating out / ordering in", EATING_OUT_LEVELS, index=selectbox_index(EATING_OUT_LEVELS, lp.get("eating_out")))
-    food_prefs = st.text_area("Food preferences or patterns the coach should know about (optional)", value=lp.get("food_prefs", ""), height=60)
+    food_prefs = st.text_area("Food preferences or patterns the coach should know about (optional)", value=lp.get("food_prefs", ""), height=60, placeholder="e.g. Prefer home-cooked meals, avoid processed sugar, love spicy food")
 
     st.markdown('<div class="sl">Stress & wellbeing</div>', unsafe_allow_html=True)
     stress_level = st.slider("Current stress level", 1, 10, int(lp.get("stress_level") or 5))
-    stressors = st.text_input("Primary stressors", value=lp.get("stressors", ""))
-    symptoms = st.text_area("Current symptoms or main concerns — in your own words", value=lp.get("symptoms", ""), height=70)
-    anything_else = st.text_area("Anything else you'd like your coach to know (optional)", value=lp.get("anything_else", ""), height=50)
+    stressors = st.text_input("Primary stressors", value=lp.get("stressors", ""), placeholder="e.g. Work deadlines, financial pressure, caregiving")
+    symptoms = st.text_area("Current symptoms or main concerns — in your own words", value=lp.get("symptoms", ""), height=70, placeholder="e.g. Afternoon energy crashes, bloating after meals, brain fog")
+    anything_else = st.text_area("Anything else you'd like your coach to know (optional)", value=lp.get("anything_else", ""), height=50, placeholder="e.g. Upcoming travel, a recent life event, a specific worry")
 
     st.markdown('<div class="sl">Additional goals</div>', unsafe_allow_html=True)
     if "ob_extra_goals" not in st.session_state:
         st.session_state.ob_extra_goals = []
+    existing_goal_texts = {g.get("goal", "") for g in st.session_state.ob_extra_goals}
+    st.caption("Tap a suggestion to add it, or write your own below.")
+    sugg_cols = st.columns(4)
+    for i, sug in enumerate(GOAL_SUGGESTIONS):
+        with sugg_cols[i % 4]:
+            if sug not in existing_goal_texts and st.button(sug, key=f"goalsugg_{i}", use_container_width=True):
+                st.session_state.ob_extra_goals.append({"goal": sug, "timeframe": "3 months"})
+                st.rerun()
     for i, g in enumerate(st.session_state.ob_extra_goals):
         gc1, gc2 = st.columns([3, 1])
-        g["goal"] = gc1.text_input("Goal", value=g.get("goal", ""), key=f"eg_{i}", label_visibility="collapsed")
+        g["goal"] = gc1.text_input("Goal", value=g.get("goal", ""), key=f"eg_{i}", label_visibility="collapsed", placeholder="e.g. Run a 10k by June")
         g["timeframe"] = gc2.selectbox("Timeframe", ["1 month", "3 months", "6 months", "Ongoing"], key=f"egt_{i}", label_visibility="collapsed")
     if st.button("+ Add goal"):
         st.session_state.ob_extra_goals.append({"goal": "", "timeframe": "3 months"})
@@ -1262,20 +1322,25 @@ def onboarding_step4(user_id):
     st.markdown('<div class="pg-title">Your labs</div>', unsafe_allow_html=True)
     st.markdown('<div class="pg-sub">Labs are not optional — they\'re the foundation of a precise assessment. We need them to give you specific guidance rather than general recommendations. You have 7 days to upload your first report — your plan recommendation will be provisional until then.</div>', unsafe_allow_html=True)
 
-    if "ob_recommended_panel" not in st.session_state:
-        conditions = ", ".join(r.get("Condition", "") for r in st.session_state.get("ob_conditions", []) if r.get("Condition"))
-        goal = st.session_state.get("ob_primary_goal", "")
-        prompt = f"Patient's stated conditions: {conditions or 'none stated'}. Primary goal: {goal or 'not yet stated'}. Suggest the 12-20 most clinically relevant lab markers for this specific person to test first, grouped by category, in a short markdown table. Be specific to their picture — not a generic panel."
-        with st.spinner("Coach is selecting the most relevant markers for you..."):
-            st.session_state.ob_recommended_panel = ai_generate(
-                "You are OneSattva, a functional medicine practitioner selecting a lab panel for a specific new patient based on what little is known so far.",
-                prompt, max_tokens=1200)
-    st.markdown(st.session_state.ob_recommended_panel)
+    if st.session_state.get("ob_show_panel"):
+        if "ob_recommended_panel" not in st.session_state:
+            conditions = ", ".join(r.get("Condition", "") for r in st.session_state.get("ob_conditions", []) if r.get("Condition"))
+            goal = st.session_state.get("ob_primary_goal", "")
+            prompt = f"Patient's stated conditions: {conditions or 'none stated'}. Primary goal: {goal or 'not yet stated'}. Suggest the 12-20 most clinically relevant lab markers for this specific person to test first, grouped by category, in a short markdown table. Be specific to their picture — not a generic panel."
+            with st.spinner("Coach is selecting the most relevant markers for you..."):
+                st.session_state.ob_recommended_panel = ai_generate(
+                    "You are OneSattva, a functional medicine practitioner selecting a lab panel for a specific new patient based on what little is known so far.",
+                    prompt, max_tokens=1200)
+        st.markdown(st.session_state.ob_recommended_panel)
+    elif st.button("Confused about which tests to get? Let OneSattva guide you →"):
+        st.session_state.ob_show_panel = True
+        st.rerun()
 
     with st.expander("Upload or paste your lab values", expanded=True):
         report_date = st.date_input("Report date", value=date.today(), help="For uploaded files, we'll try to read the actual date off the document and use that instead — this is only the fallback if we can't find one, or if you're pasting values instead of uploading a file.")
         lab_files = st.file_uploader("Upload lab report(s) (PDF or image)", type=["pdf", "png", "jpg", "jpeg"], accept_multiple_files=True, help="We'll extract and interpret the values automatically. You can upload more than one file.")
-        raw_values = st.text_area("Or paste values directly (marker: value, one per line, or freeform)", height=120)
+        raw_values = st.text_area("Or paste values directly (marker: value, one per line, or freeform)", height=120,
+                                   placeholder="e.g.\nVitamin D: 28 ng/mL\nTSH: 3.2 mIU/L\nFerritin: 45 ng/mL")
 
         if st.button("Upload & analyse"):
             attempted = 0
@@ -1944,9 +2009,34 @@ Respond with ONLY valid JSON: {{"material": true/false, "level": "roadmap"|"mont
 
 
 # ── Check-In Page ─────────────────────────────────────────────────────────────
-CHECKIN_METRICS = ["energy", "mental_clarity", "sleep_quality", "mood", "gut", "libido"]
-CHECKIN_LABELS = {"energy": "Energy", "mental_clarity": "Mental clarity", "sleep_quality": "Sleep quality",
-                   "mood": "Mood", "gut": "Gut / digestion", "libido": "Libido"}
+# Universal metrics — tracked for everyone. Anything beyond these is personalized
+# per-user (see get_or_generate_checkin_metrics) instead of forced on everyone.
+CHECKIN_METRICS = ["energy", "mental_clarity", "sleep_quality", "mood"]
+CHECKIN_LABELS = {"energy": "Energy", "mental_clarity": "Mental clarity", "sleep_quality": "Sleep quality", "mood": "Mood"}
+
+
+def get_or_generate_checkin_metrics(user_id, profile):
+    """Each person's bio-individual check-in fields, beyond the 4 universal metrics —
+    generated once from their stated symptoms/conditions/goals, cached in checkin_metric_defs."""
+    existing = db_get("checkin_metric_defs", user_id, order_col=None)
+    if existing:
+        return sorted(existing, key=lambda m: m.get("sort_order", 0))
+    conditions = ", ".join(g.get("goal", "") for g in db_get("goals", user_id))
+    prompt = f"""Patient's stated symptoms: {profile.get('symptoms') or 'none stated'}. Stressors: {profile.get('stressors') or 'none stated'}. Goals: {conditions or 'none stated'}.
+Suggest 2-4 check-in metrics specific to THIS person's actual picture, beyond generic energy/sleep/mood/mental-clarity (which are already tracked for everyone). E.g. someone with joint pain gets a joint-stiffness metric; someone with no gut complaints gets no gut metric at all.
+Return ONLY a JSON array, each item: {{"key": "snake_case_key", "label": "Short label", "type": "slider"}} for a 1-10 scale, or {{"key": "...", "label": "...", "type": "select", "options": ["...", "..."]}} for a short qualitative list (3-5 options)."""
+    raw = ai_generate("You are OneSattva, a functional medicine practitioner choosing what to track daily for a specific patient.", prompt, max_tokens=500)
+    try:
+        match = re.search(r"\[.*\]", raw, re.DOTALL)
+        metrics = json.loads(match.group(0) if match else raw)
+    except Exception:
+        metrics = []
+    for i, m in enumerate(metrics):
+        db_insert("checkin_metric_defs", {
+            "user_id": user_id, "metric_key": m["key"], "label": m["label"], "input_type": m["type"],
+            "options_json": json.dumps(m.get("options", [])) if m["type"] == "select" else None, "sort_order": i,
+        })
+    return [{"metric_key": m["key"], "label": m["label"], "input_type": m["type"], "options_json": json.dumps(m.get("options", []))} for m in metrics]
 
 
 def get_or_generate_checkin_insight(user_id, sys_prompt, force=False):
@@ -1979,6 +2069,8 @@ def show_checkin(user_id, profile):
 
     editing = st.session_state.get("checkin_editing", False)
 
+    metric_defs = get_or_generate_checkin_metrics(user_id, profile or {})
+
     if today_checkin and not editing:
         sys_prompt = build_system_prompt(user_id, profile, has_cycle=has_cycle)
         insight = get_or_generate_checkin_insight(user_id, sys_prompt)
@@ -1988,9 +2080,13 @@ def show_checkin(user_id, profile):
 <div class="ib-txt">{insight}</div>
 </div>""", unsafe_allow_html=True)
         cols = st.columns(4)
-        for i, m in enumerate(["energy", "mental_clarity", "sleep_quality", "mood"]):
+        for i, m in enumerate(CHECKIN_METRICS):
             with cols[i]:
                 st.markdown(f'<div class="snap-box"><div class="snap-lbl">{CHECKIN_LABELS[m]}</div><div class="snap-val">{today_checkin.get(m,"—")}<span style="font-size:13px;color:var(--mid)">/10</span></div></div>', unsafe_allow_html=True)
+        if metric_defs:
+            today_custom = json.loads(today_checkin.get("custom_metrics") or "{}")
+            custom_str = " · ".join(f"{m['label']}: {today_custom.get(m['metric_key'], '—')}" for m in metric_defs)
+            st.caption(custom_str)
         if today_checkin.get("notes"):
             st.caption(today_checkin["notes"])
         if st.button("✏️ Edit today's check-in"):
@@ -2000,6 +2096,7 @@ def show_checkin(user_id, profile):
 
     yesterday = db_get("checkins", user_id, order_col="checkin_date", limit=2)
     prefill = today_checkin or (yesterday[1] if len(yesterday) > 1 else (yesterday[0] if yesterday else {}))
+    prefill_custom = json.loads(prefill.get("custom_metrics") or "{}")
 
     c1, c2 = st.columns(2)
     vals = {}
@@ -2008,19 +2105,26 @@ def show_checkin(user_id, profile):
         vals["energy"] = st.slider("energy", 1, 10, int(prefill.get("energy", 5) or 5), label_visibility="collapsed")
         st.markdown(f'<p class="ci-lbl">{CHECKIN_LABELS["sleep_quality"]}</p>', unsafe_allow_html=True)
         vals["sleep_quality"] = st.slider("sleep_quality", 1, 10, int(prefill.get("sleep_quality", 5) or 5), label_visibility="collapsed")
-        st.markdown(f'<p class="ci-lbl">{CHECKIN_LABELS["gut"]}</p>', unsafe_allow_html=True)
-        vals["gut"] = st.selectbox("gut", ["Excellent", "Good", "Bloated", "Uncomfortable", "Poor"],
-                                    index=["Excellent", "Good", "Bloated", "Uncomfortable", "Poor"].index(prefill.get("gut")) if prefill.get("gut") in ["Excellent", "Good", "Bloated", "Uncomfortable", "Poor"] else 1,
-                                    label_visibility="collapsed")
     with c2:
         st.markdown(f'<p class="ci-lbl">{CHECKIN_LABELS["mental_clarity"]}</p>', unsafe_allow_html=True)
         vals["mental_clarity"] = st.slider("mental_clarity", 1, 10, int(prefill.get("mental_clarity", 5) or 5), label_visibility="collapsed")
         st.markdown(f'<p class="ci-lbl">{CHECKIN_LABELS["mood"]}</p>', unsafe_allow_html=True)
         vals["mood"] = st.slider("mood", 1, 10, int(prefill.get("mood", 5) or 5), label_visibility="collapsed")
-        st.markdown(f'<p class="ci-lbl">{CHECKIN_LABELS["libido"]}</p>', unsafe_allow_html=True)
-        vals["libido"] = st.selectbox("libido", ["High", "Normal", "Low", "Very low"],
-                                       index=["High", "Normal", "Low", "Very low"].index(prefill.get("libido")) if prefill.get("libido") in ["High", "Normal", "Low", "Very low"] else 1,
-                                       label_visibility="collapsed")
+
+    custom_vals = {}
+    if metric_defs:
+        st.markdown('<div class="sl">Your focus areas</div>', unsafe_allow_html=True)
+        mcols = st.columns(2)
+        for i, m in enumerate(metric_defs):
+            key, label, itype = m["metric_key"], m["label"], m["input_type"]
+            with mcols[i % 2]:
+                st.markdown(f'<p class="ci-lbl">{label}</p>', unsafe_allow_html=True)
+                if itype == "slider":
+                    custom_vals[key] = st.slider(key, 1, 10, int(prefill_custom.get(key, 5) or 5), label_visibility="collapsed", key=f"cm_{key}")
+                else:
+                    options = json.loads(m.get("options_json") or "[]")
+                    idx = options.index(prefill_custom[key]) if prefill_custom.get(key) in options else 0
+                    custom_vals[key] = st.selectbox(key, options, index=idx, label_visibility="collapsed", key=f"cm_{key}")
 
     c3, c4 = st.columns(2)
     sleep_hours = c3.number_input("Sleep hours", min_value=0.0, max_value=14.0, step=0.5, value=float(prefill.get("sleep_hours", 7) or 7))
@@ -2029,7 +2133,8 @@ def show_checkin(user_id, profile):
     notes = st.text_area("Notes (optional)", value=prefill.get("notes", "") if today_checkin else "", placeholder="Anything notable today — symptoms, observations, questions for your coach...")
 
     if st.button("Save today's check-in →", type="primary"):
-        row = {"user_id": user_id, "checkin_date": today_str, "sleep_hours": sleep_hours, "workout": workout, "notes": notes, **vals}
+        row = {"user_id": user_id, "checkin_date": today_str, "sleep_hours": sleep_hours, "workout": workout, "notes": notes,
+               "custom_metrics": json.dumps(custom_vals), **vals}
         db_upsert("checkins", row, on_conflict="user_id,checkin_date")
         supabase.table("checkin_insights").delete().eq("user_id", user_id).eq("for_date", today_str).execute()
         st.session_state.checkin_editing = False
@@ -2153,6 +2258,7 @@ def show_profile_user(user_id, profile):
 <div class="pr"><span class="pr-k">Location</span><span class="pr-v">{p.get('location','—')}</span></div>
 <div class="pr"><span class="pr-k">Height</span><span class="pr-v">{p.get('height_cm','—')} cm</span></div>
 <div class="pr"><span class="pr-k">Weight</span><span class="pr-v">{p.get('weight_kg','—')} kg</span></div>
+<div class="pr"><span class="pr-k">Blood group</span><span class="pr-v">{p.get('blood_group') or '—'}</span></div>
 <div class="pr"><span class="pr-k">Occupation</span><span class="pr-v">{p.get('occupation') or '—'}</span></div>
 """, unsafe_allow_html=True)
             with st.expander("Edit demographics"):
@@ -2162,6 +2268,7 @@ def show_profile_user(user_id, profile):
                 edc1, edc2 = st.columns(2)
                 ed_country = edc1.selectbox("Country", COUNTRIES, index=COUNTRIES.index(ed_existing_country) if ed_existing_country in COUNTRIES else len(COUNTRIES) - 1, key="ed_country")
                 ed_city = edc2.text_input("City", value=ed_existing_city, key="ed_city")
+                ed_blood_group = st.selectbox("Blood group", BLOOD_GROUPS, index=selectbox_index(BLOOD_GROUPS, p.get("blood_group"), default=len(BLOOD_GROUPS) - 1), key="ed_bg")
                 occupation = st.text_input("Occupation", value=p.get("occupation", ""), key="ed_occ")
                 has_cycle_now = p.get("has_cycle", False)
                 new_has_cycle = has_cycle_now
@@ -2169,7 +2276,8 @@ def show_profile_user(user_id, profile):
                     new_has_cycle = st.checkbox("I currently have a menstrual cycle to track", value=bool(has_cycle_now), key="ed_hc")
                 if st.button("Save changes", key="save_demo"):
                     ed_location = ", ".join(x for x in [ed_city.strip(), ed_country] if x)
-                    db_upsert("profiles", {"id": user_id, "height_cm": height, "weight_kg": weight, "location": ed_location, "occupation": occupation, "has_cycle": bool(new_has_cycle)})
+                    db_upsert("profiles", {"id": user_id, "height_cm": height, "weight_kg": weight, "location": ed_location,
+                                            "blood_group": ed_blood_group, "occupation": occupation, "has_cycle": bool(new_has_cycle)})
                     st.success("Saved.")
                     st.rerun()
     with c2:
@@ -2266,8 +2374,8 @@ def show_profile_user(user_id, profile):
 """, unsafe_allow_html=True)
         with st.expander("Edit eating schedule & food preferences"):
             ec1, ec2 = st.columns(2)
-            ed_first_meal = ec1.text_input("First meal time", value=p.get("first_meal", ""), key="ed_first_meal")
-            ed_last_meal = ec2.text_input("Last meal time", value=p.get("last_meal", ""), key="ed_last_meal")
+            ed_first_meal = dropdown_with_other(ec1, "First meal time", FIRST_MEAL_OPTIONS, p.get("first_meal", ""), key="ed_first_meal")
+            ed_last_meal = dropdown_with_other(ec2, "Last meal time", LAST_MEAL_OPTIONS, p.get("last_meal", ""), key="ed_last_meal")
             ed_meals_per_day = ec1.selectbox("Meals per day", MEALS_PER_DAY_OPTIONS, index=selectbox_index(MEALS_PER_DAY_OPTIONS, p.get("meals_per_day")), key="ed_meals_per_day")
             ed_eating_out = ec2.selectbox("Eating out / ordering in", EATING_OUT_LEVELS, index=selectbox_index(EATING_OUT_LEVELS, p.get("eating_out")), key="ed_eating_out")
             ed_food_prefs = st.text_area("Food preferences or patterns the coach should know about", value=p.get("food_prefs", ""), height=80, key="ed_food_prefs")
@@ -2309,9 +2417,9 @@ def show_profile_user(user_id, profile):
 """, unsafe_allow_html=True)
         with st.expander("Edit sleep"):
             sc1, sc2, sc3 = st.columns(3)
-            ed_bedtime = sc1.text_input("Typical bedtime", value=p.get("sleep_bedtime", ""), key="ed_bedtime")
-            ed_wake_time = sc2.text_input("Typical wake time", value=p.get("sleep_wake_time", ""), key="ed_wake_time")
-            ed_sleep_duration = sc3.text_input("Average sleep duration", value=p.get("sleep_duration", ""), key="ed_sleep_duration")
+            ed_bedtime = dropdown_with_other(sc1, "Typical bedtime", BEDTIME_OPTIONS, p.get("sleep_bedtime", ""), key="ed_bedtime")
+            ed_wake_time = dropdown_with_other(sc2, "Typical wake time", WAKE_TIME_OPTIONS, p.get("sleep_wake_time", ""), key="ed_wake_time")
+            ed_sleep_duration = dropdown_with_other(sc3, "Average sleep duration", SLEEP_DURATION_OPTIONS, p.get("sleep_duration", ""), key="ed_sleep_duration", placeholder="e.g. 6.5 hrs")
             ed_sleep_quality = st.slider("Sleep quality (self-rated)", 1, 10, int(p.get("sleep_quality") or 5), key="ed_sleep_quality")
             ed_sleep_challenges = st.text_area("Sleep challenges", value=p.get("sleep_challenges", ""), height=60, key="ed_sleep_challenges")
             if st.button("Save sleep", key="save_sleep"):

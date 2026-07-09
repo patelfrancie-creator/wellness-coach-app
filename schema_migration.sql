@@ -291,3 +291,31 @@ create table if not exists lab_trends (
 alter table lab_trends enable row level security;
 create policy "Users can manage own lab trends" on lab_trends
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Round 9: bio-individual check-in parameters. The 4 universal metrics
+-- (energy, mental_clarity, sleep_quality, mood) stay as fixed columns on
+-- checkins — everyone benefits from tracking those. Everything else is now
+-- personalized per-user instead of forcing the same gut/libido fields on
+-- everyone; personalized values live in the new custom_metrics jsonb column,
+-- keyed by metric_key from checkin_metric_defs. Old gut/libido columns are
+-- left in place untouched for existing beta-tester history.
+-- ═══════════════════════════════════════════════════════════════════════════
+create table if not exists checkin_metric_defs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,
+  metric_key text not null,
+  label text not null,
+  input_type text not null check (input_type in ('slider', 'select')),
+  options_json text,              -- JSON list of option strings, only for input_type='select'
+  sort_order int default 0,
+  created_at timestamptz default now(),
+  unique (user_id, metric_key)
+);
+
+alter table checkin_metric_defs enable row level security;
+create policy "Users can manage own checkin metric defs" on checkin_metric_defs
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- JSON string of {metric_key: value}, same text+json.dumps/loads convention as daily_priorities.priorities_json
+alter table checkins add column if not exists custom_metrics text default '{}';
