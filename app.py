@@ -249,6 +249,12 @@ html, body, [class*="css"] {{ font-family: 'Inter', sans-serif; }}
 .t-bg    {{ background:transparent; color:var(--mid); font-style:italic; padding-left:0; }}
 .pc-title {{ font-size:13px; font-weight:500; color:var(--graphite); margin-bottom:4px; }}
 .pc-body  {{ font-size:11.5px; color:var(--mid); line-height:1.55; }}
+.pc-title.done {{ text-decoration:line-through; text-decoration-color:var(--stone); }}
+.consist-dot {{ width:30px; height:30px; border-radius:50%; border:1.5px solid var(--stone); display:flex; align-items:center; justify-content:center; font-size:10px; color:var(--mid); }}
+.consist-dot.on {{ background:var(--copper); border-color:var(--copper); color:var(--bone); }}
+.consist-dot.today {{ box-shadow:0 0 0 2.5px rgba(182,116,74,0.30); }}
+.adh-bar-track {{ background:var(--stone); border-radius:20px; height:7px; overflow:hidden; }}
+.adh-bar-fill {{ background:var(--copper); height:100%; border-radius:20px; }}
 
 .goal-card {{ background:var(--forest); border-radius:12px; padding:16px 20px; margin-bottom:14px; }}
 .gc-lbl {{ font-size:10px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:rgba(247,245,242,0.36); margin-bottom:5px; }}
@@ -1614,6 +1620,9 @@ def show_sidebar(user_id, profile):
 
 
 # ── Daily priorities cache (once per calendar day, DB-backed) ────────────────
+TRIAGE_WEIGHT = {"now": 3, "watch": 2, "background": 1}
+
+
 def get_or_generate_daily_priorities(user_id, sys_prompt, force=False):
     today_str = date.today().isoformat()
     if not force:
@@ -1632,8 +1641,94 @@ triage "now" = act today, "watch" = monitor closely, "background" = lower urgenc
         priorities = json.loads(match.group(0) if match else raw)
     except Exception:
         priorities = [{"triage": "background", "title": "Coach is still building today's read", "body": raw[:200]}]
+    for p in priorities:
+        p["done"] = False
     supabase.table("daily_priorities").upsert({"user_id": user_id, "for_date": today_str, "priorities_json": json.dumps(priorities)}, on_conflict="user_id,for_date").execute()
     return priorities
+
+
+def toggle_priority_done(user_id, for_date_str, priorities, index):
+    priorities[index]["done"] = not priorities[index].get("done", False)
+    supabase.table("daily_priorities").upsert({"user_id": user_id, "for_date": for_date_str, "priorities_json": json.dumps(priorities)}, on_conflict="user_id,for_date").execute()
+
+
+def compute_priority_adherence(user_id, today):
+    """Weighted completion this week vs the person's own trailing baseline — 'off track' is a
+    real drop from their norm, not a universal number, so someone who's always around 50% doesn't
+    get nudged for being themselves. Falls back to a flat 50% floor for their first weeks, before
+    there's enough history to know what's normal for them."""
+    rows = db_get("daily_priorities", user_id, order_col="for_date", limit=28)
+    week_start = today - timedelta(days=6)
+    baseline_start = today - timedelta(days=27)
+    baseline_end = today - timedelta(days=7)
+
+    def weighted(rows_subset):
+        done_w = total_w = done_n = total_n = 0
+        for r in rows_subset:
+            try:
+                items = json.loads(r.get("priorities_json") or "[]")
+            except Exception:
+                continue
+            for it in items:
+                w = TRIAGE_WEIGHT.get(it.get("triage", "background"), 1)
+                total_w += w
+                total_n += 1
+                if it.get("done"):
+                    done_w += w
+                    done_n += 1
+        return done_w, total_w, done_n, total_n
+
+    week_rows = [r for r in rows if r.get("for_date") and week_start.isoformat() <= r["for_date"] <= today.isoformat()]
+    baseline_rows = [r for r in rows if r.get("for_date") and baseline_start.isoformat() <= r["for_date"] <= baseline_end.isoformat()]
+
+    done_w, total_w, done_n, total_n = weighted(week_rows)
+    this_week_pct = round(done_w / total_w * 100) if total_w else None
+    b_done_w, b_total_w, _, _ = weighted(baseline_rows)
+    baseline_pct = round(b_done_w / b_total_w * 100) if b_total_w >= 10 else None
+
+    off_track = False
+    if this_week_pct is not None and total_n >= 2:
+        if baseline_pct is not None:
+            off_track = this_week_pct <= 70 and (baseline_pct - this_week_pct) >= 30
+        else:
+            off_track = this_week_pct < 50
+
+    return {"done_count": done_n, "total_count": total_n, "this_week_pct": this_week_pct if this_week_pct is not None else 0,
+            "baseline_pct": baseline_pct, "off_track": off_track}
+
+
+def get_or_generate_adherence_nudge(user_id, sys_prompt, adherence, force=False):
+    today_str = date.today().isoformat()
+    if not force:
+        existing = supabase.table("adherence_nudges").select("*").eq("user_id", user_id).eq("for_date", today_str).limit(1).execute()
+        if existing.data:
+            return existing.data[0]["nudge_text"]
+    baseline_note = f"their own recent baseline of {adherence['baseline_pct']}%" if adherence.get("baseline_pct") is not None else "a reasonable starting bar"
+    prompt = f"""This person's protocol completion has dropped to {adherence['this_week_pct']}% this week ({adherence['done_count']} of {adherence['total_count']} priorities), versus {baseline_note}.
+Write one short, direct, first-person note (2-3 sentences, your voice) naming the drop plainly and asking what's actually getting in the way — not guilt-tripping, not generic encouragement. This should read as genuine concern from a coach who noticed, not an automated alert."""
+    nudge = ai_generate(sys_prompt, prompt, max_tokens=200)
+    supabase.table("adherence_nudges").upsert({"user_id": user_id, "for_date": today_str, "nudge_text": nudge}, on_conflict="user_id,for_date").execute()
+    return nudge
+
+
+def render_consistency(user_id, profile):
+    today = user_now(profile).date()
+    checkins_30 = db_get("checkins", user_id, order_col="checkin_date", limit=30)
+    dates_with_checkin = {c["checkin_date"] for c in checkins_30 if c.get("checkin_date")}
+    last_30_count = sum(1 for d in dates_with_checkin if (today - date.fromisoformat(d)).days < 30)
+
+    st.markdown('<div class="sl">Your consistency</div>', unsafe_allow_html=True)
+    dots = ""
+    for i in range(6, -1, -1):
+        d = today - timedelta(days=i)
+        on = " on" if d.isoformat() in dates_with_checkin else ""
+        today_ring = " today" if d == today else ""
+        dots += f'<div class="consist-dot{on}{today_ring}">{d.strftime("%a")[0]}</div>'
+    st.markdown(f"""
+<div style="display:flex;gap:8px;margin-bottom:11px">{dots}</div>
+<div style="font-size:14px;color:var(--graphite);margin-bottom:3px"><span style="font-family:'JetBrains Mono',monospace;font-weight:500">{last_30_count}</span> of last 30 days checked in</div>
+<div style="font-size:11.5px;color:var(--mid);margin-bottom:16px">Consistency, not perfection — a missed day doesn't reset anything.</div>
+""", unsafe_allow_html=True)
 
 
 def greeting(profile=None):
@@ -1719,9 +1814,13 @@ def show_home(user_id, profile):
     else:
         st.markdown('<div style="border:1.5px dashed var(--stone);border-radius:10px;padding:16px;text-align:center;color:var(--mid);margin-bottom:14px">No labs on file yet — upload from Profile & Data to see flagged findings here.</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="sl">Today\'s priorities</div>', unsafe_allow_html=True)
     has_cycle = profile.get("has_cycle", False) if profile else False
     sys_prompt = build_system_prompt(user_id, profile, has_cycle=has_cycle)
+
+    render_consistency(user_id, profile)
+
+    st.markdown('<div class="sl">Today\'s priorities</div>', unsafe_allow_html=True)
+    today_str = user_now(profile).date().isoformat()
     priorities = get_or_generate_daily_priorities(user_id, sys_prompt)
     triage_class = {"now": "t-now", "watch": "t-watch", "background": "t-bg"}
     triage_label = {"now": "Act today", "watch": "Watch", "background": "Background"}
@@ -1729,11 +1828,31 @@ def show_home(user_id, profile):
     for i, p in enumerate(priorities[:3]):
         with cols[i]:
             t = p.get("triage", "background")
+            done = p.get("done", False)
             st.markdown(f"""
-<div class="prio-card">
+<div class="prio-card" style="{'opacity:0.55' if done else ''}">
 <span class="triage {triage_class.get(t,'t-bg')}">{triage_label.get(t,'Background')}</span>
-<div class="pc-title">{p.get('title','')}</div>
+<div class="pc-title{' done' if done else ''}">{p.get('title','')}</div>
 <div class="pc-body">{p.get('body','')}</div>
+</div>""", unsafe_allow_html=True)
+            if st.button("↺ Undo" if done else "✓ Mark done", key=f"prio_toggle_{today_str}_{i}", use_container_width=True):
+                toggle_priority_done(user_id, today_str, priorities, i)
+                st.rerun()
+
+    adherence = compute_priority_adherence(user_id, user_now(profile).date())
+    st.markdown(f"""
+<div style="margin-top:2px">
+<div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--mid);margin-bottom:6px">
+<span>This week</span><span style="font-family:'JetBrains Mono',monospace;color:var(--graphite)">{adherence['done_count']} / {adherence['total_count']}</span>
+</div>
+<div class="adh-bar-track"><div class="adh-bar-fill" style="width:{adherence['this_week_pct']}%"></div></div>
+</div>""", unsafe_allow_html=True)
+    if adherence["off_track"]:
+        nudge = get_or_generate_adherence_nudge(user_id, sys_prompt, adherence)
+        st.markdown(f"""
+<div class="material-flag" style="margin-top:14px">
+<div class="mf-lbl">From your coach</div>
+<div class="mf-txt" style="font-family:'Newsreader',serif;font-style:italic">{nudge}</div>
 </div>""", unsafe_allow_html=True)
 
     st.markdown('<div class="sl">Today\'s snapshot</div>', unsafe_allow_html=True)

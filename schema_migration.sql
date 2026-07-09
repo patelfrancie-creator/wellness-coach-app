@@ -319,3 +319,23 @@ create policy "Users can manage own checkin metric defs" on checkin_metric_defs
 
 -- JSON string of {metric_key: value}, same text+json.dumps/loads convention as daily_priorities.priorities_json
 alter table checkins add column if not exists custom_metrics text default '{}';
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Round 10: gentle check-in consistency (reads existing checkins, no schema
+-- change needed there) + firm protocol adherence. Priority completion state
+-- lives inline in daily_priorities.priorities_json (each item gets a "done"
+-- key) — no new table needed for that either. This table only caches the
+-- coach's adherence nudge once per day, same shape as checkin_insights.
+-- ═══════════════════════════════════════════════════════════════════════════
+create table if not exists adherence_nudges (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,
+  for_date date not null,
+  nudge_text text not null,
+  generated_at timestamptz default now(),
+  unique (user_id, for_date)
+);
+
+alter table adherence_nudges enable row level security;
+create policy "Users can manage own adherence nudges" on adherence_nudges
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
