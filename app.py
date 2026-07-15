@@ -1189,16 +1189,16 @@ def onboarding_step1(user_id, profile):
 # ── Step 2 — Health history ───────────────────────────────────────────────
 def onboarding_step2(user_id):
     st.markdown('<div class="pg-title">Your health history</div>', unsafe_allow_html=True)
-    st.markdown('<div class="pg-sub">Nothing here is mandatory — skip anything you\'re unsure about. More context means more precise coaching.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="pg-sub">Nothing here is mandatory — skip anything you\'re unsure about. Just the names for now; your coach will ask about dose and timing when it\'s actually relevant, so this doesn\'t turn into a form marathon.</div>', unsafe_allow_html=True)
 
     row_placeholders = {
-        ("ob_conditions", "Condition"): "e.g. Hypothyroidism", ("ob_conditions", "Since / notes"): "e.g. Diagnosed 2021, on medication",
-        ("ob_meds", "Medication"): "e.g. Metformin", ("ob_meds", "Dose"): "e.g. 500mg", ("ob_meds", "Timing"): "e.g. Twice daily, with food",
-        ("ob_supps", "Supplement"): "e.g. Vitamin D3", ("ob_supps", "Dose"): "e.g. 2000 IU", ("ob_supps", "Timing"): "e.g. Morning, with breakfast",
+        ("ob_conditions", "Condition"): "e.g. Hypothyroidism",
+        ("ob_meds", "Medication"): "e.g. Metformin",
+        ("ob_supps", "Supplement"): "e.g. Vitamin D3",
     }
-    for key, label, cols in [("ob_conditions", "Diagnosed conditions", ["Condition", "Since / notes"]),
-                              ("ob_meds", "Current medications", ["Medication", "Dose", "Timing"]),
-                              ("ob_supps", "Current supplements", ["Supplement", "Dose", "Timing"])]:
+    for key, label, cols in [("ob_conditions", "Diagnosed conditions", ["Condition"]),
+                              ("ob_meds", "Current medications", ["Medication"]),
+                              ("ob_supps", "Current supplements", ["Supplement"])]:
         if key not in st.session_state:
             st.session_state[key] = [{c: "" for c in cols}]
         st.markdown(f'<div class="sl">{label}</div>', unsafe_allow_html=True)
@@ -1870,6 +1870,53 @@ def greeting(profile=None):
     return "Good morning" if h < 12 else "Good afternoon" if h < 18 else "Good evening"
 
 
+# ── Deferred onboarding detail — dose/timing/notes skipped at Step 2, asked later ──
+def get_profile_detail_gaps(user_id):
+    meds = [m for m in db_get("medications", user_id) if m.get("active", True) and not (m.get("dose") or "").strip() and not (m.get("frequency") or "").strip()]
+    supps = [s for s in db_get("supplements", user_id) if s.get("active", True) and not (s.get("dose") or "").strip() and not (s.get("timing") or "").strip()]
+    conditions = [c for c in db_get("medical_history", user_id) if not (c.get("notes") or "").strip()]
+    return meds, supps, conditions
+
+
+def render_profile_detail_nudge(user_id):
+    meds, supps, conditions = get_profile_detail_gaps(user_id)
+    if not (meds or supps or conditions) or st.session_state.get("hide_detail_nudge"):
+        return
+    names = [m["name"] for m in meds] + [s["name"] for s in supps] + [c["condition"] for c in conditions]
+    st.markdown(f"""
+<div class="material-flag">
+<div class="mf-lbl">From your coach</div>
+<div class="mf-txt">You mentioned {', '.join(names)} during onboarding — I'd like the dose/timing detail on these whenever you have a moment.</div>
+</div>""", unsafe_allow_html=True)
+    with st.expander("Add the missing detail"):
+        for m in meds:
+            c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
+            c1.markdown(f"**{m['name']}**")
+            dose = c2.text_input("Dose", key=f"gap_med_dose_{m['id']}", placeholder="e.g. 500mg", label_visibility="collapsed")
+            timing = c3.text_input("Timing", key=f"gap_med_time_{m['id']}", placeholder="e.g. Twice daily, with food", label_visibility="collapsed")
+            if c4.button("Save", key=f"gap_med_save_{m['id']}") and (dose or timing):
+                db_upsert("medications", {"id": m["id"], "dose": dose, "frequency": timing})
+                st.rerun()
+        for s in supps:
+            c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
+            c1.markdown(f"**{s['name']}**")
+            dose = c2.text_input("Dose", key=f"gap_supp_dose_{s['id']}", placeholder="e.g. 2000 IU", label_visibility="collapsed")
+            timing = c3.text_input("Timing", key=f"gap_supp_time_{s['id']}", placeholder="e.g. Morning, with breakfast", label_visibility="collapsed")
+            if c4.button("Save", key=f"gap_supp_save_{s['id']}") and (dose or timing):
+                db_upsert("supplements", {"id": s["id"], "dose": dose, "timing": timing})
+                st.rerun()
+        for c in conditions:
+            cc1, cc2, cc3 = st.columns([2, 4, 1])
+            cc1.markdown(f"**{c['condition']}**")
+            notes = cc2.text_input("Since / notes", key=f"gap_cond_notes_{c['id']}", placeholder="e.g. Diagnosed 2021, on medication", label_visibility="collapsed")
+            if cc3.button("Save", key=f"gap_cond_save_{c['id']}") and notes:
+                db_upsert("medical_history", {"id": c["id"], "notes": notes})
+                st.rerun()
+    if st.button("Not now", key="detail_gap_dismiss"):
+        st.session_state.hide_detail_nudge = True
+        st.rerun()
+
+
 # ── Home Page ─────────────────────────────────────────────────────────────────
 def show_home(user_id, profile):
     plan = get_plan_info(user_id, profile)
@@ -1906,6 +1953,8 @@ def show_home(user_id, profile):
     first_name = ((profile.get("full_name") or "") if profile else "").split(" ")[0] or "there"
     st.markdown(f'<div class="pg-title" style="margin-bottom:2px">{greeting(profile)}, {first_name}.</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="pg-sub">{user_now(profile).strftime("%A, %d %B %Y")} · Here\'s what matters today.</div>', unsafe_allow_html=True)
+
+    render_profile_detail_nudge(user_id)
 
     goals = db_get("goals", user_id)
     primary_goals = [g for g in goals if g.get("timeframe") == "Primary"]
