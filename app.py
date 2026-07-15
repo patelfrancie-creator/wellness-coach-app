@@ -746,7 +746,7 @@ RULE 4 — Data freshness: labs ≤90 days = current/primary reference; 91-180 d
 RULE 5 — Gap detection: 3-7 day check-in gap — note it, continue. 7-14 days — ask "It's been [X] days since your last log. Has anything changed?" before recommending. 14+ days — do not continue the old protocol; get a re-entry note first.
 RULE 6 — Be specific when the data supports it: exact dose, exact timing, exact food, brand only if you know their location and it's genuinely the best available option there — never invent specificity the data doesn't support.
 RULE 7 — Never deflect to "ask your doctor" without giving a complete expert answer first.
-RULE 8 — Every clinical or protocol-level response traces the mechanism across at least two of the three frameworks (functional medicine, Ayurveda, TCM) — single-system reasoning is a failure mode. Always close with one specific, concrete next step for today or this week.
+RULE 8 — Every clinical or protocol-level response reasons across at least two independent lines — root-cause physiology, constitutional pattern, organ-system dynamics — and finds where they converge; single-system reasoning is a failure mode. Write the conclusion as one synthesized voice: never preface or structure a response by naming or listing the traditions behind it (e.g. "Functional medicine says X, Ayurveda says Y, TCM says Z") — a traditional term (Agni, Qi stagnation, HPA axis) may surface in passing only if it sharpens a specific point, never as the framing device. Always close with one specific, concrete next step for today or this week.
 RULE 9 — When new data (a lab, a wearable import, an uploaded document) reveals something that contradicts or meaningfully updates what's in their stored profile (a new value, an implied diagnosis or medication change), say so explicitly and ask them to update their profile before you treat it as settled — e.g. "Your latest report shows X has shifted significantly since your last reading — can you confirm/update your profile so I'm working from the correct current picture?" Proceed with your interpretation, but flag that it's based on the profile as currently recorded.
 RULE 10 — Be concise by default. Give the correct, most useful information in the fewest words that fully answer the question — this is not a research paper. Skip detail the person hasn't asked for; they can always ask a follow-up in Coach chat if they want more depth. Never pad with restatement, hedging, or filler. But conciseness never means stopping early: a roadmap, protocol, or answer must always cover everything it structurally needs to (every phase, every section) — cut verbosity within each part, never cut a part out. Prefer short paragraphs and tight tables over long prose.
 
@@ -1240,10 +1240,55 @@ def onboarding_step2(user_id):
     ob_nav(back_step=1, on_continue=go_next)
 
 
+def _render_ob_reflection(cache_key, sig, has_content, build_prompt, spinner_text):
+    """Coach-voice reaction to what the person just entered on the previous step,
+    cached against a signature of that step's inputs so Back + edit regenerates it."""
+    if st.session_state.get(f"{cache_key}_sig") != sig:
+        if has_content:
+            with st.spinner(spinner_text):
+                st.session_state[cache_key] = ai_generate(
+                    "You are OneSattva, a warm, direct integrative health coach reacting briefly to a new "
+                    "patient's intake data mid-onboarding. This is not advice or a plan — just a short, "
+                    "specific reaction showing you're actually reading what they wrote before continuing "
+                    "the intake.",
+                    build_prompt(), max_tokens=150)
+        else:
+            st.session_state[cache_key] = None
+        st.session_state[f"{cache_key}_sig"] = sig
+    reflection = st.session_state.get(cache_key)
+    if reflection:
+        st.markdown(f"""
+<div class="insight-box">
+<div class="ib-lbl">✦ OneSattva Coach</div>
+<div class="ib-txt">{reflection}</div>
+</div>""", unsafe_allow_html=True)
+
+
 # ── Step 3 — Lifestyle and goals ──────────────────────────────────────────
 def onboarding_step3(user_id):
     st.markdown('<div class="pg-title">Your lifestyle and goals</div>', unsafe_allow_html=True)
     st.markdown('<div class="pg-sub">The more specific you are here, the more precisely the coach can build your protocol.</div>', unsafe_allow_html=True)
+
+    conditions = [r.get("Condition", "").strip() for r in st.session_state.get("ob_conditions", []) if r.get("Condition", "").strip()]
+    meds = [r.get("Medication", "").strip() for r in st.session_state.get("ob_meds", []) if r.get("Medication", "").strip()]
+    supps = [r.get("Supplement", "").strip() for r in st.session_state.get("ob_supps", []) if r.get("Supplement", "").strip()]
+    family_history = st.session_state.get("ob_family_history", "")
+    surgeries = st.session_state.get("ob_surgeries", "")
+    step2_sig = repr((conditions, meds, supps, family_history, surgeries))
+
+    def build_step3_prompt():
+        parts = []
+        if conditions: parts.append(f"Diagnosed conditions: {', '.join(conditions)}")
+        if meds: parts.append(f"Current medications: {', '.join(meds)}")
+        if supps: parts.append(f"Current supplements: {', '.join(supps)}")
+        if family_history.strip(): parts.append(f"Family history: {family_history}")
+        if surgeries.strip(): parts.append(f"Past surgeries/events: {surgeries}")
+        return ("A new patient just shared this health history during onboarding: " + "; ".join(parts) +
+                ". In 1-2 sentences, in your own voice, briefly note what stands out to you and why it's "
+                "relevant — no advice or plan yet, you're about to ask about their lifestyle and goals next.")
+
+    _render_ob_reflection("ob_step3_reflection", step2_sig, bool(conditions or meds or supps or family_history.strip() or surgeries.strip()),
+                           build_step3_prompt, "Coach is reading your history...")
 
     primary_goal = st.text_area("Primary health goal — in your own words", value=st.session_state.get("ob_primary_goal", ""), height=80, placeholder="e.g. Improve energy and fix chronic bloating")
 
@@ -1339,6 +1384,21 @@ def onboarding_step4(user_id):
     st.markdown('<div class="pg-title">Your labs</div>', unsafe_allow_html=True)
     st.markdown('<div class="pg-sub">Labs are not optional — they\'re the foundation of a precise assessment. We need them to give you specific guidance rather than general recommendations. You have 7 days to upload your first report — your plan recommendation will be provisional until then.</div>', unsafe_allow_html=True)
 
+    lp = db_get_single("profiles", user_id) or {}
+    primary_goal = st.session_state.get("ob_primary_goal", "")
+    symptoms = lp.get("symptoms", "") or ""
+    step3_sig = repr((primary_goal, symptoms))
+
+    def build_step4_prompt():
+        return (f"A new patient's primary goal is: {primary_goal or 'not stated'}. "
+                f"Their current symptoms/concerns: {symptoms or 'not stated'}. "
+                "In 1-2 sentences, in your own voice, tell them specifically why labs matter for THIS "
+                "goal/symptom picture — name the kind of thing you'd expect labs to reveal for someone "
+                "with exactly this profile. No generic 'labs are important' filler, no plan yet.")
+
+    _render_ob_reflection("ob_step4_reflection", step3_sig, bool(primary_goal.strip() or symptoms.strip()),
+                           build_step4_prompt, "Coach is connecting the dots...")
+
     if st.session_state.get("ob_show_panel"):
         if "ob_recommended_panel" not in st.session_state:
             conditions = ", ".join(r.get("Condition", "") for r in st.session_state.get("ob_conditions", []) if r.get("Condition"))
@@ -1412,7 +1472,7 @@ Plan modes available:
 Labs {'have' if labs_present else 'have NOT'} been uploaded yet — {'note this explicitly and say the recommendation may sharpen once labs are in' if not labs_present else 'use them as primary reference'}.
 
 Write a short, direct, first-person clinical read in your voice, covering:
-1. What you see in the picture — the likely root drivers, reasoned across functional medicine, Ayurveda and TCM.
+1. What you see in the picture — the likely root drivers. Reason across root-cause physiology, constitution, and organ-system patterns in your head, then write the conclusion as ONE synthesized read, not a list of separate systems. Do not open by naming or cataloguing the frameworks you're drawing from (e.g. "functional medicine says... Ayurveda says... TCM says...") — this is the very first thing this person will ever read from you, and it should sound like one voice, not three. A traditional term (Agni, Qi stagnation, HPA axis) can surface in passing if it sharpens a specific point, never as the framing device.
 {"2. Explicitly connect what your labs show to the specific symptoms you described — for each notable/flagged marker, say plainly what it likely explains about how you've been feeling, not just that the marker is off. This correlation is the most important part of this read." if labs_present else "2. What your symptoms suggest is likely happening even without labs yet, and which specific markers would confirm it."}
 3. Which ONE plan mode you recommend with explicit reasoning.
 
