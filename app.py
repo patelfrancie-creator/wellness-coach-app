@@ -25,6 +25,7 @@ anthropic_client = Anthropic(api_key=ANTHROPIC_KEY)
 CLAUDE_MODEL = "claude-sonnet-4-6"
 
 MAX_HISTORY = 20
+ADMIN_EMAILS = {"patel.francie@gmail.com"}
 
 COUNTRIES = [
     "India", "United States", "United Kingdom", "Canada", "Australia", "New Zealand",
@@ -397,6 +398,61 @@ def db_delete(table, row_id):
         supabase.table(table).delete().eq("id", row_id).execute()
     except Exception as e:
         st.error(f"Delete error: {e}")
+
+
+# ── Knowledge admin CMS (early-tester feedback #4, Piece 1) ─────────────────
+def is_admin():
+    return st.session_state.get("user_email") in ADMIN_EMAILS
+
+
+def get_active_knowledge_rules(user_id):
+    """Global rules (user_id null) plus this specific user's practitioner-scoped
+    rules, if any exist — the latter is Piece 2 territory and will just start
+    returning rows once that's built, no prompt-side change needed then."""
+    try:
+        global_rules = supabase.table("knowledge_rules").select("*").is_("user_id", "null").eq("active", True).execute().data or []
+        user_rules = supabase.table("knowledge_rules").select("*").eq("user_id", user_id).eq("active", True).execute().data or []
+        return global_rules + user_rules
+    except Exception:
+        return []
+
+
+def get_all_global_knowledge_rules():
+    try:
+        return supabase.table("knowledge_rules").select("*").is_("user_id", "null").order("category").order("created_at", desc=True).execute().data or []
+    except Exception:
+        return []
+
+
+def save_knowledge_rule(category, title, content, rule_id=None):
+    admin_email = st.session_state.get("user_email", "")
+    if rule_id:
+        existing = supabase.table("knowledge_rules").select("*").eq("id", rule_id).limit(1).execute().data
+        if existing:
+            e = existing[0]
+            supabase.table("knowledge_rule_versions").insert({
+                "rule_id": rule_id, "title": e["title"], "content": e["content"],
+                "category": e["category"], "edited_by": admin_email,
+            }).execute()
+        supabase.table("knowledge_rules").update({
+            "category": category, "title": title, "content": content, "updated_at": datetime.now().isoformat(),
+        }).eq("id", rule_id).execute()
+    else:
+        supabase.table("knowledge_rules").insert({
+            "category": category, "title": title, "content": content, "created_by": admin_email,
+        }).execute()
+
+
+def set_knowledge_rule_active(rule_id, active):
+    supabase.table("knowledge_rules").update({"active": active}).eq("id", rule_id).execute()
+
+
+def get_knowledge_rule_versions(rule_id):
+    try:
+        return supabase.table("knowledge_rule_versions").select("*").eq("rule_id", rule_id).order("edited_at", desc=True).execute().data or []
+    except Exception:
+        return []
+
 
 # ── Auth Functions ────────────────────────────────────────────────────────────
 def sign_up(email, password, full_name):
@@ -776,6 +832,14 @@ Do not answer framework-by-framework. Find where they converge — that converge
 For complex questions, structure as: (1) what is happening — mechanism across frameworks, (2) what it means for this person specifically — cite their actual data, (3) the specific recommendation with rationale, (4) realistic timeline, (5) what to watch for.
 
 """
+
+    rules = get_active_knowledge_rules(user_id)
+    if rules:
+        base += "═══════════════════════════════════════════════════════\nCURATED CLINICAL GUIDANCE\n═══════════════════════════════════════════════════════\n"
+        base += "Notes curated by OneSattva's clinical team. Treat these as expert context to reason WITH — same status as your own training knowledge — never as a population default that overrides what this specific person's own data shows. Bio-individuality above always wins if the two conflict.\n"
+        for r in rules:
+            base += f"- [{r.get('category','')}] {r.get('title','')}: {r.get('content','')}\n"
+        base += "\n"
 
     if profile:
         name = profile.get("full_name", "the patient")
@@ -1675,6 +1739,8 @@ def show_sidebar(user_id, profile):
 
         st.markdown('<div style="font-size:10px;font-weight:600;letter-spacing:0.08em;color:rgba(247,245,242,0.24);text-transform:uppercase;margin-bottom:6px">Navigation</div>', unsafe_allow_html=True)
         nav_items = [("home", "⌂ Home"), ("protocol", "◈ Protocol"), ("checkin", "✓ Check-In"), ("coach", "✦ Coach"), ("profile", "◎ Profile & Data")]
+        if is_admin():
+            nav_items.append(("admin", "⚙ Knowledge admin"))
         current = st.session_state.get("page", "home")
         for key, label in nav_items:
             if st.button(label, key=f"nav_{key}", use_container_width=True, type=("primary" if key == current else "secondary")):
@@ -2967,6 +3033,65 @@ def show_profile_wearable(user_id, profile):
             st.rerun()
 
 
+CATEGORY_LABELS = {
+    "lab_range": "Lab range", "supplement_interaction": "Supplement interaction",
+    "triage_language": "Triage language", "general": "General",
+}
+
+
+# ── Admin — knowledge CMS (early-tester feedback #4, Piece 1) ───────────────
+def show_admin(user_id, profile):
+    st.markdown('<div class="pg-title">Knowledge admin</div>', unsafe_allow_html=True)
+    st.markdown('<div class="pg-sub">Global rules every coach draws on — functional ranges, supplement interactions, triage language. Changes take effect on the next response, no redeploy needed.</div>', unsafe_allow_html=True)
+
+    with st.expander("+ Add a new rule"):
+        new_category = st.selectbox("Category", list(CATEGORY_LABELS.keys()), format_func=lambda c: CATEGORY_LABELS[c], key="new_rule_category")
+        new_title = st.text_input("Title", key="new_rule_title", placeholder="e.g. Ferritin functional range")
+        new_content = st.text_area("Content", key="new_rule_content", height=100,
+                                    placeholder="e.g. Functional optimal ferritin for most adults is 50-100 ng/mL, well above the conventional lab's low-end cutoff around 15-20 ng/mL — flag low-normal ferritin as relevant to fatigue/hair-loss presentations.")
+        if st.button("Add rule", key="add_rule_btn", type="primary") and new_title.strip() and new_content.strip():
+            save_knowledge_rule(new_category, new_title.strip(), new_content.strip())
+            st.success("Rule added — live immediately.")
+            st.rerun()
+
+    st.markdown('<div class="sl">Existing rules</div>', unsafe_allow_html=True)
+    rules = get_all_global_knowledge_rules()
+    if not rules:
+        st.caption("No rules yet — add the first one above.")
+        return
+
+    filter_cat = st.selectbox("Filter by category", ["All"] + list(CATEGORY_LABELS.keys()), format_func=lambda c: c if c == "All" else CATEGORY_LABELS[c], key="rule_filter")
+    shown = rules if filter_cat == "All" else [r for r in rules if r.get("category") == filter_cat]
+
+    for r in shown:
+        active = r.get("active", True)
+        with st.container(border=True):
+            st.markdown(f"""
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div><span class="triage t-bg">{CATEGORY_LABELS.get(r.get('category',''), r.get('category',''))}</span> <strong>{r.get('title','')}</strong>{' <span style="color:var(--mid);font-size:11px">(inactive)</span>' if not active else ''}</div>
+</div>""", unsafe_allow_html=True)
+            st.markdown(f'<div style="color:var(--mid);font-size:13px;margin:6px 0">{r.get("content","")}</div>', unsafe_allow_html=True)
+
+            with st.expander("Edit"):
+                ed_category = st.selectbox("Category", list(CATEGORY_LABELS.keys()), format_func=lambda c: CATEGORY_LABELS[c],
+                                            index=list(CATEGORY_LABELS.keys()).index(r.get("category")) if r.get("category") in CATEGORY_LABELS else 0, key=f"ed_cat_{r['id']}")
+                ed_title = st.text_input("Title", value=r.get("title", ""), key=f"ed_title_{r['id']}")
+                ed_content = st.text_area("Content", value=r.get("content", ""), height=100, key=f"ed_content_{r['id']}")
+                ec1, ec2, ec3 = st.columns(3)
+                if ec1.button("Save changes", key=f"save_rule_{r['id']}", type="primary") and ed_title.strip() and ed_content.strip():
+                    save_knowledge_rule(ed_category, ed_title.strip(), ed_content.strip(), rule_id=r["id"])
+                    st.success("Saved.")
+                    st.rerun()
+                if ec2.button("Deactivate" if active else "Reactivate", key=f"toggle_rule_{r['id']}"):
+                    set_knowledge_rule_active(r["id"], not active)
+                    st.rerun()
+                versions = get_knowledge_rule_versions(r["id"])
+                if versions:
+                    with ec3.popover(f"History ({len(versions)})"):
+                        for v in versions:
+                            st.markdown(f"**{v.get('edited_at','')[:16]}** · {v.get('edited_by','')}\n\n{v.get('title','')} — {v.get('content','')}")
+
+
 # ── Main Entry Point ──────────────────────────────────────────────────────────
 def main():
     if "user_id" not in st.session_state:
@@ -3002,6 +3127,8 @@ def main():
         show_coach(user_id, profile)
     elif page == "profile":
         show_profile(user_id, profile)
+    elif page == "admin" and is_admin():
+        show_admin(user_id, profile)
 
 
 if __name__ == "__main__":

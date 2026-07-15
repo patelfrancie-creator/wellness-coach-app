@@ -339,3 +339,53 @@ create table if not exists adherence_nudges (
 alter table adherence_nudges enable row level security;
 create policy "Users can manage own adherence nudges" on adherence_nudges
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Round 11: knowledge admin CMS (early-tester feedback #4, Piece 1) — a
+-- versioned table of curated clinical knowledge (functional ranges,
+-- supplement interaction rules, triage language) editable from an in-app
+-- admin page instead of requiring a manual doc re-upload.
+--
+-- user_id is nullable by design: null = a global rule every user's coach
+-- sees, a real user_id = a practitioner's note scoped to one person. That's
+-- the same shape Piece 2 (practitioner dashboard, deferred until a clinical
+-- advisor is on board) will need, so it slots onto this table later instead
+-- of requiring a new one.
+--
+-- Admin access is gated by email (not a role column) since there's exactly
+-- one admin today — update the email in both the RLS policies below and
+-- ADMIN_EMAILS in app.py if that ever changes.
+-- ═══════════════════════════════════════════════════════════════════════════
+create table if not exists knowledge_rules (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,  -- null = global
+  category text not null,          -- 'lab_range' | 'supplement_interaction' | 'triage_language' | 'general'
+  title text not null,
+  content text not null,
+  active boolean default true,
+  created_by text,                 -- admin's email, for audit
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists knowledge_rule_versions (
+  id uuid primary key default gen_random_uuid(),
+  rule_id uuid references knowledge_rules(id) on delete cascade,
+  title text not null,
+  content text not null,
+  category text not null,
+  edited_by text,
+  edited_at timestamptz default now()
+);
+
+alter table knowledge_rules enable row level security;
+create policy "Users can read relevant active rules" on knowledge_rules
+  for select using (active = true and (user_id is null or user_id = auth.uid()));
+create policy "Admin can manage all rules" on knowledge_rules
+  for all using (auth.jwt() ->> 'email' = 'patel.francie@gmail.com')
+  with check (auth.jwt() ->> 'email' = 'patel.francie@gmail.com');
+
+alter table knowledge_rule_versions enable row level security;
+create policy "Admin can manage rule versions" on knowledge_rule_versions
+  for all using (auth.jwt() ->> 'email' = 'patel.francie@gmail.com')
+  with check (auth.jwt() ->> 'email' = 'patel.francie@gmail.com');
