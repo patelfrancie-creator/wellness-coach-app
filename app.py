@@ -2344,6 +2344,55 @@ def show_protocol(user_id, profile):
                                 f"supplement, medication, or meal, you MUST use that exact same detail here — never "
                                 f"independently re-derive a different order or dose for something it already settled.")
 
+    def week_num_as_of(iso_date, phase_start_iso, duration_days):
+        """Same week-number math as get_plan_info, but for an arbitrary
+        reference date — lets us tell whether a cached weekly tab was
+        generated in an earlier week than the one showing everywhere else."""
+        try:
+            days_in = (date.fromisoformat(iso_date) - date.fromisoformat(phase_start_iso)).days
+        except Exception:
+            return None
+        if duration_days:
+            return min(max(days_in // 7 + 1, 1), (duration_days // 7) or 1)
+        return max(days_in // 7 + 1, 1)
+
+    def is_week_stale(table):
+        """True if this tab's cached content was generated in a week that no
+        longer matches the current week. get_or_generate() otherwise only
+        refreshes on a materiality flag, so a "this week's schedule" tab can
+        silently sit frozen on whatever week it happened to first be opened
+        in — which is exactly how Supplements/Nutrition/Workouts each ended
+        up displaying a different week, since each was first generated on a
+        different day and nothing ever told them the week had moved on."""
+        if not plan:
+            return False
+        existing = db_get_single(table, user_id)
+        if not existing or not existing.get("generated_at"):
+            return False
+        phase_start_iso = roadmap.get("phase_start_date") or roadmap.get("generated_at")
+        duration_days = PLAN_MODES.get(plan["mode"], PLAN_MODES["Restore"])["duration_days"]
+        existing_week = week_num_as_of(existing["generated_at"], phase_start_iso, duration_days)
+        return existing_week is not None and existing_week != plan["week_num"]
+
+    # Two different reasons for the same "week has moved on" trigger, because
+    # Supplements and Nutrition/Workouts have opposite correct behaviors on a
+    # week rollover. Dosing shouldn't drift without a real reason, so
+    # Supplements gets a label-only patch. Food and training are meant to
+    # progress week to week against actual check-in/wearable/cycle trends —
+    # patching just the label there would freeze content that's supposed to
+    # evolve, which is its own kind of staleness bug.
+    week_sync_reason_light = "The current week has advanced since this was last generated — update only the week/phase references to stay accurate, preserve all other content exactly."
+    week_sync_reason_evolve = ("A new week has begun in this committed programme. Do not just patch the week label — "
+                                "genuinely re-derive this week's plan by reasoning fresh from the person's most current "
+                                "check-in trends, wearable recovery data, stated preferences, and cycle phase (if "
+                                "applicable) — all in your system context. Week-to-week evolution is expected here: this "
+                                "includes real adjustments driven by feedback, injury, or cycle syncing, but also simple "
+                                "variety — do not repeat the same meals or exercises verbatim week after week even when "
+                                "nothing material changed, the same way a human coach naturally varies choices for "
+                                "someone. Stay consistent with the roadmap's current phase and any sequencing it already "
+                                "committed to, and treat the previous week's plan below as the starting point to "
+                                "progress from, not content to preserve unchanged.")
+
     tabs = st.tabs(["Treatment Roadmap", "Monthly Goal", "Supplements", "Nutrition", "Workouts"])
 
     def adjust_flow(label, key_prefix):
@@ -2394,7 +2443,8 @@ def show_protocol(user_id, profile):
             return ai_generate(sys_prompt, prompt, max_tokens=2000)
         supps_flag = get_open_materiality_flag(user_id, "supplements")
         render_materiality_flag(supps_flag, on_regenerate=lambda: get_or_generate("supplement_plan", user_id, build_supps, force=True, reason=supps_flag.get("flag_text") if supps_flag else None))
-        supps = get_or_generate("supplement_plan", user_id, build_supps)
+        supps_week_stale = is_week_stale("supplement_plan")
+        supps = get_or_generate("supplement_plan", user_id, build_supps, force=supps_week_stale, reason=week_sync_reason_light if supps_week_stale else None)
         st.markdown(supps)
         adjust_flow("supplement schedule", "supp")
 
@@ -2406,7 +2456,8 @@ def show_protocol(user_id, profile):
             return ai_generate(sys_prompt, prompt, max_tokens=2200)
         nutrition_flag = get_open_materiality_flag(user_id, "nutrition")
         render_materiality_flag(nutrition_flag, on_regenerate=lambda: get_or_generate("nutrition_plan", user_id, build_nutrition, force=True, reason=nutrition_flag.get("flag_text") if nutrition_flag else None))
-        nutrition = get_or_generate("nutrition_plan", user_id, build_nutrition)
+        nutrition_week_stale = is_week_stale("nutrition_plan")
+        nutrition = get_or_generate("nutrition_plan", user_id, build_nutrition, force=nutrition_week_stale, reason=week_sync_reason_evolve if nutrition_week_stale else None)
         st.markdown(nutrition)
         adjust_flow("nutrition plan", "nutr")
 
@@ -2418,7 +2469,8 @@ def show_protocol(user_id, profile):
             return ai_generate(sys_prompt, prompt, max_tokens=2000)
         workouts_flag = get_open_materiality_flag(user_id, "workouts")
         render_materiality_flag(workouts_flag, on_regenerate=lambda: get_or_generate("workout_plan", user_id, build_workouts, force=True, reason=workouts_flag.get("flag_text") if workouts_flag else None))
-        workouts = get_or_generate("workout_plan", user_id, build_workouts)
+        workouts_week_stale = is_week_stale("workout_plan")
+        workouts = get_or_generate("workout_plan", user_id, build_workouts, force=workouts_week_stale, reason=week_sync_reason_evolve if workouts_week_stale else None)
         st.markdown(workouts)
         adjust_flow("training plan", "workout")
 # ── Materiality check — runs after new data is submitted, not on a timer ─────
