@@ -802,7 +802,7 @@ RULE 4 — Data freshness: labs ≤90 days = current/primary reference; 91-180 d
 RULE 5 — Gap detection: 3-7 day check-in gap — note it, continue. 7-14 days — ask "It's been [X] days since your last log. Has anything changed?" before recommending. 14+ days — do not continue the old protocol; get a re-entry note first.
 RULE 6 — Be specific when the data supports it: exact dose, exact timing, exact food, brand only if you know their location and it's genuinely the best available option there — never invent specificity the data doesn't support.
 RULE 7 — Never deflect to "ask your doctor" without giving a complete expert answer first.
-RULE 8 — Every clinical or protocol-level response reasons across at least two independent lines — root-cause physiology, constitutional pattern, organ-system dynamics — and finds where they converge; single-system reasoning is a failure mode. Write the conclusion as one synthesized voice: never preface or structure a response by naming or listing the traditions behind it (e.g. "Functional medicine says X, Ayurveda says Y, TCM says Z") — a traditional term (Agni, Qi stagnation, HPA axis) may surface in passing only if it sharpens a specific point, never as the framing device. Always close with one specific, concrete next step for today or this week.
+RULE 8 — Every clinical or protocol-level response reasons across at least two independent lines — root-cause physiology, constitutional pattern, organ-system dynamics — and finds where they converge; single-system reasoning is a failure mode. Write the conclusion as one synthesized voice, in plain English by default: never preface, structure, or LABEL any part of a response by which tradition it came from. This means both the obvious list format ("Functional medicine says X, Ayurveda says Y, TCM says Z") AND the subtler inline version — never write "the Ayurvedic Agni impairment" or "the TCM Spleen Qi deficiency pattern"; write "digestive fire impairment" or "poor nutrient transformation and low energy reserve" instead. A bare traditional term (Agni, Qi stagnation) may be used, without its school name attached, only if it's genuinely the clearest way to say something and plain English would lose precision — even then, never pair the term with its tradition's name in the same breath. Always close with one specific, concrete next step for today or this week.
 RULE 9 — When new data (a lab, a wearable import, an uploaded document) reveals something that contradicts or meaningfully updates what's in their stored profile (a new value, an implied diagnosis or medication change), say so explicitly and ask them to update their profile before you treat it as settled — e.g. "Your latest report shows X has shifted significantly since your last reading — can you confirm/update your profile so I'm working from the correct current picture?" Proceed with your interpretation, but flag that it's based on the profile as currently recorded.
 RULE 10 — Be concise by default. Give the correct, most useful information in the fewest words that fully answer the question — this is not a research paper. Skip detail the person hasn't asked for; they can always ask a follow-up in Coach chat if they want more depth. Never pad with restatement, hedging, or filler. But conciseness never means stopping early: a roadmap, protocol, or answer must always cover everything it structurally needs to (every phase, every section) — cut verbosity within each part, never cut a part out. Prefer short paragraphs and tight tables over long prose.
 
@@ -2330,6 +2330,20 @@ def show_protocol(user_id, profile):
                          f'Always label this as "{week_label}" if you reference the week at all — do not invent a '
                          f'different week number or a calendar-date framing (e.g. do not say "Week of [date]").')
 
+    # The Roadmap tab's phase text often already commits to specific sequencing/
+    # timing (e.g. "L-glutamine at wake, Thyronorm 30 min later") when it names
+    # exact doses. Supplements/Nutrition/Workouts are separate AI calls that
+    # otherwise re-derive timing from scratch with no visibility into that —
+    # which is how one tab can contradict what the Roadmap already committed
+    # to. Same fix pattern as week_context above, generalized to any detail.
+    roadmap_text_for_context = roadmap.get("roadmap_text", "")
+    consistency_context = ""
+    if roadmap_text_for_context:
+        consistency_context = (f"\n\nCANONICAL COMMITTED ROADMAP (already locked in — do not contradict):\n{roadmap_text_for_context}\n"
+                                f"If the roadmap above already specifies exact timing, sequencing, or dosing for any "
+                                f"supplement, medication, or meal, you MUST use that exact same detail here — never "
+                                f"independently re-derive a different order or dose for something it already settled.")
+
     tabs = st.tabs(["Treatment Roadmap", "Monthly Goal", "Supplements", "Nutrition", "Workouts"])
 
     def adjust_flow(label, key_prefix):
@@ -2374,7 +2388,7 @@ def show_protocol(user_id, profile):
 
     with tabs[2]:
         def build_supps(existing=None, reason=None):
-            prompt = "Generate this week's committed supplement schedule as a markdown table: Time | Supplement | Dose | Clinical notes. Derive dose, brand suitability, and timing from this person's actual labs, medications, and absorption considerations — explain timing rationale concisely in the notes column. If a thyroid medication is present, reason explicitly about its absorption timing relative to other supplements. Cover every supplement/timing slot that applies — never cut the table short; keep each note to one tight sentence rather than dropping rows." + week_context
+            prompt = "Generate this week's committed supplement schedule as a markdown table: Time | Supplement | Dose | Clinical notes. Derive dose, brand suitability, and timing from this person's actual labs, medications, and absorption considerations — explain timing rationale concisely in the notes column. If a thyroid medication is present, reason explicitly about its absorption timing relative to other supplements. Cover every supplement/timing slot that applies — never cut the table short; keep each note to one tight sentence rather than dropping rows." + week_context + consistency_context
             if existing:
                 prompt += f"\n\nThis is a revision of the current committed schedule, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve the existing row order, wording, and doses for everything else exactly as they were. Do not reorder or rephrase rows this reason doesn't touch.\n\nCURRENT COMMITTED SCHEDULE:\n{existing}"
             return ai_generate(sys_prompt, prompt, max_tokens=2000)
@@ -2386,7 +2400,7 @@ def show_protocol(user_id, profile):
 
     with tabs[3]:
         def build_nutrition(existing=None, reason=None):
-            prompt = "Generate this week's committed 7-day nutrition plan. Start with a short info box (2-3 sentences) on this phase's nutrition focus, reasoned from this person's actual gut/digestion check-in data, goals, and dietary preferences — not a generic rule. Then a markdown table: Meal | Focus | Examples, covering all 7 days. Respect their stated dietary pattern and restrictions exactly. Keep each row tight (a few words per cell) so all 7 days fit — completeness across all 7 days matters more than detail in any one day." + week_context
+            prompt = "Generate this week's committed 7-day nutrition plan. Start with a short info box (2-3 sentences) on this phase's nutrition focus, reasoned from this person's actual gut/digestion check-in data, goals, and dietary preferences — not a generic rule. Then a markdown table: Meal | Focus | Examples, covering all 7 days. Respect their stated dietary pattern and restrictions exactly. Keep each row tight (a few words per cell) so all 7 days fit — completeness across all 7 days matters more than detail in any one day." + week_context + consistency_context
             if existing:
                 prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
             return ai_generate(sys_prompt, prompt, max_tokens=2200)
@@ -2398,7 +2412,7 @@ def show_protocol(user_id, profile):
 
     with tabs[4]:
         def build_workouts(existing=None, reason=None):
-            prompt = "Generate this week's committed 7-day training plan. Start with a short info box (2-3 sentences) on this phase's training principle, reasoned from this person's recovery/wearable data and goals. Then a markdown table: Day | Session type | Focus & exercises | Target duration, covering all 7 days. Calibrate intensity to recovery data if available. Keep each row tight so all 7 days fit — completeness across the full week matters more than depth on any single day." + week_context
+            prompt = "Generate this week's committed 7-day training plan. Start with a short info box (2-3 sentences) on this phase's training principle, reasoned from this person's recovery/wearable data and goals. Then a markdown table: Day | Session type | Focus & exercises | Target duration, covering all 7 days. Calibrate intensity to recovery data if available. Keep each row tight so all 7 days fit — completeness across the full week matters more than depth on any single day." + week_context + consistency_context
             if existing:
                 prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
             return ai_generate(sys_prompt, prompt, max_tokens=2000)
