@@ -389,3 +389,13 @@ alter table knowledge_rule_versions enable row level security;
 create policy "Admin can manage rule versions" on knowledge_rule_versions
   for all using (auth.jwt() ->> 'email' = 'patel.francie@gmail.com')
   with check (auth.jwt() ->> 'email' = 'patel.francie@gmail.com');
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Round 12: structured lab values for key-number cards + real trend charts.
+-- raw_values (free text, "Marker: value unit (range)" per line) stays the
+-- coach's source of truth for reasoning — this is a parallel, normalized
+-- JSON representation for display only. Existing reports self-heal lazily
+-- (re-extracted from their existing raw_values on next view) rather than
+-- needing a bulk backfill script.
+-- ═══════════════════════════════════════════════════════════════════════════
+alter table lab_reports add column if not exists structured_values text;

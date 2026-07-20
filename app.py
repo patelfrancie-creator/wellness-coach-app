@@ -666,6 +666,66 @@ def lab_file_to_content_block(lab_file):
     return {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}}
 
 
+def extract_structured_lab_values(raw_values):
+    """Parallel, normalized JSON representation of a report's raw_values text,
+    for display (key-number cards, trend charts) — raw_values stays the
+    coach's actual reasoning source, this is display-only. Canonical naming
+    is the load-bearing instruction here: the same marker must get the same
+    name every time or cross-report trend matching silently breaks."""
+    prompt = f"""Extract every lab marker below into a structured JSON array. For each marker, output:
+{{"marker": "...", "value": <number>, "unit": "...", "flag": "low"|"normal"|"high"}}
+
+Use a stable, canonical name for each marker every time you see it — e.g. always "Vitamin D" (never "Vitamin D3" or "25-OH Vitamin D"), always "TSH" (never "Thyroid Stimulating Hormone"), always "Ferritin", always "HS-CRP" (never "hs-CRP" or "High Sensitivity CRP"). This consistency matters because these names get matched across different reports over time to build trend charts — an inconsistent name breaks that matching silently.
+
+Only include markers with a genuine numeric value — skip anything qualitative or missing a number. Judge "flag" using functional (optimal) ranges, not just whether it falls inside the lab's own reference range.
+
+Respond with ONLY the JSON array, nothing else.
+
+LAB TEXT:
+{raw_values}"""
+    raw = ai_generate("You are OneSattva, extracting structured lab data for a patient's records.", prompt, max_tokens=1500)
+    try:
+        match = re.search(r"\[.*\]", raw, re.DOTALL)
+        return json.loads(match.group(0) if match else raw)
+    except Exception:
+        return []
+
+
+def get_structured_lab_values(lab_report):
+    """Lazily backfills structured_values for reports saved before this
+    column existed — self-heals from the already-stored raw_values instead
+    of needing a bulk migration script."""
+    existing = lab_report.get("structured_values")
+    if existing:
+        try:
+            return json.loads(existing)
+        except Exception:
+            pass
+    raw_values = lab_report.get("raw_values", "")
+    if not raw_values.strip():
+        return []
+    parsed = extract_structured_lab_values(raw_values)
+    if parsed:
+        db_upsert("lab_reports", {"id": lab_report["id"], "structured_values": json.dumps(parsed)})
+    return parsed
+
+
+def render_lab_key_numbers(structured):
+    if not structured:
+        return
+    cols = st.columns(4)
+    for i, m in enumerate(structured):
+        flag = (m.get("flag") or "normal").lower()
+        flag_html = f'<div class="snap-flag">{flag}</div>' if flag != "normal" else ""
+        with cols[i % 4]:
+            st.markdown(f"""
+<div class="snap-box" style="margin-bottom:10px">
+<div class="snap-lbl">{m.get('marker','')}</div>
+<div class="snap-val">{m.get('value','—')}<span style="font-size:13px;color:var(--mid)"> {m.get('unit','')}</span></div>
+{flag_html}
+</div>""", unsafe_allow_html=True)
+
+
 def save_lab_report(user_id, report_date, text=None, file_block=None, file_label=None):
     """Shared by onboarding Step 4 and Profile & Data > Lab Reports & Documents.
     Pass either `text` (pasted values) or `file_block` + `file_label` (an uploaded
@@ -715,7 +775,8 @@ def save_lab_report(user_id, report_date, text=None, file_block=None, file_label
             "no restating the patient's name or demographics. Just the clinical interpretation itself: what's notable and why it matters. "
             "This is a short list-preview summary, not a full report — the full protocol reasoning happens elsewhere.",
             interpret_input, max_tokens=400)
-    result = db_insert("lab_reports", {"user_id": user_id, "report_date": report_date.isoformat(), "raw_values": raw_values[:4000], "summary": summary})
+    structured = extract_structured_lab_values(raw_values)
+    result = db_insert("lab_reports", {"user_id": user_id, "report_date": report_date.isoformat(), "raw_values": raw_values[:4000], "summary": summary, "structured_values": json.dumps(structured)})
     if result is None:
         st.error(f"{label} was analyzed but failed to save — please try uploading it again.")
         return None
@@ -3041,6 +3102,37 @@ def show_profile_user(user_id, profile):
             st.rerun()
 
 
+def build_marker_trend_series(labs):
+    """Aggregates structured_values across all reports by canonical marker
+    name, keyed by report date — returns {marker: [(date, value, unit), ...]}
+    for markers appearing in 2+ reports, sorted chronologically. Depends on
+    extract_structured_lab_values() using a stable name for the same marker
+    every time (verified against real reports from different labs)."""
+    from collections import defaultdict
+    series = defaultdict(list)
+    for l in labs:
+        report_date = l.get("report_date")
+        for m in get_structured_lab_values(l):
+            if m.get("marker") and isinstance(m.get("value"), (int, float)) and report_date:
+                series[m["marker"]].append((report_date, m["value"], m.get("unit", "")))
+    return {marker: sorted(points) for marker, points in series.items() if len(points) >= 2}
+
+
+def render_marker_trend_charts(labs):
+    import pandas as pd
+    series = build_marker_trend_series(labs)
+    if not series:
+        st.caption("Not enough overlapping markers across reports yet to chart trends.")
+        return
+    cols = st.columns(2)
+    for i, (marker, points) in enumerate(sorted(series.items())):
+        df = pd.DataFrame({marker: [p[1] for p in points]}, index=pd.to_datetime([p[0] for p in points]))
+        unit = points[-1][2]
+        with cols[i % 2]:
+            st.markdown(f'<div class="snap-lbl" style="margin-top:8px">{marker}{f" ({unit})" if unit else ""}</div>', unsafe_allow_html=True)
+            st.line_chart(df, height=180)
+
+
 def show_profile_labs(user_id, profile):
     st.markdown('<div class="sl first">Upload a new report</div>', unsafe_allow_html=True)
     report_date = st.date_input("Report date", value=date.today(), key="lab_date", help="For uploaded files, we'll try to read the actual date off the document and use that instead — this is only the fallback if we can't find one, or if you're pasting values instead of uploading a file.")
@@ -3070,6 +3162,7 @@ def show_profile_labs(user_id, profile):
     labs = db_get("lab_reports", user_id, order_col="report_date")
     if len(labs) >= 2:
         st.markdown('<div class="sl">Trends across your reports</div>', unsafe_allow_html=True)
+        render_marker_trend_charts(labs)
         trends = db_get_single("lab_trends", user_id)
         if trends and trends.get("content"):
             st.markdown(trends["content"])
@@ -3106,7 +3199,14 @@ def show_profile_labs(user_id, profile):
         with st.expander("View full interpretation & extracted values", key=f"lab_detail_{l['id']}"):
             st.markdown(f"**Coach interpretation**\n\n{l.get('summary','') or '_None._'}")
             st.markdown("---")
-            st.markdown(f"**Extracted values**\n\n{l.get('raw_values','') or '_None._'}")
+            structured = get_structured_lab_values(l)
+            if structured:
+                st.markdown("**Key numbers**")
+                render_lab_key_numbers(structured)
+                with st.expander("View raw extracted text"):
+                    st.markdown(l.get('raw_values','') or '_None._')
+            else:
+                st.markdown(f"**Extracted values**\n\n{l.get('raw_values','') or '_None._'}")
             st.markdown("---")
             report_q = st.text_area("Ask your coach about this specific report", key=f"lab_clarify_{l['id']}")
             if st.button("Send to your coach", key=f"lab_clarify_btn_{l['id']}") and report_q:
