@@ -1731,7 +1731,7 @@ Table: Phase | Focus | Key milestones | Checkpoint — one row per phase, all {p
 ## If Progress Stalls
 [Escalation path, 2-3 sentences]
 
-**Start today:** [one specific immediate action]
+**Immediate priority:** [one specific first action to begin this phase — describe it without referencing "today" or any specific date/day; this document is cached and re-read across many days without regenerating, so anything framed as happening on a specific day goes stale the moment that day passes. Daily-specific nudges are handled elsewhere in the app.]
 """
         with st.spinner(f"Building your {plan_mode} roadmap..."):
             st.session_state.ob_roadmap_text = ai_generate(sys_prompt, prompt, max_tokens=8000)
@@ -2398,7 +2398,7 @@ Table: Phase | Focus | Key milestones | Checkpoint — one row per phase, all {p
 ## If Progress Stalls
 [Escalation path, 2-3 sentences]
 
-**Start today:** [one specific immediate action]
+**Immediate priority:** [one specific first action to begin this phase — describe it without referencing "today" or any specific date/day; this document is cached and re-read across many days without regenerating, so anything framed as happening on a specific day goes stale the moment that day passes. Daily-specific nudges are handled elsewhere in the app.]
 """
     if existing_text:
         prompt += (f"\n\nThis is a REVISION of the current committed roadmap below, not a fresh document. "
@@ -2543,6 +2543,16 @@ def show_protocol(user_id, profile):
                                 "committed to, and treat the previous week's plan below as the starting point to "
                                 "progress from, not content to preserve unchanged.")
 
+    # For an explicit manual refresh click (not a week rollover) — re-derive
+    # fresh per the current prompt rules rather than defaulting to "preserve
+    # everything," since the whole point of a manual refresh is often to
+    # clear out something stale (e.g. absolute dates an older prompt version
+    # allowed) that a "preserve unchanged" revision would otherwise carry
+    # forward verbatim.
+    manual_refresh_reason = ("Manually refreshed by the user. Re-derive this content fresh per the current instructions "
+                              "above — if the previous version has anything that no longer fits those instructions "
+                              "(e.g. stale absolute dates or a \"today\" reference), fix it now rather than preserving it.")
+
     tabs = st.tabs(["Treatment Roadmap", "Monthly Goal", "Supplements", "Nutrition", "Workouts"])
 
     def adjust_flow(label, key_prefix):
@@ -2566,7 +2576,11 @@ def show_protocol(user_id, profile):
     with tabs[0]:
         roadmap_flag = get_open_materiality_flag(user_id, "roadmap")
         render_materiality_flag(roadmap_flag, on_regenerate=lambda: regenerate_roadmap(user_id, sys_prompt, roadmap, reason=roadmap_flag.get("flag_text") if roadmap_flag else None))
-        st.markdown(f'<div class="sl first">{roadmap.get("plan_mode","")} · roadmap · Committed {roadmap.get("generated_at","")}</div>', unsafe_allow_html=True)
+        rc1, rc2 = st.columns([5, 1])
+        rc1.markdown(f'<div class="sl first" style="margin-top:0">{roadmap.get("plan_mode","")} · roadmap · Committed {roadmap.get("generated_at","")}</div>', unsafe_allow_html=True)
+        if rc2.button("↻ Refresh", key="refresh_roadmap_btn"):
+            regenerate_roadmap(user_id, sys_prompt, roadmap, reason=manual_refresh_reason)
+            st.rerun()
         if roadmap.get("provisional"):
             st.warning("This roadmap is provisional — labs were not yet available when it was generated.")
         full_roadmap_text = roadmap.get("roadmap_text", "_No roadmap text._")
@@ -2602,34 +2616,39 @@ def show_protocol(user_id, profile):
             return ai_generate(sys_prompt, prompt, max_tokens=2000)
         supps_flag = get_open_materiality_flag(user_id, "supplements")
         render_materiality_flag(supps_flag, on_regenerate=lambda: get_or_generate("supplement_plan", user_id, build_supps, force=True, reason=supps_flag.get("flag_text") if supps_flag else None))
+        supps_manual_refresh = st.button("↻ Refresh", key="refresh_supps_btn")
         supps_week_stale = is_week_stale("supplement_plan")
-        supps = get_or_generate("supplement_plan", user_id, build_supps, force=supps_week_stale, reason=week_sync_reason_light if supps_week_stale else None)
+        supps = get_or_generate("supplement_plan", user_id, build_supps, force=(supps_week_stale or supps_manual_refresh), reason=week_sync_reason_light if supps_week_stale else (manual_refresh_reason if supps_manual_refresh else None))
         st.markdown(supps)
         adjust_flow("supplement schedule", "supp")
 
     with tabs[3]:
         def build_nutrition(existing=None, reason=None):
-            prompt = "Generate this week's committed 7-day nutrition plan. Start with a short info box (2-3 sentences) on this phase's nutrition focus, reasoned from this person's actual gut/digestion check-in data, goals, and dietary preferences — not a generic rule. Then a markdown table: Meal | Focus | Examples, covering all 7 days. Respect their stated dietary pattern and restrictions exactly. Keep each row tight (a few words per cell) so all 7 days fit — completeness across all 7 days matters more than detail in any one day." + week_context + consistency_context
+            prompt = "Generate this week's committed 7-day nutrition plan. Start with a short info box (2-3 sentences) on this phase's nutrition focus, reasoned from this person's actual gut/digestion check-in data, goals, and dietary preferences — not a generic rule. Then a markdown table: Day | Focus | Examples, covering all 7 days, labeled with generic weekday names only (Monday, Tuesday, ...) — never an absolute calendar date (e.g. never \"20 Jul\"), and never a \"today is [date]\" framing anywhere in this content. This plan is cached and re-read across many days without regenerating, so anything tied to a specific date goes stale the moment a day passes — daily-specific nudges are handled elsewhere in the app. Respect their stated dietary pattern and restrictions exactly. Keep each row tight (a few words per cell) so all 7 days fit — completeness across all 7 days matters more than detail in any one day." + week_context + consistency_context
             if existing:
                 prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
             return ai_generate(sys_prompt, prompt, max_tokens=2200)
         nutrition_flag = get_open_materiality_flag(user_id, "nutrition")
         render_materiality_flag(nutrition_flag, on_regenerate=lambda: get_or_generate("nutrition_plan", user_id, build_nutrition, force=True, reason=nutrition_flag.get("flag_text") if nutrition_flag else None))
+        nutrition_manual_refresh = st.button("↻ Refresh", key="refresh_nutrition_btn")
         nutrition_week_stale = is_week_stale("nutrition_plan")
-        nutrition = get_or_generate("nutrition_plan", user_id, build_nutrition, force=nutrition_week_stale, reason=week_sync_reason_evolve if nutrition_week_stale else None)
+        nutrition_reason = week_sync_reason_evolve if nutrition_week_stale else (manual_refresh_reason if nutrition_manual_refresh else None)
+        nutrition = get_or_generate("nutrition_plan", user_id, build_nutrition, force=(nutrition_week_stale or nutrition_manual_refresh), reason=nutrition_reason)
         st.markdown(nutrition)
         adjust_flow("nutrition plan", "nutr")
 
     with tabs[4]:
         def build_workouts(existing=None, reason=None):
-            prompt = "Generate this week's committed 7-day training plan. Start with a short info box (2-3 sentences) on this phase's training principle, reasoned from this person's recovery/wearable data and goals. Then a markdown table: Day | Session type | Focus & exercises | Target duration, covering all 7 days. Calibrate intensity to recovery data if available. Keep each row tight so all 7 days fit — completeness across the full week matters more than depth on any single day." + week_context + consistency_context
+            prompt = "Generate this week's committed 7-day training plan. Start with a short info box (2-3 sentences) on this phase's training principle, reasoned from this person's recovery/wearable data and goals. Then a markdown table: Day | Session type | Focus & exercises | Target duration, covering all 7 days, labeled with generic weekday names only (Monday, Tuesday, ...) — never an absolute calendar date (e.g. never \"20 Jul\" or \"Mon 20 Jul\"), and never a \"today is [date]\" framing or a closing \"do this today\" callout anywhere in this content. This plan is cached and re-read across many days without regenerating, so anything tied to a specific date goes stale the moment a day passes — daily-specific nudges are handled elsewhere in the app. Calibrate intensity to recovery data if available. Keep each row tight so all 7 days fit — completeness across the full week matters more than depth on any single day." + week_context + consistency_context
             if existing:
                 prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
             return ai_generate(sys_prompt, prompt, max_tokens=2000)
         workouts_flag = get_open_materiality_flag(user_id, "workouts")
         render_materiality_flag(workouts_flag, on_regenerate=lambda: get_or_generate("workout_plan", user_id, build_workouts, force=True, reason=workouts_flag.get("flag_text") if workouts_flag else None))
+        workouts_manual_refresh = st.button("↻ Refresh", key="refresh_workouts_btn")
         workouts_week_stale = is_week_stale("workout_plan")
-        workouts = get_or_generate("workout_plan", user_id, build_workouts, force=workouts_week_stale, reason=week_sync_reason_evolve if workouts_week_stale else None)
+        workouts_reason = week_sync_reason_evolve if workouts_week_stale else (manual_refresh_reason if workouts_manual_refresh else None)
+        workouts = get_or_generate("workout_plan", user_id, build_workouts, force=(workouts_week_stale or workouts_manual_refresh), reason=workouts_reason)
         st.markdown(workouts)
         adjust_flow("training plan", "workout")
 # ── Materiality check — runs after new data is submitted, not on a timer ─────
