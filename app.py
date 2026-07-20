@@ -2553,7 +2553,7 @@ def show_protocol(user_id, profile):
                               "above — if the previous version has anything that no longer fits those instructions "
                               "(e.g. stale absolute dates or a \"today\" reference), fix it now rather than preserving it.")
 
-    tabs = st.tabs(["Treatment Roadmap", "Monthly Goal", "Supplements", "Nutrition", "Workouts"])
+    tabs = st.tabs(["Treatment Roadmap", "Monthly Goal", "Supplements", "Nutrition", "Workouts", "Lifestyle"])
 
     def adjust_flow(label, key_prefix):
         """Shared by every tab's 'Want to adjust something?' expander. Runs the
@@ -2651,6 +2651,39 @@ def show_protocol(user_id, profile):
         workouts = get_or_generate("workout_plan", user_id, build_workouts, force=(workouts_week_stale or workouts_manual_refresh), reason=workouts_reason)
         st.markdown(workouts)
         adjust_flow("training plan", "workout")
+
+    with tabs[5]:
+        def build_lifestyle(existing=None, reason=None):
+            prompt = ("Generate this week's committed lifestyle & nervous-system regulation protocol. Start with a short info box "
+                      "(2-3 sentences) on this phase's focus, reasoned from this person's actual stress/sleep/HRV check-in data and "
+                      "goals — not a generic rule. Then a markdown table: Day | Practice | Instructions | Duration, covering all 7 "
+                      "days, labeled with generic weekday names only (Monday, Tuesday, ...) — never an absolute calendar date, and "
+                      "never a \"today is [date]\" framing. This plan is cached and re-read across many days without regenerating, "
+                      "so anything tied to a specific date goes stale the moment a day passes.\n\n"
+                      "Cover nervous-system regulation (vagal tone practices — breathwork, cold exposure, humming/gargling, etc.), "
+                      "sleep hygiene and circadian rhythm, stress-management routines, and gut-brain axis support — reasoned from "
+                      "this person's actual data (HRV, recovery, stress check-ins, sleep quality), the same bio-individual way "
+                      "supplements and nutrition are reasoned.\n\n"
+                      "STRICT SCOPE BOUNDARY: this is lifestyle and nervous-system regulation coaching, never mental health "
+                      "treatment. Recommend concrete regulation PRACTICES (breathing techniques, sleep hygiene steps, movement, "
+                      "journaling prompts, routine structure) — never diagnose or name a mental health condition (anxiety, "
+                      "depression, etc.), never suggest therapy modalities or psychiatric treatment, never claim to treat or cure a "
+                      "mental health condition. If check-in data or symptoms suggest something beyond lifestyle-level support "
+                      "(e.g. persistent low mood, symptoms consistent with clinical anxiety or depression), say plainly that this "
+                      "is a conversation worth having with a mental health professional — the same way prescription medication "
+                      "decisions are deferred to a physician — and do not attempt to coach through it yourself."
+                      + week_context + consistency_context)
+            if existing:
+                prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
+            return ai_generate(sys_prompt, prompt, max_tokens=2200)
+        lifestyle_flag = get_open_materiality_flag(user_id, "lifestyle")
+        render_materiality_flag(lifestyle_flag, on_regenerate=lambda: get_or_generate("lifestyle_plan", user_id, build_lifestyle, force=True, reason=lifestyle_flag.get("flag_text") if lifestyle_flag else None))
+        lifestyle_manual_refresh = st.button("↻ Refresh", key="refresh_lifestyle_btn")
+        lifestyle_week_stale = is_week_stale("lifestyle_plan")
+        lifestyle_reason = week_sync_reason_evolve if lifestyle_week_stale else (manual_refresh_reason if lifestyle_manual_refresh else None)
+        lifestyle = get_or_generate("lifestyle_plan", user_id, build_lifestyle, force=(lifestyle_week_stale or lifestyle_manual_refresh), reason=lifestyle_reason)
+        st.markdown(lifestyle)
+        adjust_flow("lifestyle protocol", "lifestyle")
 # ── Materiality check — runs after new data is submitted, not on a timer ─────
 def check_materiality(user_id, sys_prompt, trigger_desc):
     """Returns the parsed {"material": bool, "level": str|None, "flag_text": str|None}
@@ -2659,8 +2692,8 @@ def check_materiality(user_id, sys_prompt, trigger_desc):
     changed — can show the verdict right there instead of only silently inserting
     a flag that's easy to miss."""
     prompt = f"""A new data point just came in: {trigger_desc}.
-Given everything you know about this patient, is there anything here material enough that the committed roadmap, this phase's monthly focus, or a weekly protocol (supplements/nutrition/workouts) should be revisited? Use your own clinical judgment — there is no fixed checklist. A change that's material for one patient may be irrelevant for another. Most single data points are NOT material — only flag genuine, protocol-relevant changes.
-Respond with ONLY valid JSON: {{"material": true/false, "level": "roadmap"|"monthly_focus"|"supplements"|"nutrition"|"workouts"|null, "flag_text": "what changed, why it's material for this person specifically, what level should change, what you're proposing" or "why this doesn't require a change" if not material}}"""
+Given everything you know about this patient, is there anything here material enough that the committed roadmap, this phase's monthly focus, or a weekly protocol (supplements/nutrition/workouts/lifestyle) should be revisited? Use your own clinical judgment — there is no fixed checklist. A change that's material for one patient may be irrelevant for another. Most single data points are NOT material — only flag genuine, protocol-relevant changes.
+Respond with ONLY valid JSON: {{"material": true/false, "level": "roadmap"|"monthly_focus"|"supplements"|"nutrition"|"workouts"|"lifestyle"|null, "flag_text": "what changed, why it's material for this person specifically, what level should change, what you're proposing" or "why this doesn't require a change" if not material}}"""
     raw = ai_generate(sys_prompt, prompt, max_tokens=500)
     try:
         match = re.search(r"\{.*\}", raw, re.DOTALL)
@@ -2868,7 +2901,7 @@ def show_coach(user_id, profile):
         st.session_state.coach_messages.append({"role": "user", "content": final_input})
         sys_prompt = build_system_prompt(user_id, profile, has_cycle=has_cycle)
         flags = []
-        for level in ["roadmap", "monthly_focus", "supplements", "nutrition", "workouts"]:
+        for level in ["roadmap", "monthly_focus", "supplements", "nutrition", "workouts", "lifestyle"]:
             f = get_open_materiality_flag(user_id, level)
             if f:
                 flags.append(f"[{level}] {f.get('flag_text','')}")
@@ -2893,7 +2926,7 @@ def show_profile(user_id, profile):
         except Exception:
             pass
 
-    open_flags = [f for level in ["roadmap", "monthly_focus", "supplements", "nutrition", "workouts"] if (f := get_open_materiality_flag(user_id, level))]
+    open_flags = [f for level in ["roadmap", "monthly_focus", "supplements", "nutrition", "workouts", "lifestyle"] if (f := get_open_materiality_flag(user_id, level))]
     if open_flags:
         f = open_flags[0]
         st.markdown(f'<div class="cp-banner"><strong>Coach notice ({f.get("level")}):</strong> {f.get("flag_text","")}</div>', unsafe_allow_html=True)
