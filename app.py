@@ -2058,23 +2058,32 @@ def render_profile_detail_nudge(user_id):
             dose = c2.text_input("Dose", key=f"gap_med_dose_{m['id']}", placeholder="e.g. 500mg", label_visibility="collapsed")
             timing = c3.text_input("Timing", key=f"gap_med_time_{m['id']}", placeholder="e.g. Twice daily, with food", label_visibility="collapsed")
             if c4.button("Save", key=f"gap_med_save_{m['id']}") and (dose or timing):
-                db_upsert("medications", {"id": m["id"], "dose": dose, "frequency": timing})
-                st.rerun()
+                try:
+                    supabase.table("medications").update({"dose": dose, "frequency": timing}).eq("id", m["id"]).execute()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Save error: {e}")
         for s in supps:
             c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
             c1.markdown(f"**{s['name']}**")
             dose = c2.text_input("Dose", key=f"gap_supp_dose_{s['id']}", placeholder="e.g. 2000 IU", label_visibility="collapsed")
             timing = c3.text_input("Timing", key=f"gap_supp_time_{s['id']}", placeholder="e.g. Morning, with breakfast", label_visibility="collapsed")
             if c4.button("Save", key=f"gap_supp_save_{s['id']}") and (dose or timing):
-                db_upsert("supplements", {"id": s["id"], "dose": dose, "timing": timing})
-                st.rerun()
+                try:
+                    supabase.table("supplements").update({"dose": dose, "timing": timing}).eq("id", s["id"]).execute()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Save error: {e}")
         for c in conditions:
             cc1, cc2, cc3 = st.columns([2, 4, 1])
             cc1.markdown(f"**{c['condition']}**")
             notes = cc2.text_input("Since / notes", key=f"gap_cond_notes_{c['id']}", placeholder="e.g. Diagnosed 2021, on medication", label_visibility="collapsed")
             if cc3.button("Save", key=f"gap_cond_save_{c['id']}") and notes:
-                db_upsert("medical_history", {"id": c["id"], "notes": notes})
-                st.rerun()
+                try:
+                    supabase.table("medical_history").update({"notes": notes}).eq("id", c["id"]).execute()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Save error: {e}")
     if st.button("Not now", key="detail_gap_dismiss"):
         st.session_state.hide_detail_nudge = True
         st.rerun()
