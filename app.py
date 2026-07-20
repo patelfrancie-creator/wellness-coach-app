@@ -806,7 +806,7 @@ Write two things, in this order:
 
 1. **Coach's take** — 2-4 sentences in your own voice synthesizing the overall pattern across these reports: what's genuinely improving, worsening, or stable, and what that means for this person specifically given their symptoms, goals, and current protocol. Interpret, don't just restate numbers — this is the most important part.
 
-2. A markdown table: Marker | value at each date it appears (format "YYYY-MM-DD: value unit") | Direction — one tight clause per marker on whether it's improving, worsening, or stable, reasoned against functional (optimal) ranges, not just raw numeric direction. Identify every marker that appears in 2 or more of these reports (match markers by meaning even if the exact wording differs slightly across reports — e.g. "Vitamin D" and "25-OH Vitamin D" are the same marker). Only include markers that genuinely appear in 2+ reports — skip markers unique to a single report.
+2. A markdown table: Marker | Direction — one tight clause per marker on whether it's improving, worsening, or stable, reasoned against functional (optimal) ranges, not just raw numeric direction. Identify every marker that appears in 2 or more of these reports (match markers by meaning even if the exact wording differs slightly across reports — e.g. "Vitamin D" and "25-OH Vitamin D" are the same marker). Only include markers that genuinely appear in 2+ reports — skip markers unique to a single report. Do NOT include the actual values/dates in this table — those are shown separately as a proper table elsewhere on the page; just the marker name and your direction judgment.
 
 If no marker repeats across reports, skip the table entirely and write only: "No overlapping markers to compare yet — your reports test different panels.\""""
     return ai_generate(sys_prompt, prompt, max_tokens=1800)
@@ -3102,25 +3102,57 @@ def show_profile_user(user_id, profile):
             st.rerun()
 
 
+def canonicalize_marker_names(raw_names):
+    """Reconciles marker names that drifted across independently-extracted
+    reports (e.g. "Hemoglobin" vs "Haemoglobin", "TIBC" vs "Total Iron
+    Binding Capacity") into one canonical name per underlying test. Each
+    report is extracted in isolation and can't see how other reports named
+    the same marker, so the per-extraction "use a stable name" instruction
+    alone isn't enough on real-world naming variance — verified this
+    reconciliation step actually fixes a real drift case. Returns
+    {raw_name: canonical_name}, covering every input name."""
+    unique_names = sorted(set(raw_names))
+    if len(unique_names) < 2:
+        return {n: n for n in unique_names}
+    prompt = f"""These are lab marker names extracted independently from different reports for the same patient. Some may refer to the exact same clinical test using different wording (e.g. "Hemoglobin" and "Haemoglobin", "TIBC" and "Total Iron Binding Capacity", "Serum Iron" and "Iron, Serum").
+
+Group any names that refer to the same test, and choose ONE clear canonical name per group. Names that are genuinely different tests must stay separate.
+
+Names:
+{json.dumps(unique_names)}
+
+Respond with ONLY a JSON object mapping every input name to its chosen canonical name, e.g. {{"Hemoglobin": "Hemoglobin", "Haemoglobin": "Hemoglobin"}}."""
+    raw = ai_generate("You are OneSattva, reconciling lab marker names across reports.", prompt, max_tokens=1000)
+    try:
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        mapping = json.loads(match.group(0) if match else raw)
+        return {n: mapping.get(n, n) for n in unique_names}
+    except Exception:
+        return {n: n for n in unique_names}
+
+
 def build_marker_trend_series(labs):
     """Aggregates structured_values across all reports by canonical marker
     name, keyed by report date — returns {marker: [(date, value, unit), ...]}
-    for markers appearing in 2+ reports, sorted chronologically. Depends on
-    extract_structured_lab_values() using a stable name for the same marker
-    every time (verified against real reports from different labs)."""
+    for markers appearing in 2+ reports, sorted chronologically."""
     from collections import defaultdict
-    series = defaultdict(list)
+    raw_series = defaultdict(list)
     for l in labs:
         report_date = l.get("report_date")
         for m in get_structured_lab_values(l):
             if m.get("marker") and isinstance(m.get("value"), (int, float)) and report_date:
-                series[m["marker"]].append((report_date, m["value"], m.get("unit", "")))
+                raw_series[m["marker"]].append((report_date, m["value"], m.get("unit", "")))
+    if not raw_series:
+        return {}
+    mapping = canonicalize_marker_names(list(raw_series.keys()))
+    series = defaultdict(list)
+    for raw_name, points in raw_series.items():
+        series[mapping.get(raw_name, raw_name)].extend(points)
     return {marker: sorted(points) for marker, points in series.items() if len(points) >= 2}
 
 
-def render_marker_trend_charts(labs):
+def render_marker_trend_charts(series):
     import pandas as pd
-    series = build_marker_trend_series(labs)
     if not series:
         st.caption("Not enough overlapping markers across reports yet to chart trends.")
         return
@@ -3131,6 +3163,27 @@ def render_marker_trend_charts(labs):
         with cols[i % 2]:
             st.markdown(f'<div class="snap-lbl" style="margin-top:8px">{marker}{f" ({unit})" if unit else ""}</div>', unsafe_allow_html=True)
             st.line_chart(df, height=180)
+
+
+def render_marker_trend_table(series):
+    """A real pivot table (marker rows, one column per report date) built
+    directly from structured_values — replaces the old approach of asking
+    the AI to cram every date into a single string per cell, which is
+    exactly what read as jumbled. Numbers come from code, not LLM
+    formatting, so column count and alignment are always reliable."""
+    import pandas as pd
+    if not series:
+        return
+    all_dates = sorted({p[0] for points in series.values() for p in points})
+    rows = {}
+    for marker, points in sorted(series.items()):
+        unit = points[-1][2]
+        by_date = {p[0]: p[1] for p in points}
+        row_label = f"{marker} ({unit})" if unit else marker
+        rows[row_label] = [by_date.get(d, None) for d in all_dates]
+    df = pd.DataFrame(rows, index=all_dates).T
+    df.columns.name = "Marker \\ Date"
+    st.dataframe(df, use_container_width=True)
 
 
 def show_profile_labs(user_id, profile):
@@ -3161,8 +3214,15 @@ def show_profile_labs(user_id, profile):
 
     labs = db_get("lab_reports", user_id, order_col="report_date")
     if len(labs) >= 2:
-        st.markdown('<div class="sl">Trends across your reports</div>', unsafe_allow_html=True)
-        render_marker_trend_charts(labs)
+        tc1, tc2 = st.columns([5, 1])
+        tc1.markdown('<div class="sl" style="margin-top:0">Trends across your reports</div>', unsafe_allow_html=True)
+        if tc2.button("↻ Refresh", key="refresh_trends_btn"):
+            with st.spinner("Refreshing..."):
+                refresh_lab_trends(user_id)
+            st.rerun()
+        marker_series = build_marker_trend_series(labs)
+        render_marker_trend_charts(marker_series)
+        render_marker_trend_table(marker_series)
         trends = db_get_single("lab_trends", user_id)
         if trends and trends.get("content"):
             st.markdown(trends["content"])
