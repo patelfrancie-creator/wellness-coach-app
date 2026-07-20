@@ -266,6 +266,15 @@ html, body, [class*="css"] {{ font-family: 'Inter', sans-serif; }}
 .gc-wkf {{ color:rgba(247,245,242,0.7); line-height:1.4; }}
 .gc-wk.now {{ background:rgba(182,116,74,0.14); border:1px solid rgba(182,116,74,0.2); }}
 
+.phase-timeline {{ display:flex; gap:10px; overflow-x:auto; padding-bottom:4px; margin-bottom:16px; }}
+.phase-card {{ background:var(--white); border:1px solid var(--line); border-radius:12px; padding:14px 15px; min-width:190px; flex:1; }}
+.phase-card.current {{ background:var(--cu-bg); border:1px solid var(--cu-bd); }}
+.phase-num {{ font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--mid); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px; }}
+.phase-card.current .phase-num {{ color:var(--copper); font-weight:600; }}
+.phase-focus {{ font-size:13px; font-weight:500; color:var(--graphite); margin-bottom:8px; line-height:1.35; }}
+.phase-meta {{ font-size:11px; color:var(--mid); line-height:1.5; }}
+.phase-meta strong {{ color:var(--graphite); font-weight:500; }}
+
 .snap-grid {{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }}
 .snap-box  {{ background:var(--white); border:1px solid var(--line); border-radius:10px; padding:13px 14px; }}
 .snap-lbl  {{ font-size:10px; font-weight:600; letter-spacing:0.07em; text-transform:uppercase; color:var(--mid); }}
@@ -1167,9 +1176,18 @@ def show_onboarding(user_id, profile):
     if "ob_step" not in st.session_state:
         ob_state = get_onboarding_state(user_id)
         st.session_state.ob_step = (ob_state or {}).get("current_step") or 1
+        # Only true once, right when a session is restored from a previous
+        # visit — not on every step transition within one sitting — so the
+        # "welcome back" framing doesn't show up after every normal Continue click.
+        st.session_state.ob_just_resumed = st.session_state.ob_step > 1
     step = st.session_state.ob_step
     st.markdown('<div style="max-width:820px;margin:0 auto;padding-top:18px">', unsafe_allow_html=True)
     onboarding_progress(step)
+
+    if st.session_state.get("ob_just_resumed"):
+        st.markdown(f'<div class="cp-banner" style="margin-bottom:16px"><strong>Welcome back.</strong> You\'re right where you left off — Step {step} of {len(ONBOARDING_STEPS)}.</div>', unsafe_allow_html=True)
+    else:
+        st.caption("Your progress saves automatically as you go — pause anytime and pick up right where you left off.")
 
     if step == 1:
         onboarding_step1(user_id, profile)
@@ -2304,6 +2322,50 @@ Table: Phase | Focus | Key milestones | Checkpoint — one row per phase, all {p
         db_upsert("roadmaps", {"user_id": user_id, "roadmap_text": new_text, "provisional": not labs_present}, on_conflict="user_id")
 
 
+# ── Phase Timeline visual — parsed from the "## Phase Timeline" table the ────
+# roadmap prompt already reliably produces (see FORMAT section above). Purely
+# a display-layer enhancement, no change to generation needed.
+def parse_phase_timeline(roadmap_text):
+    m = re.search(r"##\s*Phase Timeline\s*\n(.*?)(?=\n##\s|\Z)", roadmap_text, re.DOTALL)
+    if not m:
+        return []
+    rows = []
+    for line in m.group(1).strip().split("\n"):
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if all(re.fullmatch(r":?-+:?", c) for c in cells):
+            continue  # the |---|---|---|---| header-separator row
+        if len(cells) >= 4:
+            rows.append({"phase": cells[0], "focus": cells[1], "milestones": cells[2], "checkpoint": cells[3]})
+    if rows and rows[0]["phase"].lower() == "phase":
+        rows = rows[1:]  # the literal header row (Phase | Focus | ...)
+    return rows
+
+
+def strip_phase_timeline_section(roadmap_text):
+    """Removes the raw markdown table once it's shown as the visual timeline
+    instead, so the same data isn't displayed twice."""
+    return re.sub(r"##\s*Phase Timeline\s*\n.*?(?=\n##\s|\Z)", "", roadmap_text, count=1, flags=re.DOTALL)
+
+
+def render_phase_timeline(phases, current_index):
+    if not phases:
+        return
+    cards = []
+    for i, p in enumerate(phases):
+        phase_label = p["phase"] if re.match(r"(?i)phase\b", p["phase"]) else f"Phase {p['phase']}"
+        cards.append(f"""
+<div class="phase-card{' current' if i == current_index else ''}">
+<div class="phase-num">{phase_label}{' · Now' if i == current_index else ''}</div>
+<div class="phase-focus">{p['focus']}</div>
+<div class="phase-meta"><strong>Milestone:</strong> {p['milestones']}</div>
+<div class="phase-meta"><strong>Checkpoint:</strong> {p['checkpoint']}</div>
+</div>""")
+    st.markdown(f'<div class="phase-timeline">{"".join(cards)}</div>', unsafe_allow_html=True)
+
+
 # ── Protocol Page ─────────────────────────────────────────────────────────────
 def show_protocol(user_id, profile):
     st.markdown('<div class="pg-title">Protocol</div>', unsafe_allow_html=True)
@@ -2419,8 +2481,17 @@ def show_protocol(user_id, profile):
         st.markdown(f'<div class="sl first">{roadmap.get("plan_mode","")} · roadmap · Committed {roadmap.get("generated_at","")}</div>', unsafe_allow_html=True)
         if roadmap.get("provisional"):
             st.warning("This roadmap is provisional — labs were not yet available when it was generated.")
-        st.markdown(roadmap.get("roadmap_text", "_No roadmap text._"))
-        st.download_button("Download roadmap", roadmap.get("roadmap_text", ""), file_name="onesattva_roadmap.md")
+        full_roadmap_text = roadmap.get("roadmap_text", "_No roadmap text._")
+        phases = parse_phase_timeline(full_roadmap_text)
+        if phases:
+            current_phase_index = 0
+            if plan and plan.get("total_weeks"):
+                current_phase_index = min(int(plan["week_num"] / plan["total_weeks"] * len(phases)), len(phases) - 1)
+            render_phase_timeline(phases, current_phase_index)
+            st.markdown(strip_phase_timeline_section(full_roadmap_text))
+        else:
+            st.markdown(full_roadmap_text)
+        st.download_button("Download roadmap", full_roadmap_text, file_name="onesattva_roadmap.md")
         adjust_flow("overall roadmap", "roadmap")
 
     with tabs[1]:
