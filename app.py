@@ -715,7 +715,16 @@ def get_structured_lab_values(lab_report):
         return []
     parsed = extract_structured_lab_values(raw_values)
     if parsed:
-        db_upsert("lab_reports", {"id": lab_report["id"], "structured_values": json.dumps(parsed)})
+        # A plain UPDATE, not db_upsert — this row is already known to exist
+        # (it came from a prior fetch), so there's no ambiguity to resolve
+        # about matching an ON CONFLICT target. Failures here are non-fatal:
+        # get_structured_lab_values() still returns the freshly-extracted
+        # values for THIS render even if the backfill-save silently fails,
+        # it just retries next time (same "never permanently stuck" property).
+        try:
+            supabase.table("lab_reports").update({"structured_values": json.dumps(parsed)}).eq("id", lab_report["id"]).execute()
+        except Exception:
+            pass
     return parsed
 
 
