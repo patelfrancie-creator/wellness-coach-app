@@ -683,7 +683,12 @@ Respond with ONLY the JSON array, nothing else.
 
 LAB TEXT:
 {raw_values}"""
-    raw = ai_generate("You are OneSattva, extracting structured lab data for a patient's records.", prompt, max_tokens=1500)
+    # 1500 tokens was too tight for a real comprehensive panel (verified: a
+    # 52-marker real report hit stop_reason="max_tokens" and got cut off
+    # mid-array, which silently failed to parse and returned nothing — the
+    # exact bug a tester hit). 6000 comfortably covers even a large full-body
+    # panel; the interpretation/summary call is separate and unaffected.
+    raw = ai_generate("You are OneSattva, extracting structured lab data for a patient's records.", prompt, max_tokens=6000)
     try:
         match = re.search(r"\[.*\]", raw, re.DOTALL)
         return json.loads(match.group(0) if match else raw)
