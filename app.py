@@ -3281,17 +3281,13 @@ def show_profile_labs(user_id, profile):
             db_delete("lab_reports", l["id"])
             refresh_lab_trends(user_id)
             st.rerun()
-        with st.expander("View full interpretation & extracted values", key=f"lab_detail_{l['id']}"):
+        with st.expander("View interpretation & key numbers", key=f"lab_detail_{l['id']}"):
             st.markdown(f"**Coach interpretation**\n\n{l.get('summary','') or '_None._'}")
-            st.markdown("---")
             structured = get_structured_lab_values(l)
             if structured:
+                st.markdown("---")
                 st.markdown("**Key numbers**")
                 render_lab_key_numbers(structured)
-                with st.expander("View raw extracted text"):
-                    st.markdown(l.get('raw_values','') or '_None._')
-            else:
-                st.markdown(f"**Extracted values**\n\n{l.get('raw_values','') or '_None._'}")
             st.markdown("---")
             report_q = st.text_area("Ask your coach about this specific report", key=f"lab_clarify_{l['id']}")
             if st.button("Send to your coach", key=f"lab_clarify_btn_{l['id']}") and report_q:
