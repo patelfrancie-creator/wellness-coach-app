@@ -694,11 +694,15 @@ LAB TEXT:
 def get_structured_lab_values(lab_report):
     """Lazily backfills structured_values for reports saved before this
     column existed — self-heals from the already-stored raw_values instead
-    of needing a bulk migration script."""
+    of needing a bulk migration script. Only treats a NON-empty prior result
+    as "already done" — an empty/failed extraction (e.g. a parsing hiccup on
+    one specific document) must retry on next view, not get stuck forever."""
     existing = lab_report.get("structured_values")
     if existing:
         try:
-            return json.loads(existing)
+            parsed_existing = json.loads(existing)
+            if parsed_existing:
+                return parsed_existing
         except Exception:
             pass
     raw_values = lab_report.get("raw_values", "")
@@ -3131,6 +3135,21 @@ Respond with ONLY a JSON object mapping every input name to its chosen canonical
         return {n: n for n in unique_names}
 
 
+def _coerce_lab_value(value):
+    """Real document extraction sometimes outputs a number as a JSON string
+    (e.g. "11.3" instead of 11.3) — an isinstance(value, (int, float)) check
+    silently drops those from trending even though they display fine in the
+    Key Numbers cards (which don't type-check). Coerce before filtering."""
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        try:
+            return float(value.replace(",", "").strip())
+        except (ValueError, AttributeError):
+            return None
+    return None
+
+
 def build_marker_trend_series(labs):
     """Aggregates structured_values across all reports by canonical marker
     name, keyed by report date — returns {marker: [(date, value, unit), ...]}
@@ -3140,8 +3159,9 @@ def build_marker_trend_series(labs):
     for l in labs:
         report_date = l.get("report_date")
         for m in get_structured_lab_values(l):
-            if m.get("marker") and isinstance(m.get("value"), (int, float)) and report_date:
-                raw_series[m["marker"]].append((report_date, m["value"], m.get("unit", "")))
+            value = _coerce_lab_value(m.get("value"))
+            if m.get("marker") and value is not None and report_date:
+                raw_series[m["marker"]].append((report_date, value, m.get("unit", "")))
     if not raw_series:
         return {}
     mapping = canonicalize_marker_names(list(raw_series.keys()))
