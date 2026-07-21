@@ -2831,6 +2831,12 @@ def show_checkin(user_id, profile):
     today_checkin = checkins[0] if checkins and checkins[0].get("checkin_date") == today_str else None
 
     st.markdown('<div class="pg-title">Daily Check-In</div>', unsafe_allow_html=True)
+    flagged_note = st.session_state.pop("checkin_materiality_flag_text", None)
+    if flagged_note is not None:
+        st.success(f"Check-in saved. Your coach flagged something worth updating — check the Protocol tab. {flagged_note}")
+    elif "just_saved_checkin" in st.session_state:
+        del st.session_state["just_saved_checkin"]
+        st.success("Check-in saved.")
     tod = "Morning" if local_now.hour < 12 else "Afternoon" if local_now.hour < 18 else "Evening"
     st.markdown(f'<div class="pg-sub">{tod} check-in · {local_now.strftime("%A, %d %B")}{cycle_str} · Pre-filled from yesterday. Edit anything that has changed today. Takes less than 2 minutes.</div>', unsafe_allow_html=True)
 
@@ -2907,8 +2913,16 @@ def show_checkin(user_id, profile):
         st.session_state.checkin_editing = False
         has_cycle2 = profile.get("has_cycle", False) if profile else False
         sys_prompt = build_system_prompt(user_id, profile, has_cycle=has_cycle2)
-        check_materiality(user_id, sys_prompt, f"Today's check-in: {row}")
-        st.success("Check-in saved.")
+        checkin_result = check_materiality(user_id, sys_prompt, f"Today's check-in: {row}")
+        # Only stash something to show post-rerun when it's actually material —
+        # check-ins happen daily, so a "no change needed" message every single
+        # day would be noise. A flagged change is exactly the kind of thing
+        # that shouldn't just silently wait to be discovered on the Protocol
+        # tab later, though — that's the gap this fixes.
+        if checkin_result and checkin_result.get("material"):
+            st.session_state.checkin_materiality_flag_text = checkin_result.get("flag_text", "")
+        else:
+            st.session_state.just_saved_checkin = True
         st.rerun()
 
 
@@ -3366,8 +3380,26 @@ def show_profile_labs(user_id, profile):
         elif saved_summaries:
             has_cycle = profile.get("has_cycle", False) if profile else False
             sys_prompt = build_system_prompt(user_id, profile, has_cycle=has_cycle)
-            check_materiality(user_id, sys_prompt, f"New lab report(s) uploaded: {'; '.join(saved_summaries)}")
+            with st.spinner("Checking whether this changes your protocol..."):
+                result = check_materiality(user_id, sys_prompt, f"New lab report(s) uploaded: {'; '.join(saved_summaries)}")
+            # Stash across the rerun (needed so "Saved reports" below reflects
+            # the new upload immediately) rather than showing it inline here,
+            # since st.rerun() would discard this render before it's seen.
+            # Wrapped in a dict so "no upload happened" (nothing in session
+            # state) is distinguishable from "checked, but the AI judgment
+            # call itself failed to parse" (result is None).
+            st.session_state.lab_materiality_result = {"checked": True, "result": result}
             st.rerun()
+
+    lab_check = st.session_state.pop("lab_materiality_result", None)
+    if lab_check:
+        lab_result = lab_check["result"]
+        if lab_result is None:
+            st.warning("Uploaded, but couldn't evaluate whether this changes your protocol just now — your coach can still check manually via Coach chat.")
+        elif lab_result.get("material"):
+            st.success(f"Your coach reviewed this against your protocol — flagged for update. Check the Protocol tab. {lab_result.get('flag_text','')}")
+        else:
+            st.info(f"Your coach reviewed this against your protocol — no change needed right now. {lab_result.get('flag_text','')}")
 
     labs = db_get("lab_reports", user_id, order_col="report_date")
     if len(labs) >= 2:
