@@ -2141,10 +2141,12 @@ def render_milestone_check(user_id, plan, sys_prompt):
             trigger_desc = (f"End of {concluded['phase']} milestone check. Stated milestone: {concluded['milestones']}. "
                             f"User reports: {status}." + (f" Additional note: {note}" if note else ""))
             with st.spinner("Checking with your coach..."):
-                result = check_materiality(user_id, sys_prompt, trigger_desc)
+                results = check_materiality(user_id, sys_prompt, trigger_desc)
             db_upsert("roadmaps", {"user_id": user_id, "last_milestone_check_phase": last_checked + 1}, on_conflict="user_id")
-            if result and result.get("material"):
-                st.success(f"Flagged for update — check the Protocol tab. {result.get('flag_text','')}")
+            materials = [r for r in results if r.get("material")] if results else []
+            if materials:
+                levels_str = ", ".join(LEVEL_LABELS.get(r["level"], r["level"]) for r in materials)
+                st.success(f"Flagged for update: {levels_str} — check Home for details.")
             else:
                 st.info("Noted — no change needed to your plan right now.")
             st.rerun()
@@ -2761,13 +2763,16 @@ def show_protocol(user_id, profile):
         with st.expander("Want to adjust something?"):
             adj = st.text_area("Describe what you'd like to change", key=f"adj_{key_prefix}")
             if st.button("Tell your coach", key=f"adj_{key_prefix}_btn") and adj:
-                result = check_materiality(user_id, sys_prompt, f"User says about their {label}: {adj}")
-                if result is None:
+                results = check_materiality(user_id, sys_prompt, f"User says about their {label}: {adj}")
+                if results is None:
                     st.warning("Couldn't evaluate that just now — try again in a moment.")
-                elif result.get("material"):
-                    st.success(f"Flagged for update — reopen this tab to see the Regenerate option. {result.get('flag_text','')}")
                 else:
-                    st.info(f"No change needed: {result.get('flag_text') or 'this does not change your current protocol.'}")
+                    materials = [r for r in results if r.get("material")]
+                    if materials:
+                        levels_str = ", ".join(LEVEL_LABELS.get(r["level"], r["level"]) for r in materials)
+                        st.success(f"Flagged for update: {levels_str} — reopen the relevant tab to see the Regenerate option.")
+                    else:
+                        st.info("No change needed — this doesn't affect your current protocol.")
 
     with tabs[0]:
         roadmap_flag = get_open_materiality_flag(user_id, "roadmap")
@@ -2851,21 +2856,26 @@ def show_protocol(user_id, profile):
         adjust_flow("lifestyle protocol", "lifestyle")
 # ── Materiality check — runs after new data is submitted, not on a timer ─────
 def check_materiality(user_id, sys_prompt, trigger_desc):
-    """Returns the parsed {"material": bool, "level": str|None, "flag_text": str|None}
-    verdict (or None if the judgment call itself failed to parse), so a caller that
-    needs to react immediately — e.g. a user directly telling the coach something
-    changed — can show the verdict right there instead of only silently inserting
-    a flag that's easy to miss."""
+    """Judges all 6 protocol levels independently against the same trigger,
+    since a single real-world event (e.g. a new lab report) can genuinely be
+    material to more than one of them at once — asking for only one "level"
+    per event silently meant every other affected level never got evaluated.
+    Returns a list of per-level {"level", "material", "flag_text"} dicts (or
+    None if the judgment call itself failed to parse), so a caller that needs
+    to react immediately can show what happened instead of only silently
+    inserting flags that are easy to miss."""
     prompt = f"""A new data point just came in: {trigger_desc}.
-Given everything you know about this patient, is there anything here material enough that the committed roadmap, this phase's monthly focus, or a weekly protocol (supplements/nutrition/workouts/lifestyle) should be revisited? Use your own clinical judgment — there is no fixed checklist. A change that's material for one patient may be irrelevant for another. Most single data points are NOT material — only flag genuine, protocol-relevant changes.
-Respond with ONLY valid JSON: {{"material": true/false, "level": "roadmap"|"monthly_focus"|"supplements"|"nutrition"|"workouts"|"lifestyle"|null, "flag_text": "what changed, why it's material for this person specifically, what level should change, what you're proposing" or "why this doesn't require a change" if not material}}"""
-    raw = ai_generate(sys_prompt, prompt, max_tokens=500)
+Given everything you know about this patient, evaluate — independently — whether each of these levels is material enough to revisit: the committed roadmap, this phase's monthly focus, and the weekly supplements/nutrition/workouts/lifestyle protocols. Use your own clinical judgment — there is no fixed checklist. A single event can genuinely affect more than one level at once (e.g. a new lab finding might change both the roadmap and the supplement schedule), or none at all. Most single data points are NOT material — only flag genuine, protocol-relevant changes; don't flag a level just because you can find some workable justification for it.
+This is a short flag/notification, not the actual revised content — the full reasoning happens when the level is actually regenerated. Keep each flag_text to 1-2 tight sentences: what changed and why it matters for this person, nothing more.
+Respond with ONLY a valid JSON array of exactly 6 objects, one per level, in this exact order: roadmap, monthly_focus, supplements, nutrition, workouts, lifestyle. Each object: {{"level": "...", "material": true/false, "flag_text": "1-2 sentences: what changed, why it's material for this person specifically" or "1 short sentence why this doesn't require a change" if not material}}"""
+    raw = ai_generate(sys_prompt, prompt, max_tokens=2500)
     try:
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
-        result = json.loads(match.group(0) if match else raw)
+        match = re.search(r"\[.*\]", raw, re.DOTALL)
+        results = json.loads(match.group(0) if match else raw)
     except Exception:
         return None
-    if result.get("material"):
+    materials = [r for r in results if r.get("material")]
+    if materials:
         # Today's Home page priorities are cached once per calendar day, so a
         # material event (new labs, a materially different check-in) would
         # otherwise keep showing stale "no labs on file"-style content until
@@ -2873,9 +2883,21 @@ Respond with ONLY valid JSON: {{"material": true/false, "level": "roadmap"|"mont
         # with the full picture on the next visit.
         today_str = date.today().isoformat()
         supabase.table("daily_priorities").delete().eq("user_id", user_id).eq("for_date", today_str).execute()
-        if result.get("level"):
-            db_insert("materiality_flags", {"user_id": user_id, "level": result["level"], "flag_text": result.get("flag_text", ""), "resolved": False, "created_at": datetime.now().isoformat()})
-    return result
+        for r in materials:
+            if r.get("level"):
+                db_insert("materiality_flags", {"user_id": user_id, "level": r["level"], "flag_text": r.get("flag_text", ""), "resolved": False, "created_at": datetime.now().isoformat()})
+    return results
+
+
+def flag_profile_change(user_id, profile_for_prompt, change_desc):
+    """Fire-and-forget materiality check for a Profile & Data edit. No inline
+    UI feedback here — these edits are frequent and often trivial, so a flag
+    (when the AI judges one genuinely warranted) surfaces via the Home
+    banner (render_open_materiality_flags_banner) instead of an extra
+    message on every single save."""
+    has_cycle = profile_for_prompt.get("has_cycle", False) if profile_for_prompt else False
+    sys_prompt = build_system_prompt(user_id, profile_for_prompt, has_cycle=has_cycle)
+    check_materiality(user_id, sys_prompt, change_desc)
 
 
 # ── Check-In Page ─────────────────────────────────────────────────────────────
@@ -2936,7 +2958,7 @@ def show_checkin(user_id, profile):
     st.markdown('<div class="pg-title">Daily Check-In</div>', unsafe_allow_html=True)
     flagged_note = st.session_state.pop("checkin_materiality_flag_text", None)
     if flagged_note is not None:
-        st.success(f"Check-in saved. Your coach flagged something worth updating — check the Protocol tab. {flagged_note}")
+        st.success(f"Check-in saved. Your coach flagged: {flagged_note} — check Home for details.")
     elif "just_saved_checkin" in st.session_state:
         del st.session_state["just_saved_checkin"]
         st.success("Check-in saved.")
@@ -3016,14 +3038,15 @@ def show_checkin(user_id, profile):
         st.session_state.checkin_editing = False
         has_cycle2 = profile.get("has_cycle", False) if profile else False
         sys_prompt = build_system_prompt(user_id, profile, has_cycle=has_cycle2)
-        checkin_result = check_materiality(user_id, sys_prompt, f"Today's check-in: {row}")
+        checkin_results = check_materiality(user_id, sys_prompt, f"Today's check-in: {row}")
         # Only stash something to show post-rerun when it's actually material —
         # check-ins happen daily, so a "no change needed" message every single
         # day would be noise. A flagged change is exactly the kind of thing
         # that shouldn't just silently wait to be discovered on the Protocol
         # tab later, though — that's the gap this fixes.
-        if checkin_result and checkin_result.get("material"):
-            st.session_state.checkin_materiality_flag_text = checkin_result.get("flag_text", "")
+        checkin_materials = [r for r in checkin_results if r.get("material")] if checkin_results else []
+        if checkin_materials:
+            st.session_state.checkin_materiality_flag_text = ", ".join(LEVEL_LABELS.get(r["level"], r["level"]) for r in checkin_materials)
         else:
             st.session_state.just_saved_checkin = True
         st.rerun()
@@ -3160,8 +3183,11 @@ def show_profile_user(user_id, profile):
                     new_has_cycle = st.checkbox("I currently have a menstrual cycle to track", value=bool(has_cycle_now), key="ed_hc")
                 if st.button("Save changes", key="save_demo"):
                     ed_location = ", ".join(x for x in [ed_city.strip(), ed_country] if x)
-                    db_upsert("profiles", {"id": user_id, "height_cm": height, "weight_kg": weight, "location": ed_location,
-                                            "blood_group": ed_blood_group, "occupation": occupation, "has_cycle": bool(new_has_cycle)})
+                    updated_fields = {"height_cm": height, "weight_kg": weight, "location": ed_location,
+                                       "blood_group": ed_blood_group, "occupation": occupation, "has_cycle": bool(new_has_cycle)}
+                    db_upsert("profiles", {"id": user_id, **updated_fields})
+                    with st.spinner("Checking with your coach..."):
+                        flag_profile_change(user_id, {**p, **updated_fields}, f"User updated demographics: height {height}cm, weight {weight}kg, location {ed_location}, blood group {ed_blood_group}, occupation {occupation}, tracks cycle: {bool(new_has_cycle)}")
                     st.success("Saved.")
                     st.rerun()
     with c2:
@@ -3175,6 +3201,8 @@ def show_profile_user(user_id, profile):
                     cc1.markdown(f'<div class="pr"><span class="pr-k">{c.get("condition","")}</span><span class="pr-v">{c.get("notes","")}</span></div>', unsafe_allow_html=True)
                     if cc2.button("Delete", key=f"del_cond_{c['id']}"):
                         db_delete("medical_history", c["id"])
+                        with st.spinner("Checking with your coach..."):
+                            flag_profile_change(user_id, p, f"User removed medical condition: {c.get('condition','')}")
                         st.rerun()
             if meds:
                 for m in meds:
@@ -3182,6 +3210,8 @@ def show_profile_user(user_id, profile):
                     mc1.markdown(f'<div class="pr"><span class="pr-k">{m.get("name","")}</span><span class="pr-v">{m.get("dose","")} · {m.get("frequency","")}</span></div>', unsafe_allow_html=True)
                     if mc2.button("Delete", key=f"del_med_{m['id']}"):
                         db_delete("medications", m["id"])
+                        with st.spinner("Checking with your coach..."):
+                            flag_profile_change(user_id, p, f"User removed medication: {m.get('name','')}")
                         st.rerun()
             if not conditions and not meds:
                 st.caption("No conditions or medications on file.")
@@ -3190,6 +3220,8 @@ def show_profile_user(user_id, profile):
                 cond_notes = st.text_input("Notes", key="new_cond_notes")
                 if st.button("Add condition", key="add_cond") and new_cond:
                     db_insert("medical_history", {"user_id": user_id, "condition": new_cond, "notes": cond_notes})
+                    with st.spinner("Checking with your coach..."):
+                        flag_profile_change(user_id, p, f"User added medical condition: {new_cond} ({cond_notes or 'no notes'})")
                     st.rerun()
                 st.markdown("---")
                 new_med = st.text_input("New medication", key="new_med")
@@ -3197,11 +3229,15 @@ def show_profile_user(user_id, profile):
                 med_freq = st.text_input("Frequency / timing", key="new_med_freq")
                 if st.button("Add medication", key="add_med") and new_med:
                     db_insert("medications", {"user_id": user_id, "name": new_med, "dose": med_dose, "frequency": med_freq, "active": True})
+                    with st.spinner("Checking with your coach..."):
+                        flag_profile_change(user_id, p, f"User added medication: {new_med} ({med_dose or 'no dose stated'}, {med_freq or 'no timing stated'})")
                     st.rerun()
             with st.expander("Family history & past surgeries"):
                 bg_text = st.text_area("Family history & past surgeries", value=((health_bg_row or {}).get("notes") or ""), height=90, key="ed_health_bg", label_visibility="collapsed")
                 if st.button("Save", key="save_health_bg"):
                     db_upsert("profile_notes", {"user_id": user_id, "notes": bg_text}, on_conflict="user_id")
+                    with st.spinner("Checking with your coach..."):
+                        flag_profile_change(user_id, p, f"User updated family history & past surgeries: {bg_text or 'cleared'}")
                     st.success("Saved.")
                     st.rerun()
 
@@ -3212,10 +3248,14 @@ def show_profile_user(user_id, profile):
             gc1.markdown(f"- {g['goal']} *{('· ' + g['timeframe']) if g.get('timeframe') else ''}*")
             if gc2.button("Delete", key=f"del_goal_{g['id']}"):
                 db_delete("goals", g["id"])
+                with st.spinner("Checking with your coach..."):
+                    flag_profile_change(user_id, p, f"User removed goal: {g.get('goal','')}")
                 st.rerun()
         new_goal = st.text_input("Add a goal", key="new_goal")
         if st.button("+ Add goal", key="add_goal_btn") and new_goal:
             db_insert("goals", {"user_id": user_id, "goal": new_goal, "timeframe": "3 months"})
+            with st.spinner("Checking with your coach..."):
+                flag_profile_change(user_id, p, f"User added goal: {new_goal}")
             st.rerun()
 
     with st.expander("Current supplements"):
@@ -3225,6 +3265,8 @@ def show_profile_user(user_id, profile):
             sc1.markdown(f"- {s.get('name','')} — {s.get('dose','')} ({s.get('timing','')})")
             if sc2.button("Delete", key=f"del_supp_{s['id']}"):
                 db_delete("supplements", s["id"])
+                with st.spinner("Checking with your coach..."):
+                    flag_profile_change(user_id, p, f"User removed supplement: {s.get('name','')}")
                 st.rerun()
         n1, n2, n3 = st.columns(3)
         sn = n1.text_input("Name", key="new_supp_n")
@@ -3232,6 +3274,8 @@ def show_profile_user(user_id, profile):
         st_ = n3.text_input("Timing", key="new_supp_t")
         if st.button("+ Add supplement", key="add_supp_btn") and sn:
             db_insert("supplements", {"user_id": user_id, "name": sn, "dose": sd, "timing": st_, "active": True})
+            with st.spinner("Checking with your coach..."):
+                flag_profile_change(user_id, p, f"User added supplement: {sn} ({sd or 'no dose stated'}, {st_ or 'no timing stated'})")
             st.rerun()
 
     with st.container(border=True):
@@ -3246,6 +3290,8 @@ def show_profile_user(user_id, profile):
             allergies = st.text_input("Allergies / intolerances", value=(p.get("allergies") or ""), key="ed_allerg")
             if st.button("Save dietary profile", key="save_diet"):
                 db_upsert("profiles", {"id": user_id, "eating_pattern": eating_pattern, "allergies": allergies})
+                with st.spinner("Checking with your coach..."):
+                    flag_profile_change(user_id, {**p, "eating_pattern": eating_pattern, "allergies": allergies}, f"User updated dietary profile: eating pattern {eating_pattern}, allergies/intolerances: {allergies or 'none stated'}")
                 st.success("Saved.")
                 st.rerun()
 
@@ -3264,8 +3310,11 @@ def show_profile_user(user_id, profile):
             ed_eating_out = ec2.selectbox("Eating out / ordering in", EATING_OUT_LEVELS, index=selectbox_index(EATING_OUT_LEVELS, p.get("eating_out")), key="ed_eating_out")
             ed_food_prefs = st.text_area("Food preferences or patterns the coach should know about", value=(p.get("food_prefs") or ""), height=80, key="ed_food_prefs")
             if st.button("Save eating schedule", key="save_eating"):
-                db_upsert("profiles", {"id": user_id, "first_meal": ed_first_meal, "last_meal": ed_last_meal,
-                                        "meals_per_day": ed_meals_per_day, "eating_out": ed_eating_out, "food_prefs": ed_food_prefs})
+                eating_fields = {"first_meal": ed_first_meal, "last_meal": ed_last_meal, "meals_per_day": ed_meals_per_day,
+                                  "eating_out": ed_eating_out, "food_prefs": ed_food_prefs}
+                db_upsert("profiles", {"id": user_id, **eating_fields})
+                with st.spinner("Checking with your coach..."):
+                    flag_profile_change(user_id, {**p, **eating_fields}, f"User updated eating schedule: first meal {ed_first_meal}, last meal {ed_last_meal}, {ed_meals_per_day}, eating out {ed_eating_out}, food preferences: {ed_food_prefs or 'none stated'}")
                 st.success("Saved.")
                 st.rerun()
 
@@ -3285,8 +3334,10 @@ def show_profile_user(user_id, profile):
             ed_smoking = ac2.selectbox("Smoking / tobacco", SMOKING_LEVELS, index=selectbox_index(SMOKING_LEVELS, p.get("smoking")), key="ed_smoking")
             ed_exercise_routine = st.text_area("Exercise routine", value=(p.get("exercise_routine") or ""), height=70, key="ed_exercise_routine")
             if st.button("Save activity", key="save_activity"):
-                db_upsert("profiles", {"id": user_id, "activity_level": ed_activity_level, "alcohol": ed_alcohol,
-                                        "smoking": ed_smoking, "exercise_routine": ed_exercise_routine})
+                activity_fields = {"activity_level": ed_activity_level, "alcohol": ed_alcohol, "smoking": ed_smoking, "exercise_routine": ed_exercise_routine}
+                db_upsert("profiles", {"id": user_id, **activity_fields})
+                with st.spinner("Checking with your coach..."):
+                    flag_profile_change(user_id, {**p, **activity_fields}, f"User updated activity & exercise: level {ed_activity_level}, alcohol {ed_alcohol}, smoking {ed_smoking}, routine: {ed_exercise_routine or 'not stated'}")
                 st.success("Saved.")
                 st.rerun()
 
@@ -3307,8 +3358,11 @@ def show_profile_user(user_id, profile):
             ed_sleep_quality = st.slider("Sleep quality (self-rated)", 1, 10, int(p.get("sleep_quality") or 5), key="ed_sleep_quality")
             ed_sleep_challenges = st.text_area("Sleep challenges", value=(p.get("sleep_challenges") or ""), height=60, key="ed_sleep_challenges")
             if st.button("Save sleep", key="save_sleep"):
-                db_upsert("profiles", {"id": user_id, "sleep_bedtime": ed_bedtime, "sleep_wake_time": ed_wake_time,
-                                        "sleep_duration": ed_sleep_duration, "sleep_quality": int(ed_sleep_quality), "sleep_challenges": ed_sleep_challenges})
+                sleep_fields = {"sleep_bedtime": ed_bedtime, "sleep_wake_time": ed_wake_time, "sleep_duration": ed_sleep_duration,
+                                 "sleep_quality": int(ed_sleep_quality), "sleep_challenges": ed_sleep_challenges}
+                db_upsert("profiles", {"id": user_id, **sleep_fields})
+                with st.spinner("Checking with your coach..."):
+                    flag_profile_change(user_id, {**p, **sleep_fields}, f"User updated sleep: bedtime {ed_bedtime}, wake {ed_wake_time}, duration {ed_sleep_duration}, quality {ed_sleep_quality}/10, challenges: {ed_sleep_challenges or 'none stated'}")
                 st.success("Saved.")
                 st.rerun()
 
@@ -3326,8 +3380,10 @@ def show_profile_user(user_id, profile):
             ed_symptoms = st.text_area("Current symptoms or main concerns", value=(p.get("symptoms") or ""), height=70, key="ed_symptoms")
             ed_anything_else = st.text_area("Anything else you'd like your coach to know", value=(p.get("anything_else") or ""), height=50, key="ed_anything_else")
             if st.button("Save stress & symptoms", key="save_stress"):
-                db_upsert("profiles", {"id": user_id, "stress_level": int(ed_stress_level), "stressors": ed_stressors,
-                                        "symptoms": ed_symptoms, "anything_else": ed_anything_else})
+                stress_fields = {"stress_level": int(ed_stress_level), "stressors": ed_stressors, "symptoms": ed_symptoms, "anything_else": ed_anything_else}
+                db_upsert("profiles", {"id": user_id, **stress_fields})
+                with st.spinner("Checking with your coach..."):
+                    flag_profile_change(user_id, {**p, **stress_fields}, f"User updated stress & symptoms: stress level {ed_stress_level}/10, stressors: {ed_stressors or 'none stated'}, symptoms: {ed_symptoms or 'none stated'}, other notes: {ed_anything_else or 'none'}")
                 st.success("Saved.")
                 st.rerun()
 
@@ -3342,10 +3398,14 @@ def show_profile_user(user_id, profile):
             avg_len = c2.number_input("Actual average cycle length (days)", 15, 60, int(cd.get("avg_cycle_length") or 28), key="ed_cycle_len")
             if st.button("Save cycle data", key="save_cycle"):
                 db_upsert("cycle_data", {"user_id": user_id, "last_period_start": last_start.isoformat(), "avg_cycle_length": int(avg_len)}, on_conflict="user_id")
+                with st.spinner("Checking with your coach..."):
+                    flag_profile_change(user_id, p, f"User updated cycle data: last period start {last_start.isoformat()}, average cycle length {avg_len} days")
                 st.success("Saved.")
                 st.rerun()
             if st.button("New period started today", key="new_period"):
                 db_upsert("cycle_data", {"user_id": user_id, "last_period_start": date.today().isoformat(), "avg_cycle_length": int(cd.get("avg_cycle_length") or 28)}, on_conflict="user_id")
+                with st.spinner("Checking with your coach..."):
+                    flag_profile_change(user_id, p, f"User logged a new period starting today, {date.today().isoformat()}")
                 st.rerun()
     # has_cycle False/unset: accordion deliberately absent — not collapsed, not greyed out.
 
@@ -3523,25 +3583,28 @@ def show_profile_labs(user_id, profile):
             has_cycle = profile.get("has_cycle", False) if profile else False
             sys_prompt = build_system_prompt(user_id, profile, has_cycle=has_cycle)
             with st.spinner("Checking whether this changes your protocol..."):
-                result = check_materiality(user_id, sys_prompt, f"New lab report(s) uploaded: {'; '.join(saved_summaries)}")
+                results = check_materiality(user_id, sys_prompt, f"New lab report(s) uploaded: {'; '.join(saved_summaries)}")
             # Stash across the rerun (needed so "Saved reports" below reflects
             # the new upload immediately) rather than showing it inline here,
             # since st.rerun() would discard this render before it's seen.
             # Wrapped in a dict so "no upload happened" (nothing in session
             # state) is distinguishable from "checked, but the AI judgment
-            # call itself failed to parse" (result is None).
-            st.session_state.lab_materiality_result = {"checked": True, "result": result}
+            # call itself failed to parse" (results is None).
+            st.session_state.lab_materiality_result = {"checked": True, "results": results}
             st.rerun()
 
     lab_check = st.session_state.pop("lab_materiality_result", None)
     if lab_check:
-        lab_result = lab_check["result"]
-        if lab_result is None:
+        lab_results = lab_check["results"]
+        if lab_results is None:
             st.warning("Uploaded, but couldn't evaluate whether this changes your protocol just now — your coach can still check manually via Coach chat.")
-        elif lab_result.get("material"):
-            st.success(f"Your coach reviewed this against your protocol — flagged for update. Check the Protocol tab. {lab_result.get('flag_text','')}")
         else:
-            st.info(f"Your coach reviewed this against your protocol — no change needed right now. {lab_result.get('flag_text','')}")
+            lab_materials = [r for r in lab_results if r.get("material")]
+            if lab_materials:
+                levels_str = ", ".join(LEVEL_LABELS.get(r["level"], r["level"]) for r in lab_materials)
+                st.success(f"Your coach reviewed this against your protocol — flagged for update: {levels_str}. Check Home for details.")
+            else:
+                st.info("Your coach reviewed this against your protocol — no change needed right now.")
 
     labs = db_get("lab_reports", user_id, order_col="report_date")
 
