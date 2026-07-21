@@ -416,3 +416,11 @@ create table if not exists lifestyle_plan (
 alter table lifestyle_plan enable row level security;
 create policy "Users can manage own lifestyle plan" on lifestyle_plan
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Round 14: phase milestone check-in. Tracks the highest phase index
+-- already checked (0-based) so the Home-page prompt only fires once per
+-- phase transition, detected from the same proportional time-in-phase
+-- estimate already used for the Phase Timeline card highlight.
+-- ═══════════════════════════════════════════════════════════════════════════
+alter table roadmaps add column if not exists last_milestone_check_phase int default 0;

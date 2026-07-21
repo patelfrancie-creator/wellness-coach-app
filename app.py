@@ -1799,8 +1799,14 @@ def get_plan_info(user_id, profile):
         pct = min(100, round(days_in / duration_days * 100))
     else:
         week_num, total_weeks, pct = days_in // 7 + 1, None, None
+    # Centralized here (rather than recomputed separately in show_home and
+    # show_protocol) so both use the same "which phase are we in" estimate —
+    # this is what the milestone check-in uses to detect a phase transition.
+    phases = parse_phase_timeline(roadmap.get("roadmap_text", ""))
+    current_phase_index = min(int(week_num / total_weeks * len(phases)), len(phases) - 1) if phases and total_weeks else 0
     return {"mode": mode, "roadmap": roadmap, "week_num": week_num, "total_weeks": total_weeks,
-            "pct": pct, "duration_days": duration_days, "days_in": days_in}
+            "pct": pct, "duration_days": duration_days, "days_in": days_in,
+            "phases": phases, "current_phase_index": current_phase_index}
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -2089,6 +2095,34 @@ def render_profile_detail_nudge(user_id):
         st.rerun()
 
 
+# ── Phase milestone check-in — prompted, never locked; feeds the coach's ────
+# own materiality judgment on whether the next phase needs adjusting, the
+# same mechanism already used for check-ins and lab uploads.
+def render_milestone_check(user_id, plan, sys_prompt):
+    if not plan or not plan["phases"]:
+        return
+    last_checked = plan["roadmap"].get("last_milestone_check_phase") or 0
+    if plan["current_phase_index"] <= last_checked or last_checked >= len(plan["phases"]):
+        return
+    concluded = plan["phases"][last_checked]
+    with st.container(border=True):
+        st.markdown(f"**Milestone check — {concluded['phase']}**")
+        st.markdown(f"Stated milestone: _{concluded['milestones']}_")
+        status = st.radio("Did you hit this milestone?", ["Yes", "Partially", "No"], horizontal=True, key=f"milestone_status_{last_checked}")
+        note = st.text_area("Anything your coach should know about how this phase went?", key=f"milestone_note_{last_checked}", placeholder="e.g. retest results, what worked, what didn't")
+        if st.button("Send to your coach →", key=f"milestone_submit_{last_checked}", type="primary"):
+            trigger_desc = (f"End of {concluded['phase']} milestone check. Stated milestone: {concluded['milestones']}. "
+                            f"User reports: {status}." + (f" Additional note: {note}" if note else ""))
+            with st.spinner("Checking with your coach..."):
+                result = check_materiality(user_id, sys_prompt, trigger_desc)
+            db_upsert("roadmaps", {"user_id": user_id, "last_milestone_check_phase": last_checked + 1}, on_conflict="user_id")
+            if result and result.get("material"):
+                st.success(f"Flagged for update — check the Protocol tab. {result.get('flag_text','')}")
+            else:
+                st.info("Noted — no change needed to your plan right now.")
+            st.rerun()
+
+
 # ── Home Page ─────────────────────────────────────────────────────────────────
 def show_home(user_id, profile):
     plan = get_plan_info(user_id, profile)
@@ -2171,6 +2205,8 @@ def show_home(user_id, profile):
 
     has_cycle = profile.get("has_cycle", False) if profile else False
     sys_prompt = build_system_prompt(user_id, profile, has_cycle=has_cycle)
+
+    render_milestone_check(user_id, plan, sys_prompt)
 
     render_consistency(user_id, profile)
 
@@ -2438,6 +2474,21 @@ def strip_phase_timeline_section(roadmap_text):
     return re.sub(r"##\s*Phase Timeline\s*\n.*?(?=\n##\s|\Z)", "", roadmap_text, count=1, flags=re.DOTALL)
 
 
+def parse_phase_sections(text):
+    """Splits the roadmap body (after the Phase Timeline table is stripped)
+    into (intro, [phase_blocks], trailing) so each phase can render in its
+    own collapsible expander instead of one continuous wall of text. Matches
+    "## Phase <digit>" specifically so "## If Progress Stalls" etc. aren't
+    mistaken for a phase block."""
+    phase_matches = list(re.finditer(r"##\s*Phase\s+\d+.*?(?=\n##\s|\Z)", text, re.DOTALL))
+    if not phase_matches:
+        return text, [], ""
+    intro = text[:phase_matches[0].start()].strip()
+    blocks = [m.group(0).strip() for m in phase_matches]
+    trailing = text[phase_matches[-1].end():].strip()
+    return intro, blocks, trailing
+
+
 def render_phase_timeline(phases, current_index):
     if not phases:
         return
@@ -2584,13 +2635,20 @@ def show_protocol(user_id, profile):
         if roadmap.get("provisional"):
             st.warning("This roadmap is provisional — labs were not yet available when it was generated.")
         full_roadmap_text = roadmap.get("roadmap_text", "_No roadmap text._")
-        phases = parse_phase_timeline(full_roadmap_text)
+        phases = plan["phases"] if plan else parse_phase_timeline(full_roadmap_text)
         if phases:
-            current_phase_index = 0
-            if plan and plan.get("total_weeks"):
-                current_phase_index = min(int(plan["week_num"] / plan["total_weeks"] * len(phases)), len(phases) - 1)
+            current_phase_index = plan["current_phase_index"] if plan else 0
             render_phase_timeline(phases, current_phase_index)
-            st.markdown(strip_phase_timeline_section(full_roadmap_text))
+            intro, phase_blocks, trailing = parse_phase_sections(strip_phase_timeline_section(full_roadmap_text))
+            if intro:
+                st.markdown(intro)
+            for i, block in enumerate(phase_blocks):
+                p = phases[i] if i < len(phases) else None
+                label = f"{p['phase']} — {p['focus']}" if p else f"Phase {i + 1}"
+                with st.expander(label, expanded=(i == current_phase_index)):
+                    st.markdown(block)
+            if trailing:
+                st.markdown(trailing)
         else:
             st.markdown(full_roadmap_text)
         st.download_button("Download roadmap", full_roadmap_text, file_name="onesattva_roadmap.md")
