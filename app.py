@@ -830,7 +830,7 @@ Write two things, in this order:
 
 1. **Coach's take** — 2-4 sentences in your own voice synthesizing the overall pattern across these reports: what's genuinely improving, worsening, or stable, and what that means for this person specifically given their symptoms, goals, and current protocol. Interpret, don't just restate numbers — this is the most important part.
 
-2. A markdown table: Marker | Direction — one tight clause per marker on whether it's improving, worsening, or stable, reasoned against functional (optimal) ranges, not just raw numeric direction. Identify every marker that appears in 2 or more of these reports (match markers by meaning even if the exact wording differs slightly across reports — e.g. "Vitamin D" and "25-OH Vitamin D" are the same marker). Only include markers that genuinely appear in 2+ reports — skip markers unique to a single report. Do NOT include the actual values/dates in this table — those are shown separately as a proper table elsewhere on the page; just the marker name and your direction judgment.
+2. A markdown table: Marker | Direction — one tight clause per marker on whether it's improving, worsening, or stable, reasoned against functional (optimal) ranges, not just raw numeric direction. Consider every marker that appears in 2 or more of these reports (match markers by meaning even if the exact wording differs slightly across reports — e.g. "Vitamin D" and "25-OH Vitamin D" are the same marker), but limit this table to the 12-15 MOST clinically significant for this specific person — prioritize markers tied to their stated symptoms/goals, anything outside functional range, and anything showing a meaningful change, over stable/unremarkable ones. If fewer than 12-15 markers repeat across reports, just list however many genuinely do — don't pad with unremarkable ones to hit a count. Do NOT include the actual values/dates in this table — those are shown separately as a proper table elsewhere on the page; just the marker name and your direction judgment.
 
 If no marker repeats across reports, skip the table entirely and write only: "No overlapping markers to compare yet — your reports test different panels.\""""
     return ai_generate(sys_prompt, prompt, max_tokens=1800)
@@ -3322,6 +3322,44 @@ def build_marker_trend_series(labs):
     return {marker: sorted(points) for marker, points in series.items() if len(points) >= 2}
 
 
+def parse_discussed_markers(trends_content):
+    """Extracts the marker names from the "Marker | Direction" table inside
+    the Coach's-take trends content — that table is already capped by the
+    prompt to the 12-15 most clinically significant markers, so reusing it
+    here (rather than a separate selection step) keeps the chart/table and
+    the narrative discussing exactly the same set of markers.
+
+    The AI often groups related markers into one row (e.g. "Hemoglobin /
+    Hematocrit", "TSH / Free T3 / Free T4") — each cell is split on common
+    separators so every individual marker still matches against the
+    code-computed series, which tracks them separately."""
+    if not trends_content:
+        return []
+    names = []
+    for line in trends_content.split("\n"):
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 2 or all(re.fullmatch(r":?-+:?", c) for c in cells):
+            continue
+        if cells[0].lower() == "marker":
+            continue
+        names.extend(part.strip() for part in re.split(r"\s*/\s*|\s*,\s*|\s+&\s+", cells[0]) if part.strip())
+    return names
+
+
+def filter_series_to_discussed(series, discussed_names):
+    """Case/whitespace-tolerant match between the code-computed series'
+    canonical names and whatever the AI wrote in the Direction table —
+    both are independently canonicalized, so exact string equality isn't
+    guaranteed even though they mean the same marker."""
+    if not discussed_names:
+        return series
+    normalized_discussed = {n.strip().lower() for n in discussed_names}
+    return {marker: points for marker, points in series.items() if marker.strip().lower() in normalized_discussed}
+
+
 def render_marker_trend_charts(series):
     import pandas as pd
     if not series:
@@ -3403,6 +3441,34 @@ def show_profile_labs(user_id, profile):
 
     labs = db_get("lab_reports", user_id, order_col="report_date")
 
+    if len(labs) >= 2:
+        cc1, cc2 = st.columns([5, 1])
+        cc1.markdown('<div class="sl">Coach\'s take & comparison</div>', unsafe_allow_html=True)
+        if cc2.button("↻ Refresh", key="refresh_trends_btn"):
+            with st.spinner("Refreshing..."):
+                refresh_lab_trends(user_id)
+            st.rerun()
+        trends = db_get_single("lab_trends", user_id)
+        if not trends or not trends.get("content"):
+            with st.spinner("Comparing your reports..."):
+                refresh_lab_trends(user_id)
+            trends = db_get_single("lab_trends", user_id)
+        trends_content = (trends or {}).get("content") or "No overlapping markers to compare yet."
+        st.markdown(trends_content)
+
+        full_series = build_marker_trend_series(labs)
+        discussed = parse_discussed_markers(trends_content)
+        capped_series = filter_series_to_discussed(full_series, discussed)
+        render_marker_trend_table(capped_series)
+
+        with st.expander("Trends (charts) — optional visual view"):
+            render_marker_trend_charts(capped_series)
+            trend_q = st.text_area("If the coach flagged something it wants to check with you (e.g. did you start a new supplement between reports?), answer here — or ask anything about the pattern.", key="trend_clarify")
+            if st.button("Send to your coach", key="trend_clarify_btn") and trend_q:
+                st.session_state.page = "coach"
+                st.session_state.coach_seed = f"About the trend pattern across my lab reports: {trend_q}"
+                st.rerun()
+
     st.markdown('<div class="sl">Saved reports</div>', unsafe_allow_html=True)
     if labs:
         st.caption("✓ Current (≤90 days) = your coach's primary reference. Recent (91-180 days) = trend context only. Historical (>180 days) = background only, a retest is flagged as needed.")
@@ -3433,31 +3499,6 @@ def show_profile_labs(user_id, profile):
             if st.button("Send to your coach", key=f"lab_clarify_btn_{l['id']}") and report_q:
                 st.session_state.page = "coach"
                 st.session_state.coach_seed = f"About my lab report from {l.get('report_date','')}: {report_q}"
-                st.rerun()
-
-    if len(labs) >= 2:
-        tc1, tc2 = st.columns([5, 1])
-        tc1.markdown('<div class="sl">Trends across your reports</div>', unsafe_allow_html=True)
-        if tc2.button("↻ Refresh", key="refresh_trends_btn"):
-            with st.spinner("Refreshing..."):
-                refresh_lab_trends(user_id)
-            st.rerun()
-        marker_series = build_marker_trend_series(labs)
-        render_marker_trend_charts(marker_series)
-        render_marker_trend_table(marker_series)
-        trends = db_get_single("lab_trends", user_id)
-        if trends and trends.get("content"):
-            st.markdown(trends["content"])
-        else:
-            with st.spinner("Comparing your reports..."):
-                refresh_lab_trends(user_id)
-            trends = db_get_single("lab_trends", user_id)
-            st.markdown((trends or {}).get("content") or "No overlapping markers to compare yet.")
-        with st.expander("Clarify or ask your coach about these trends"):
-            trend_q = st.text_area("If the coach flagged something it wants to check with you (e.g. did you start a new supplement between reports?), answer here — or ask anything about the pattern.", key="trend_clarify")
-            if st.button("Send to your coach", key="trend_clarify_btn") and trend_q:
-                st.session_state.page = "coach"
-                st.session_state.coach_seed = f"About the trend pattern across my lab reports: {trend_q}"
                 st.rerun()
 
 
