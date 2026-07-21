@@ -811,15 +811,7 @@ def save_lab_report(user_id, report_date, text=None, file_block=None, file_label
         raw_values = text
         interpret_input = text
     with st.spinner(f"Interpreting {label} against functional ranges..."):
-        summary = ai_generate(
-            "You are OneSattva, interpreting lab values against functional (optimal) ranges, not conventional population reference ranges. "
-            "Respond with exactly 2-4 sentences of plain prose — no headers, no markdown formatting (no #, *, bullet points, section titles), "
-            "no restating the patient's name or demographics. Just the clinical interpretation itself: what's notable and why it matters. "
-            "This is a short list-preview summary, not a full report — the full protocol reasoning happens elsewhere. "
-            "A report can have many flagged markers — do not try to mention every one. Pick only the 2-3 most clinically "
-            "significant findings and weave them into one tight synthesis; leave the rest for the full report. Whatever you "
-            "write must be a complete thought that ends on a full sentence — never trail off mid-point.",
-            interpret_input, max_tokens=600)
+        summary = generate_lab_summary(interpret_input)
     structured = extract_structured_lab_values(raw_values)
     result = db_insert("lab_reports", {"user_id": user_id, "report_date": report_date.isoformat(), "raw_values": raw_values[:4000], "summary": summary, "structured_values": json.dumps(structured)})
     if result is None:
@@ -827,6 +819,37 @@ def save_lab_report(user_id, report_date, text=None, file_block=None, file_label
         return None
     refresh_lab_trends(user_id)
     st.success(f"✓ {label} uploaded and analyzed{date_note}.")
+    return summary
+
+
+def generate_lab_summary(interpret_input):
+    """Shared by save_lab_report and the per-report 'Regenerate interpretation'
+    action, so both go through the identical prompt — a report saved under an
+    older prompt version needs a way to re-pull the current one rather than
+    staying permanently stuck with whatever it was generated under."""
+    return ai_generate(
+        "You are OneSattva, interpreting lab values against functional (optimal) ranges, not conventional population reference ranges. "
+        "Respond with exactly 2-4 sentences of plain prose — no headers, no markdown formatting (no #, *, bullet points, section titles), "
+        "no restating the patient's name or demographics. Just the clinical interpretation itself: what's notable and why it matters. "
+        "This is a short list-preview summary, not a full report — the full protocol reasoning happens elsewhere. "
+        "A report can have many flagged markers — do not try to mention every one. Pick only the 2-3 most clinically "
+        "significant findings and weave them into one tight synthesis; leave the rest for the full report. Whatever you "
+        "write must be a complete thought that ends on a full sentence — never trail off mid-point.",
+        interpret_input, max_tokens=600)
+
+
+def regenerate_lab_summary(lab_report):
+    """Re-runs just the interpretation step against the current prompt for an
+    already-saved report — lets a report saved under an older, truncation-prone
+    prompt version get the fixed summary without deleting and re-uploading."""
+    raw_values = lab_report.get("raw_values", "")
+    if not raw_values.strip():
+        return None
+    summary = generate_lab_summary(raw_values)
+    try:
+        supabase.table("lab_reports").update({"summary": summary}).eq("id", lab_report["id"]).execute()
+    except Exception:
+        pass
     return summary
 
 
@@ -2462,28 +2485,28 @@ def build_week_and_consistency_context(plan, roadmap):
 
 
 def build_monthly_goal(sys_prompt, existing=None, reason=None):
-    prompt = "Generate this phase's Monthly Goal focus: one italic-style focus statement (1-2 sentences) plus a 4-week breakdown table (Week | Focus), covering all 4 weeks. Base this on the committed roadmap's current phase. Be concise but always complete all 4 rows — never truncate the table."
+    prompt = "Generate this phase's Monthly Goal focus: one italic-style focus statement (1-2 sentences) plus a 4-week breakdown table (Week | Focus), covering all 4 weeks. Base this on the committed roadmap's current phase. Be concise but always complete all 4 rows — never truncate the table. This is cached and re-read for weeks at a time — never reference an absolute calendar date, a \"today is [date]\" framing, or a specific cycle day number (e.g. \"Day 19 of 27\"); cycle day advances daily just like a date, so a number embedded here goes stale within days. If cycle context is relevant, name the phase only (menstrual/follicular/ovulatory/luteal)."
     if existing:
         prompt += f"\n\nThis is a revision of the current version, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT VERSION:\n{existing}"
     return ai_generate(sys_prompt, prompt, max_tokens=1200)
 
 
 def build_supplement_plan(sys_prompt, week_context, consistency_context, existing=None, reason=None):
-    prompt = "Generate this week's committed supplement schedule as a markdown table: Time | Supplement | Dose | Clinical notes. Derive dose, brand suitability, and timing from this person's actual labs, medications, and absorption considerations — explain timing rationale concisely in the notes column. If a thyroid medication is present, reason explicitly about its absorption timing relative to other supplements. Cover every supplement/timing slot that applies — never cut the table short; keep each note to one tight sentence rather than dropping rows." + week_context + consistency_context
+    prompt = "Generate this week's committed supplement schedule as a markdown table: Time | Supplement | Dose | Clinical notes. Derive dose, brand suitability, and timing from this person's actual labs, medications, and absorption considerations — explain timing rationale concisely in the notes column. If a thyroid medication is present, reason explicitly about its absorption timing relative to other supplements. Cover every supplement/timing slot that applies — never cut the table short; keep each note to one tight sentence rather than dropping rows. This is cached and re-read for days at a time — never reference an absolute calendar date, a \"today is [date]\" framing, or a specific cycle day number (e.g. \"Day 19 of 27\") anywhere, including in the notes column; cycle day advances daily just like a date, so a number embedded here goes stale within days. If cycle context is relevant to a note, name the phase only (menstrual/follicular/ovulatory/luteal)." + week_context + consistency_context
     if existing:
         prompt += f"\n\nThis is a revision of the current committed schedule, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve the existing row order, wording, and doses for everything else exactly as they were. Do not reorder or rephrase rows this reason doesn't touch.\n\nCURRENT COMMITTED SCHEDULE:\n{existing}"
     return ai_generate(sys_prompt, prompt, max_tokens=2000)
 
 
 def build_nutrition_plan(sys_prompt, week_context, consistency_context, existing=None, reason=None):
-    prompt = "Generate this week's committed 7-day nutrition plan. Start with a short info box (2-3 sentences) on this phase's nutrition focus, reasoned from this person's actual gut/digestion check-in data, goals, and dietary preferences — not a generic rule. Then a markdown table: Day | Focus | Examples, covering all 7 days, labeled with generic weekday names only (Monday, Tuesday, ...) — never an absolute calendar date (e.g. never \"20 Jul\"), and never a \"today is [date]\" framing anywhere in this content. This plan is cached and re-read across many days without regenerating, so anything tied to a specific date goes stale the moment a day passes — daily-specific nudges are handled elsewhere in the app. Respect their stated dietary pattern and restrictions exactly. Keep each row tight (a few words per cell) so all 7 days fit — completeness across all 7 days matters more than detail in any one day." + week_context + consistency_context
+    prompt = "Generate this week's committed 7-day nutrition plan. Start with a short info box (2-3 sentences) on this phase's nutrition focus, reasoned from this person's actual gut/digestion check-in data, goals, and dietary preferences — not a generic rule. Then a markdown table: Day | Focus | Examples, covering all 7 days, labeled with generic weekday names only (Monday, Tuesday, ...) — never an absolute calendar date (e.g. never \"20 Jul\"), and never a \"today is [date]\" framing anywhere in this content. This plan is cached and re-read across many days without regenerating, so anything tied to a specific date goes stale the moment a day passes — daily-specific nudges are handled elsewhere in the app. The same applies to a specific cycle day number (e.g. \"Day 19 of 27\") — it advances daily just like a date, so never state one; if cycle context is relevant to the focus, name the phase only (menstrual/follicular/ovulatory/luteal). Respect their stated dietary pattern and restrictions exactly. Keep each row tight (a few words per cell) so all 7 days fit — completeness across all 7 days matters more than detail in any one day." + week_context + consistency_context
     if existing:
         prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
     return ai_generate(sys_prompt, prompt, max_tokens=2200)
 
 
 def build_workout_plan(sys_prompt, week_context, consistency_context, existing=None, reason=None):
-    prompt = "Generate this week's committed 7-day training plan. Start with a short info box (2-3 sentences) on this phase's training principle, reasoned from this person's recovery/wearable data and goals. Then a markdown table: Day | Session type | Focus & exercises | Target duration, covering all 7 days, labeled with generic weekday names only (Monday, Tuesday, ...) — never an absolute calendar date (e.g. never \"20 Jul\" or \"Mon 20 Jul\"), and never a \"today is [date]\" framing or a closing \"do this today\" callout anywhere in this content. This plan is cached and re-read across many days without regenerating, so anything tied to a specific date goes stale the moment a day passes — daily-specific nudges are handled elsewhere in the app. Calibrate intensity to recovery data if available. Keep each row tight so all 7 days fit — completeness across the full week matters more than depth on any single day." + week_context + consistency_context
+    prompt = "Generate this week's committed 7-day training plan. Start with a short info box (2-3 sentences) on this phase's training principle, reasoned from this person's recovery/wearable data and goals. Then a markdown table: Day | Session type | Focus & exercises | Target duration, covering all 7 days, labeled with generic weekday names only (Monday, Tuesday, ...) — never an absolute calendar date (e.g. never \"20 Jul\" or \"Mon 20 Jul\"), and never a \"today is [date]\" framing or a closing \"do this today\" callout anywhere in this content. This plan is cached and re-read across many days without regenerating, so anything tied to a specific date goes stale the moment a day passes — daily-specific nudges are handled elsewhere in the app. The same applies to a specific cycle day number (e.g. \"Day 19 of 27\") — it advances daily just like a date, so never state one; if cycle context is relevant to the focus, name the phase only (menstrual/follicular/ovulatory/luteal). Calibrate intensity to recovery data if available. Keep each row tight so all 7 days fit — completeness across the full week matters more than depth on any single day." + week_context + consistency_context
     if existing:
         prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
     return ai_generate(sys_prompt, prompt, max_tokens=2000)
@@ -2495,7 +2518,9 @@ def build_lifestyle_plan(sys_prompt, week_context, consistency_context, existing
               "this phase's focus, reasoned from this person's actual stress/sleep/HRV check-in data, not a generic rule. "
               "Then a markdown table: Day | Practice | Instructions | Duration, covering all 7 days, labeled with generic "
               "weekday names only (Monday, Tuesday, ...) — never an absolute calendar date, never a \"today is [date]\" "
-              "framing (this plan is cached and re-read across many days, so date references go stale within a day). Keep "
+              "framing, and never a specific cycle day number (e.g. \"Day 19 of 27\") — it advances daily just like a date, "
+              "so a number embedded here goes stale within days (this plan is cached and re-read across many days). If "
+              "cycle context is relevant, name the phase only (menstrual/follicular/ovulatory/luteal). Keep "
               "each instruction to one tight sentence — cover nervous-system regulation (vagal tone practices), sleep "
               "hygiene, stress-management, and gut-brain axis support, reasoned from this person's actual data. "
               "No extra section headers, no bullet-list recap after the table, no closing summary — the info box plus the "
@@ -3655,7 +3680,12 @@ def show_profile_labs(user_id, profile):
             refresh_lab_trends(user_id)
             st.rerun()
         with st.expander("View interpretation & key numbers", key=f"lab_detail_{l['id']}"):
-            st.markdown(f"**Coach interpretation**\n\n{l.get('summary','') or '_None._'}")
+            ic1, ic2 = st.columns([5, 1])
+            ic1.markdown(f"**Coach interpretation**\n\n{l.get('summary','') or '_None._'}")
+            if ic2.button("↻ Regenerate", key=f"regen_summary_{l['id']}", help="Re-run the interpretation against the current prompt — useful if this was saved before a prompt fix."):
+                with st.spinner("Re-interpreting..."):
+                    regenerate_lab_summary(l)
+                st.rerun()
             structured = get_structured_lab_values(l)
             if structured:
                 st.markdown("---")
