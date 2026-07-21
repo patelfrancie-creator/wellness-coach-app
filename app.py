@@ -683,12 +683,13 @@ Respond with ONLY the JSON array, nothing else.
 
 LAB TEXT:
 {raw_values}"""
-    # 1500 tokens was too tight for a real comprehensive panel (verified: a
-    # 52-marker real report hit stop_reason="max_tokens" and got cut off
-    # mid-array, which silently failed to parse and returned nothing — the
-    # exact bug a tester hit). 6000 comfortably covers even a large full-body
-    # panel; the interpretation/summary call is separate and unaffected.
-    raw = ai_generate("You are OneSattva, extracting structured lab data for a patient's records.", prompt, max_tokens=6000)
+    # Raised twice now: 1500 -> 6000 (2026-07-20, a 52-marker report), then
+    # 6000 -> 8000 (2026-07-21, a 104-marker report) after the upstream raw-
+    # value extraction pass itself got raised 1500 -> 8000 for the same
+    # truncation reason — a large multi-page panel can produce far more
+    # markers than a single-page report, and this call's budget needs to
+    # scale with whatever the raw-extraction pass actually returns.
+    raw = ai_generate("You are OneSattva, extracting structured lab data for a patient's records.", prompt, max_tokens=8000)
     try:
         match = re.search(r"\[.*\]", raw, re.DOTALL)
         return json.loads(match.group(0) if match else raw)
@@ -757,6 +758,11 @@ def save_lab_report(user_id, report_date, text=None, file_block=None, file_label
     date_note = ""
     if file_block:
         with st.spinner(f"Extracting lab values from {label}..."):
+            # 1500 was too tight for a real comprehensive panel — verified: a
+            # 37-page, ~38-test Thyrocare report hit stop_reason="max_tokens"
+            # and got cut off mid-line partway through, silently dropping
+            # every marker after the cutoff (including Iron and HS-CRP,
+            # confirmed against the actual document). 8000 completes cleanly.
             raw_output = ai_generate(
                 "You are OneSattva extracting lab data from an uploaded document/image. "
                 "On the FIRST line, output the report/collection date printed on the document in the exact format "
@@ -765,7 +771,7 @@ def save_lab_report(user_id, report_date, text=None, file_block=None, file_label
                 "in the format 'Marker: value unit (reference range if shown)'. Be exhaustive and precise — include every marker present, "
                 "even ones without an obvious flag. Output nothing else: no commentary, no headers, no markdown.",
                 [file_block, {"type": "text", "text": "Extract the report date and every lab marker/value from this document/image."}],
-                max_tokens=1500)
+                max_tokens=8000)
         if raw_output.startswith("_Coach is temporarily unavailable"):
             st.error(f"Couldn't extract values from {label} — the AI service had an error. Try again in a moment.")
             return None
