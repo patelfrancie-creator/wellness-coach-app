@@ -3402,30 +3402,6 @@ def show_profile_labs(user_id, profile):
             st.info(f"Your coach reviewed this against your protocol — no change needed right now. {lab_result.get('flag_text','')}")
 
     labs = db_get("lab_reports", user_id, order_col="report_date")
-    if len(labs) >= 2:
-        tc1, tc2 = st.columns([5, 1])
-        tc1.markdown('<div class="sl" style="margin-top:0">Trends across your reports</div>', unsafe_allow_html=True)
-        if tc2.button("↻ Refresh", key="refresh_trends_btn"):
-            with st.spinner("Refreshing..."):
-                refresh_lab_trends(user_id)
-            st.rerun()
-        marker_series = build_marker_trend_series(labs)
-        render_marker_trend_charts(marker_series)
-        render_marker_trend_table(marker_series)
-        trends = db_get_single("lab_trends", user_id)
-        if trends and trends.get("content"):
-            st.markdown(trends["content"])
-        else:
-            with st.spinner("Comparing your reports..."):
-                refresh_lab_trends(user_id)
-            trends = db_get_single("lab_trends", user_id)
-            st.markdown((trends or {}).get("content") or "No overlapping markers to compare yet.")
-        with st.expander("Clarify or ask your coach about these trends"):
-            trend_q = st.text_area("If the coach flagged something it wants to check with you (e.g. did you start a new supplement between reports?), answer here — or ask anything about the pattern.", key="trend_clarify")
-            if st.button("Send to your coach", key="trend_clarify_btn") and trend_q:
-                st.session_state.page = "coach"
-                st.session_state.coach_seed = f"About the trend pattern across my lab reports: {trend_q}"
-                st.rerun()
 
     st.markdown('<div class="sl">Saved reports</div>', unsafe_allow_html=True)
     if labs:
@@ -3457,6 +3433,31 @@ def show_profile_labs(user_id, profile):
             if st.button("Send to your coach", key=f"lab_clarify_btn_{l['id']}") and report_q:
                 st.session_state.page = "coach"
                 st.session_state.coach_seed = f"About my lab report from {l.get('report_date','')}: {report_q}"
+                st.rerun()
+
+    if len(labs) >= 2:
+        tc1, tc2 = st.columns([5, 1])
+        tc1.markdown('<div class="sl">Trends across your reports</div>', unsafe_allow_html=True)
+        if tc2.button("↻ Refresh", key="refresh_trends_btn"):
+            with st.spinner("Refreshing..."):
+                refresh_lab_trends(user_id)
+            st.rerun()
+        marker_series = build_marker_trend_series(labs)
+        render_marker_trend_charts(marker_series)
+        render_marker_trend_table(marker_series)
+        trends = db_get_single("lab_trends", user_id)
+        if trends and trends.get("content"):
+            st.markdown(trends["content"])
+        else:
+            with st.spinner("Comparing your reports..."):
+                refresh_lab_trends(user_id)
+            trends = db_get_single("lab_trends", user_id)
+            st.markdown((trends or {}).get("content") or "No overlapping markers to compare yet.")
+        with st.expander("Clarify or ask your coach about these trends"):
+            trend_q = st.text_area("If the coach flagged something it wants to check with you (e.g. did you start a new supplement between reports?), answer here — or ask anything about the pattern.", key="trend_clarify")
+            if st.button("Send to your coach", key="trend_clarify_btn") and trend_q:
+                st.session_state.page = "coach"
+                st.session_state.coach_seed = f"About the trend pattern across my lab reports: {trend_q}"
                 st.rerun()
 
 
