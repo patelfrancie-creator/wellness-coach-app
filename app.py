@@ -729,20 +729,38 @@ def get_structured_lab_values(lab_report):
     return parsed
 
 
-def render_lab_key_numbers(structured):
+def render_lab_key_numbers(structured, key_prefix="lab"):
+    """Out-of-range markers (flagged against functional/optimal ranges, not
+    just lab reference ranges) are the ones actually relevant to this person
+    from this one report, so they're the headline cards. Normal-range markers
+    aren't hidden — a large panel can be 50-100+ markers and dumping every
+    one as a card buries the ones that matter — they're one click away
+    behind a toggle instead."""
     if not structured:
         return
-    cols = st.columns(4)
-    for i, m in enumerate(structured):
-        flag = (m.get("flag") or "normal").lower()
-        flag_html = f'<div class="snap-flag">{flag}</div>' if flag != "normal" else ""
-        with cols[i % 4]:
-            st.markdown(f"""
+    flagged = [m for m in structured if (m.get("flag") or "normal").lower() != "normal"]
+    normal = [m for m in structured if (m.get("flag") or "normal").lower() == "normal"]
+
+    def render_cards(markers):
+        cols = st.columns(4)
+        for i, m in enumerate(markers):
+            flag = (m.get("flag") or "normal").lower()
+            flag_html = f'<div class="snap-flag">{flag}</div>' if flag != "normal" else ""
+            with cols[i % 4]:
+                st.markdown(f"""
 <div class="snap-box" style="margin-bottom:10px">
 <div class="snap-lbl">{m.get('marker','')}</div>
 <div class="snap-val">{m.get('value','—')}<span style="font-size:13px;color:var(--mid)"> {m.get('unit','')}</span></div>
 {flag_html}
 </div>""", unsafe_allow_html=True)
+
+    if flagged:
+        render_cards(flagged)
+    else:
+        st.caption("Nothing outside functional range in this report.")
+    if normal:
+        with st.expander(f"Show {len(normal)} more in-range markers", key=f"{key_prefix}_show_normal"):
+            render_cards(normal)
 
 
 def save_lab_report(user_id, report_date, text=None, file_block=None, file_label=None):
@@ -3576,7 +3594,7 @@ def show_profile_labs(user_id, profile):
             if structured:
                 st.markdown("---")
                 st.markdown("**Key numbers**")
-                render_lab_key_numbers(structured)
+                render_lab_key_numbers(structured, key_prefix=f"lab_{l['id']}")
             st.markdown("---")
             report_q = st.text_area("Ask your coach about this specific report", key=f"lab_clarify_{l['id']}")
             if st.button("Send to your coach", key=f"lab_clarify_btn_{l['id']}") and report_q:
