@@ -830,7 +830,7 @@ Write two things, in this order:
 
 1. **Coach's take** — 2-4 sentences in your own voice synthesizing the overall pattern across these reports: what's genuinely improving, worsening, or stable, and what that means for this person specifically given their symptoms, goals, and current protocol. Interpret, don't just restate numbers — this is the most important part.
 
-2. A markdown table: Marker | Direction — one tight clause per marker on whether it's improving, worsening, or stable, reasoned against functional (optimal) ranges, not just raw numeric direction. Consider every marker that appears in 2 or more of these reports (match markers by meaning even if the exact wording differs slightly across reports — e.g. "Vitamin D" and "25-OH Vitamin D" are the same marker), but limit this table to the 12-15 MOST clinically significant for this specific person — prioritize markers tied to their stated symptoms/goals, anything outside functional range, and anything showing a meaningful change, over stable/unremarkable ones. If fewer than 12-15 markers repeat across reports, just list however many genuinely do — don't pad with unremarkable ones to hit a count. Do NOT include the actual values/dates in this table — those are shown separately as a proper table elsewhere on the page; just the marker name and your direction judgment.
+2. A markdown table: Marker | Direction — one tight clause per marker on whether it's improving, worsening, or stable, reasoned against functional (optimal) ranges, not just raw numeric direction. Consider every marker that appears in 2 or more of these reports (match markers by meaning even if the exact wording differs slightly across reports — e.g. "Vitamin D" and "25-OH Vitamin D" are the same marker), but this is a bio-individual judgment call, not a fixed count — include a marker only if it's genuinely relevant to THIS person: tied to their stated symptoms/goals, outside functional range, or showing a meaningful change (improving or worsening). Leave out markers that are stable and unremarkable for them specifically, even if many reports share that marker. The right number varies entirely by person — it could be 8, it could be 25 — never pad to hit a target count and never cut a genuinely relevant marker to stay under one. Do NOT include the actual values/dates in this table — those are shown separately as a proper table elsewhere on the page; just the marker name and your direction judgment.
 
 If no marker repeats across reports, skip the table entirely and write only: "No overlapping markers to compare yet — your reports test different panels.\""""
     return ai_generate(sys_prompt, prompt, max_tokens=1800)
@@ -2212,6 +2212,8 @@ def show_home(user_id, profile):
     has_cycle = profile.get("has_cycle", False) if profile else False
     sys_prompt = build_system_prompt(user_id, profile, has_cycle=has_cycle)
 
+    render_open_materiality_flags_banner(user_id, profile)
+
     render_milestone_check(user_id, plan, sys_prompt)
 
     render_consistency(user_id, profile)
@@ -2414,6 +2416,141 @@ def get_or_generate(table, user_id, build_fn, force=False, reason=None):
     return content
 
 
+def build_week_and_consistency_context(plan, roadmap):
+    """Shared by every weekly Protocol tab (Supplements/Nutrition/Workouts/
+    Lifestyle) and by the Home page's materiality-flag banner, so a tab
+    regenerated from Home gets the exact same week-labeling and
+    roadmap-consistency guardrails as one regenerated from its own tab —
+    a single source of truth instead of two copies that could drift apart."""
+    week_context = ""
+    if plan:
+        week_label = f"Week {plan['week_num']}" + (f" of {plan['total_weeks']}" if plan["total_weeks"] else "")
+        week_context = (f"\n\nCanonical current week: this is {week_label} of the {plan['mode']} programme. "
+                         f'Always label this as "{week_label}" if you reference the week at all — do not invent a '
+                         f'different week number or a calendar-date framing (e.g. do not say "Week of [date]").')
+    roadmap_text_for_context = roadmap.get("roadmap_text", "") if roadmap else ""
+    consistency_context = ""
+    if roadmap_text_for_context:
+        consistency_context = (f"\n\nCANONICAL COMMITTED ROADMAP (already locked in — do not contradict):\n{roadmap_text_for_context}\n"
+                                f"If the roadmap above already specifies exact timing, sequencing, or dosing for any "
+                                f"supplement, medication, or meal, you MUST use that exact same detail here — never "
+                                f"independently re-derive a different order or dose for something it already settled.")
+    return week_context, consistency_context
+
+
+def build_monthly_goal(sys_prompt, existing=None, reason=None):
+    prompt = "Generate this phase's Monthly Goal focus: one italic-style focus statement (1-2 sentences) plus a 4-week breakdown table (Week | Focus), covering all 4 weeks. Base this on the committed roadmap's current phase. Be concise but always complete all 4 rows — never truncate the table."
+    if existing:
+        prompt += f"\n\nThis is a revision of the current version, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT VERSION:\n{existing}"
+    return ai_generate(sys_prompt, prompt, max_tokens=1200)
+
+
+def build_supplement_plan(sys_prompt, week_context, consistency_context, existing=None, reason=None):
+    prompt = "Generate this week's committed supplement schedule as a markdown table: Time | Supplement | Dose | Clinical notes. Derive dose, brand suitability, and timing from this person's actual labs, medications, and absorption considerations — explain timing rationale concisely in the notes column. If a thyroid medication is present, reason explicitly about its absorption timing relative to other supplements. Cover every supplement/timing slot that applies — never cut the table short; keep each note to one tight sentence rather than dropping rows." + week_context + consistency_context
+    if existing:
+        prompt += f"\n\nThis is a revision of the current committed schedule, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve the existing row order, wording, and doses for everything else exactly as they were. Do not reorder or rephrase rows this reason doesn't touch.\n\nCURRENT COMMITTED SCHEDULE:\n{existing}"
+    return ai_generate(sys_prompt, prompt, max_tokens=2000)
+
+
+def build_nutrition_plan(sys_prompt, week_context, consistency_context, existing=None, reason=None):
+    prompt = "Generate this week's committed 7-day nutrition plan. Start with a short info box (2-3 sentences) on this phase's nutrition focus, reasoned from this person's actual gut/digestion check-in data, goals, and dietary preferences — not a generic rule. Then a markdown table: Day | Focus | Examples, covering all 7 days, labeled with generic weekday names only (Monday, Tuesday, ...) — never an absolute calendar date (e.g. never \"20 Jul\"), and never a \"today is [date]\" framing anywhere in this content. This plan is cached and re-read across many days without regenerating, so anything tied to a specific date goes stale the moment a day passes — daily-specific nudges are handled elsewhere in the app. Respect their stated dietary pattern and restrictions exactly. Keep each row tight (a few words per cell) so all 7 days fit — completeness across all 7 days matters more than detail in any one day." + week_context + consistency_context
+    if existing:
+        prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
+    return ai_generate(sys_prompt, prompt, max_tokens=2200)
+
+
+def build_workout_plan(sys_prompt, week_context, consistency_context, existing=None, reason=None):
+    prompt = "Generate this week's committed 7-day training plan. Start with a short info box (2-3 sentences) on this phase's training principle, reasoned from this person's recovery/wearable data and goals. Then a markdown table: Day | Session type | Focus & exercises | Target duration, covering all 7 days, labeled with generic weekday names only (Monday, Tuesday, ...) — never an absolute calendar date (e.g. never \"20 Jul\" or \"Mon 20 Jul\"), and never a \"today is [date]\" framing or a closing \"do this today\" callout anywhere in this content. This plan is cached and re-read across many days without regenerating, so anything tied to a specific date goes stale the moment a day passes — daily-specific nudges are handled elsewhere in the app. Calibrate intensity to recovery data if available. Keep each row tight so all 7 days fit — completeness across the full week matters more than depth on any single day." + week_context + consistency_context
+    if existing:
+        prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
+    return ai_generate(sys_prompt, prompt, max_tokens=2000)
+
+
+def build_lifestyle_plan(sys_prompt, week_context, consistency_context, existing=None, reason=None):
+    prompt = ("Generate this week's committed lifestyle & nervous-system regulation protocol, in the exact same concise "
+              "style as the Supplements/Nutrition/Workouts tabs — a short info box (2-3 sentences, no heading, no emoji) on "
+              "this phase's focus, reasoned from this person's actual stress/sleep/HRV check-in data, not a generic rule. "
+              "Then a markdown table: Day | Practice | Instructions | Duration, covering all 7 days, labeled with generic "
+              "weekday names only (Monday, Tuesday, ...) — never an absolute calendar date, never a \"today is [date]\" "
+              "framing (this plan is cached and re-read across many days, so date references go stale within a day). Keep "
+              "each instruction to one tight sentence — cover nervous-system regulation (vagal tone practices), sleep "
+              "hygiene, stress-management, and gut-brain axis support, reasoned from this person's actual data. "
+              "No extra section headers, no bullet-list recap after the table, no closing summary — the info box plus the "
+              "table is the whole response, same as the other weekly tabs.\n\n"
+              "STRICT SCOPE BOUNDARY, stated once, applied silently: this is lifestyle/nervous-system coaching, never "
+              "mental health treatment — recommend concrete practices, never diagnose or name a mental health condition, "
+              "never suggest therapy or psychiatric treatment. If check-in data suggests something beyond lifestyle scope "
+              "(e.g. persistent low mood, symptoms consistent with clinical anxiety or depression), skip the regular table "
+              "entirely and write only a brief, direct note deferring to a mental health professional — the same way a "
+              "physician referral is handled — without extra framing or caveats around it."
+              + week_context + consistency_context)
+    if existing:
+        prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
+    return ai_generate(sys_prompt, prompt, max_tokens=2200)
+
+
+LEVEL_LABELS = {
+    "roadmap": "Treatment Roadmap", "monthly_focus": "Monthly Goal", "supplements": "Supplements",
+    "nutrition": "Nutrition", "workouts": "Workouts", "lifestyle": "Lifestyle",
+}
+
+
+def regenerate_for_level(user_id, profile, level, reason):
+    """Regenerates whichever Protocol tab a materiality flag points at, given
+    only the flag's level string — the single place this happens, so the
+    Home page's flag banner and each Protocol tab's own Regenerate button
+    trigger identical logic instead of two copies that could drift apart."""
+    has_cycle = profile.get("has_cycle", False) if profile else False
+    sys_prompt = build_system_prompt(user_id, profile, has_cycle=has_cycle)
+    roadmap = db_get_single("roadmaps", user_id)
+    if not roadmap or not roadmap.get("committed"):
+        return
+    if level == "roadmap":
+        regenerate_roadmap(user_id, sys_prompt, roadmap, reason=reason)
+        return
+    plan = get_plan_info(user_id, profile)
+    week_context, consistency_context = build_week_and_consistency_context(plan, roadmap)
+    if level == "monthly_focus":
+        get_or_generate("monthly_focus", user_id, lambda existing, r: build_monthly_goal(sys_prompt, existing, r), force=True, reason=reason)
+    elif level == "supplements":
+        get_or_generate("supplement_plan", user_id, lambda existing, r: build_supplement_plan(sys_prompt, week_context, consistency_context, existing, r), force=True, reason=reason)
+    elif level == "nutrition":
+        get_or_generate("nutrition_plan", user_id, lambda existing, r: build_nutrition_plan(sys_prompt, week_context, consistency_context, existing, r), force=True, reason=reason)
+    elif level == "workouts":
+        get_or_generate("workout_plan", user_id, lambda existing, r: build_workout_plan(sys_prompt, week_context, consistency_context, existing, r), force=True, reason=reason)
+    elif level == "lifestyle":
+        get_or_generate("lifestyle_plan", user_id, lambda existing, r: build_lifestyle_plan(sys_prompt, week_context, consistency_context, existing, r), force=True, reason=reason)
+
+
+def render_open_materiality_flags_banner(user_id, profile):
+    """Home page, near the top — every open materiality flag across all 6
+    levels, impossible to miss regardless of which Protocol tab it actually
+    belongs to. Keeps the existing 'you agree' consent step (Regenerate is
+    still an explicit click) rather than auto-applying silently, per the
+    product's stable-by-default principle."""
+    open_flags = [f for level in LEVEL_LABELS for f in [get_open_materiality_flag(user_id, level)] if f]
+    if not open_flags:
+        return
+    for flag in open_flags:
+        level = flag.get("level")
+        st.markdown(f"""
+<div class="material-flag">
+<div class="mf-lbl">✦ Coach flag — {LEVEL_LABELS.get(level, level)} may need updating</div>
+<div class="mf-txt">{flag.get('flag_text','')}</div>
+</div>""", unsafe_allow_html=True)
+        fc1, fc2 = st.columns(2)
+        if fc1.button("Discuss with coach →", key=f"home_flag_discuss_{flag.get('id')}"):
+            st.session_state.page = "coach"
+            st.session_state.coach_seed = f"You flagged something about my {level} — let's talk about it."
+            st.rerun()
+        if fc2.button("Accept & update", key=f"home_flag_accept_{flag.get('id')}", type="primary"):
+            with st.spinner("Updating your protocol..."):
+                regenerate_for_level(user_id, profile, level, flag.get("flag_text"))
+                resolve_materiality_flag(flag["id"])
+            st.success(f"{LEVEL_LABELS.get(level, level)} updated — see the Protocol tab.")
+            st.rerun()
+
+
 def regenerate_roadmap(user_id, sys_prompt, roadmap, reason=None):
     phase_count = {"Reset": 2, "Restore": 3, "Transform": 4, "Sustain": 3}.get(roadmap.get("plan_mode", "Restore"), 3)
     labs_present = bool(db_get("lab_reports", user_id))
@@ -2530,26 +2667,7 @@ def show_protocol(user_id, profile):
     # own week number or calendar-date framing (which is how one tab ended up
     # saying "Week of 2 July 2026" while another said "Week 1").
     plan = get_plan_info(user_id, profile)
-    week_context = ""
-    if plan:
-        week_label = f"Week {plan['week_num']}" + (f" of {plan['total_weeks']}" if plan["total_weeks"] else "")
-        week_context = (f"\n\nCanonical current week: this is {week_label} of the {plan['mode']} programme. "
-                         f'Always label this as "{week_label}" if you reference the week at all — do not invent a '
-                         f'different week number or a calendar-date framing (e.g. do not say "Week of [date]").')
-
-    # The Roadmap tab's phase text often already commits to specific sequencing/
-    # timing (e.g. "L-glutamine at wake, Thyronorm 30 min later") when it names
-    # exact doses. Supplements/Nutrition/Workouts are separate AI calls that
-    # otherwise re-derive timing from scratch with no visibility into that —
-    # which is how one tab can contradict what the Roadmap already committed
-    # to. Same fix pattern as week_context above, generalized to any detail.
-    roadmap_text_for_context = roadmap.get("roadmap_text", "")
-    consistency_context = ""
-    if roadmap_text_for_context:
-        consistency_context = (f"\n\nCANONICAL COMMITTED ROADMAP (already locked in — do not contradict):\n{roadmap_text_for_context}\n"
-                                f"If the roadmap above already specifies exact timing, sequencing, or dosing for any "
-                                f"supplement, medication, or meal, you MUST use that exact same detail here — never "
-                                f"independently re-derive a different order or dose for something it already settled.")
+    week_context, consistency_context = build_week_and_consistency_context(plan, roadmap)
 
     def week_num_as_of(iso_date, phase_start_iso, duration_days):
         """Same week-number math as get_plan_info, but for an arbitrary
@@ -2661,11 +2779,7 @@ def show_protocol(user_id, profile):
         adjust_flow("overall roadmap", "roadmap")
 
     with tabs[1]:
-        def build_monthly(existing=None, reason=None):
-            prompt = "Generate this phase's Monthly Goal focus: one italic-style focus statement (1-2 sentences) plus a 4-week breakdown table (Week | Focus), covering all 4 weeks. Base this on the committed roadmap's current phase. Be concise but always complete all 4 rows — never truncate the table."
-            if existing:
-                prompt += f"\n\nThis is a revision of the current version, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT VERSION:\n{existing}"
-            return ai_generate(sys_prompt, prompt, max_tokens=1200)
+        build_monthly = lambda existing=None, reason=None: build_monthly_goal(sys_prompt, existing, reason)
         monthly_flag = get_open_materiality_flag(user_id, "monthly_focus")
         render_materiality_flag(monthly_flag, on_regenerate=lambda: get_or_generate("monthly_focus", user_id, build_monthly, force=True, reason=monthly_flag.get("flag_text") if monthly_flag else None))
         monthly = get_or_generate("monthly_focus", user_id, build_monthly)
@@ -2673,11 +2787,7 @@ def show_protocol(user_id, profile):
         adjust_flow("monthly goal focus", "monthly")
 
     with tabs[2]:
-        def build_supps(existing=None, reason=None):
-            prompt = "Generate this week's committed supplement schedule as a markdown table: Time | Supplement | Dose | Clinical notes. Derive dose, brand suitability, and timing from this person's actual labs, medications, and absorption considerations — explain timing rationale concisely in the notes column. If a thyroid medication is present, reason explicitly about its absorption timing relative to other supplements. Cover every supplement/timing slot that applies — never cut the table short; keep each note to one tight sentence rather than dropping rows." + week_context + consistency_context
-            if existing:
-                prompt += f"\n\nThis is a revision of the current committed schedule, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve the existing row order, wording, and doses for everything else exactly as they were. Do not reorder or rephrase rows this reason doesn't touch.\n\nCURRENT COMMITTED SCHEDULE:\n{existing}"
-            return ai_generate(sys_prompt, prompt, max_tokens=2000)
+        build_supps = lambda existing=None, reason=None: build_supplement_plan(sys_prompt, week_context, consistency_context, existing, reason)
         supps_flag = get_open_materiality_flag(user_id, "supplements")
         render_materiality_flag(supps_flag, on_regenerate=lambda: get_or_generate("supplement_plan", user_id, build_supps, force=True, reason=supps_flag.get("flag_text") if supps_flag else None))
         supps_manual_refresh = st.button("↻ Refresh", key="refresh_supps_btn")
@@ -2687,11 +2797,7 @@ def show_protocol(user_id, profile):
         adjust_flow("supplement schedule", "supp")
 
     with tabs[3]:
-        def build_nutrition(existing=None, reason=None):
-            prompt = "Generate this week's committed 7-day nutrition plan. Start with a short info box (2-3 sentences) on this phase's nutrition focus, reasoned from this person's actual gut/digestion check-in data, goals, and dietary preferences — not a generic rule. Then a markdown table: Day | Focus | Examples, covering all 7 days, labeled with generic weekday names only (Monday, Tuesday, ...) — never an absolute calendar date (e.g. never \"20 Jul\"), and never a \"today is [date]\" framing anywhere in this content. This plan is cached and re-read across many days without regenerating, so anything tied to a specific date goes stale the moment a day passes — daily-specific nudges are handled elsewhere in the app. Respect their stated dietary pattern and restrictions exactly. Keep each row tight (a few words per cell) so all 7 days fit — completeness across all 7 days matters more than detail in any one day." + week_context + consistency_context
-            if existing:
-                prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
-            return ai_generate(sys_prompt, prompt, max_tokens=2200)
+        build_nutrition = lambda existing=None, reason=None: build_nutrition_plan(sys_prompt, week_context, consistency_context, existing, reason)
         nutrition_flag = get_open_materiality_flag(user_id, "nutrition")
         render_materiality_flag(nutrition_flag, on_regenerate=lambda: get_or_generate("nutrition_plan", user_id, build_nutrition, force=True, reason=nutrition_flag.get("flag_text") if nutrition_flag else None))
         nutrition_manual_refresh = st.button("↻ Refresh", key="refresh_nutrition_btn")
@@ -2702,11 +2808,7 @@ def show_protocol(user_id, profile):
         adjust_flow("nutrition plan", "nutr")
 
     with tabs[4]:
-        def build_workouts(existing=None, reason=None):
-            prompt = "Generate this week's committed 7-day training plan. Start with a short info box (2-3 sentences) on this phase's training principle, reasoned from this person's recovery/wearable data and goals. Then a markdown table: Day | Session type | Focus & exercises | Target duration, covering all 7 days, labeled with generic weekday names only (Monday, Tuesday, ...) — never an absolute calendar date (e.g. never \"20 Jul\" or \"Mon 20 Jul\"), and never a \"today is [date]\" framing or a closing \"do this today\" callout anywhere in this content. This plan is cached and re-read across many days without regenerating, so anything tied to a specific date goes stale the moment a day passes — daily-specific nudges are handled elsewhere in the app. Calibrate intensity to recovery data if available. Keep each row tight so all 7 days fit — completeness across the full week matters more than depth on any single day." + week_context + consistency_context
-            if existing:
-                prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
-            return ai_generate(sys_prompt, prompt, max_tokens=2000)
+        build_workouts = lambda existing=None, reason=None: build_workout_plan(sys_prompt, week_context, consistency_context, existing, reason)
         workouts_flag = get_open_materiality_flag(user_id, "workouts")
         render_materiality_flag(workouts_flag, on_regenerate=lambda: get_or_generate("workout_plan", user_id, build_workouts, force=True, reason=workouts_flag.get("flag_text") if workouts_flag else None))
         workouts_manual_refresh = st.button("↻ Refresh", key="refresh_workouts_btn")
@@ -2717,27 +2819,7 @@ def show_protocol(user_id, profile):
         adjust_flow("training plan", "workout")
 
     with tabs[5]:
-        def build_lifestyle(existing=None, reason=None):
-            prompt = ("Generate this week's committed lifestyle & nervous-system regulation protocol, in the exact same concise "
-                      "style as the Supplements/Nutrition/Workouts tabs — a short info box (2-3 sentences, no heading, no emoji) on "
-                      "this phase's focus, reasoned from this person's actual stress/sleep/HRV check-in data, not a generic rule. "
-                      "Then a markdown table: Day | Practice | Instructions | Duration, covering all 7 days, labeled with generic "
-                      "weekday names only (Monday, Tuesday, ...) — never an absolute calendar date, never a \"today is [date]\" "
-                      "framing (this plan is cached and re-read across many days, so date references go stale within a day). Keep "
-                      "each instruction to one tight sentence — cover nervous-system regulation (vagal tone practices), sleep "
-                      "hygiene, stress-management, and gut-brain axis support, reasoned from this person's actual data. "
-                      "No extra section headers, no bullet-list recap after the table, no closing summary — the info box plus the "
-                      "table is the whole response, same as the other weekly tabs.\n\n"
-                      "STRICT SCOPE BOUNDARY, stated once, applied silently: this is lifestyle/nervous-system coaching, never "
-                      "mental health treatment — recommend concrete practices, never diagnose or name a mental health condition, "
-                      "never suggest therapy or psychiatric treatment. If check-in data suggests something beyond lifestyle scope "
-                      "(e.g. persistent low mood, symptoms consistent with clinical anxiety or depression), skip the regular table "
-                      "entirely and write only a brief, direct note deferring to a mental health professional — the same way a "
-                      "physician referral is handled — without extra framing or caveats around it."
-                      + week_context + consistency_context)
-            if existing:
-                prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
-            return ai_generate(sys_prompt, prompt, max_tokens=2200)
+        build_lifestyle = lambda existing=None, reason=None: build_lifestyle_plan(sys_prompt, week_context, consistency_context, existing, reason)
         lifestyle_flag = get_open_materiality_flag(user_id, "lifestyle")
         render_materiality_flag(lifestyle_flag, on_regenerate=lambda: get_or_generate("lifestyle_plan", user_id, build_lifestyle, force=True, reason=lifestyle_flag.get("flag_text") if lifestyle_flag else None))
         lifestyle_manual_refresh = st.button("↻ Refresh", key="refresh_lifestyle_btn")
@@ -3324,10 +3406,11 @@ def build_marker_trend_series(labs):
 
 def parse_discussed_markers(trends_content):
     """Extracts the marker names from the "Marker | Direction" table inside
-    the Coach's-take trends content — that table is already capped by the
-    prompt to the 12-15 most clinically significant markers, so reusing it
-    here (rather than a separate selection step) keeps the chart/table and
-    the narrative discussing exactly the same set of markers.
+    the Coach's-take trends content — that table is already filtered by the
+    prompt to whichever markers are genuinely relevant for this person (tied
+    to symptoms/goals, out of range, or meaningfully changing), not a fixed
+    count, so reusing it here (rather than a separate selection step) keeps
+    the chart/table and the narrative discussing exactly the same set.
 
     The AI often groups related markers into one row (e.g. "Hemoglobin /
     Hematocrit", "TSH / Free T3 / Free T4") — each cell is split on common
