@@ -815,8 +815,11 @@ def save_lab_report(user_id, report_date, text=None, file_block=None, file_label
             "You are OneSattva, interpreting lab values against functional (optimal) ranges, not conventional population reference ranges. "
             "Respond with exactly 2-4 sentences of plain prose — no headers, no markdown formatting (no #, *, bullet points, section titles), "
             "no restating the patient's name or demographics. Just the clinical interpretation itself: what's notable and why it matters. "
-            "This is a short list-preview summary, not a full report — the full protocol reasoning happens elsewhere.",
-            interpret_input, max_tokens=400)
+            "This is a short list-preview summary, not a full report — the full protocol reasoning happens elsewhere. "
+            "A report can have many flagged markers — do not try to mention every one. Pick only the 2-3 most clinically "
+            "significant findings and weave them into one tight synthesis; leave the rest for the full report. Whatever you "
+            "write must be a complete thought that ends on a full sentence — never trail off mid-point.",
+            interpret_input, max_tokens=600)
     structured = extract_structured_lab_values(raw_values)
     result = db_insert("lab_reports", {"user_id": user_id, "report_date": report_date.isoformat(), "raw_values": raw_values[:4000], "summary": summary, "structured_values": json.dumps(structured)})
     if result is None:
