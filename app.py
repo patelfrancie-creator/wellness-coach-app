@@ -2906,6 +2906,26 @@ def show_protocol(user_id, profile):
         st.markdown(lifestyle)
         adjust_flow("lifestyle protocol", "lifestyle")
 # ── Materiality check — runs after new data is submitted, not on a timer ─────
+def get_current_protocol_snapshot(user_id):
+    """What each of the 6 protocol levels currently, actually says — as
+    opposed to the raw underlying data (labs, meds, check-ins) that sys_prompt
+    already carries. Without this, a materiality judgment can only ask "is
+    this new data notable," never "does my already-committed content now
+    contradict this new data" — e.g. a committed Supplements table still
+    telling the person to continue something they just told the app they
+    stopped taking. Missing/empty levels are simply omitted."""
+    roadmap = db_get_single("roadmaps", user_id)
+    sections = []
+    if roadmap and roadmap.get("roadmap_text"):
+        sections.append(f"ROADMAP (currently committed):\n{roadmap['roadmap_text']}")
+    for table, label in [("monthly_focus", "MONTHLY FOCUS"), ("supplement_plan", "SUPPLEMENTS"),
+                          ("nutrition_plan", "NUTRITION"), ("workout_plan", "WORKOUTS"), ("lifestyle_plan", "LIFESTYLE")]:
+        row = db_get_single(table, user_id)
+        if row and row.get("content"):
+            sections.append(f"{label} (currently committed):\n{row['content']}")
+    return "\n\n".join(sections)
+
+
 def check_materiality(user_id, sys_prompt, trigger_desc):
     """Judges all 6 protocol levels independently against the same trigger,
     since a single real-world event (e.g. a new lab report) can genuinely be
@@ -2915,8 +2935,11 @@ def check_materiality(user_id, sys_prompt, trigger_desc):
     None if the judgment call itself failed to parse), so a caller that needs
     to react immediately can show what happened instead of only silently
     inserting flags that are easy to miss."""
+    current_content = get_current_protocol_snapshot(user_id)
+    content_block = f"\n\nHere is what each level currently, actually says (check for direct contradictions with the new data point below, not just general relevance):\n{current_content}\n" if current_content else ""
     prompt = f"""A new data point just came in: {trigger_desc}.
-Given everything you know about this patient, evaluate — independently — whether each of these levels is material enough to revisit: the committed roadmap, this phase's monthly focus, and the weekly supplements/nutrition/workouts/lifestyle protocols. Use your own clinical judgment — there is no fixed checklist. A single event can genuinely affect more than one level at once (e.g. a new lab finding might change both the roadmap and the supplement schedule), or none at all. Most single data points are NOT material — only flag genuine, protocol-relevant changes; don't flag a level just because you can find some workable justification for it.
+{content_block}
+Given everything you know about this patient, evaluate — independently — whether each of these levels is material enough to revisit: the committed roadmap, this phase's monthly focus, and the weekly supplements/nutrition/workouts/lifestyle protocols. Use your own clinical judgment — there is no fixed checklist. A single event can genuinely affect more than one level at once (e.g. a new lab finding might change both the roadmap and the supplement schedule), or none at all. Most single data points are NOT material — only flag genuine, protocol-relevant changes; don't flag a level just because you can find some workable justification for it. A direct contradiction between the new data point and what a level currently says (e.g. it still recommends something the person just stopped, or still cites a value that's now out of date) is always material for that level — never let that kind of contradiction stand unflagged.
 This is a short flag/notification, not the actual revised content — the full reasoning happens when the level is actually regenerated. Keep each flag_text to 1-2 tight sentences: what changed and why it matters for this person, nothing more.
 Respond with ONLY a valid JSON array of exactly 6 objects, one per level, in this exact order: roadmap, monthly_focus, supplements, nutrition, workouts, lifestyle. Each object: {{"level": "...", "material": true/false, "flag_text": "1-2 sentences: what changed, why it's material for this person specifically" or "1 short sentence why this doesn't require a change" if not material}}"""
     raw = ai_generate(sys_prompt, prompt, max_tokens=2500)
