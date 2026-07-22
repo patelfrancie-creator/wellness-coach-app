@@ -2484,7 +2484,7 @@ def build_week_and_consistency_context(plan, roadmap):
     return week_context, consistency_context
 
 
-def revision_suffix(existing, reason, label="committed plan", stability_note="preserve wording and order for anything that's still accurate"):
+def revision_suffix(existing, reason, label="committed plan", stability_note="preserve wording and order for anything that's still accurate", reconcile=True):
     """Shared by every build_* function's revision branch. The reason a
     revision fires (a materiality flag, a manual adjustment) explains WHY
     it's happening now — it is not an exhaustive list of every detail to
@@ -2494,9 +2494,20 @@ def revision_suffix(existing, reason, label="committed plan", stability_note="pr
     longer listed, a stale cycle-day mention — simply because the reason
     text didn't happen to call them out by name. This reconciles against
     everything currently in context while still avoiding needless
-    churn on parts that are genuinely still correct."""
+    churn on parts that are genuinely still correct.
+
+    reconcile=False opts back into the old narrow behavior — needed for
+    Supplements' week-rollover label patch specifically, where the whole
+    point (per an explicit product decision) is that dose/timing must NOT
+    drift on an ordinary week rollover, only the week/phase label should
+    change; broadening that one case to "fix anything stale" would undo
+    that deliberate stability."""
     if not existing:
         return ""
+    if not reconcile:
+        return (f"\n\nThis is a revision of the current {label}, not a fresh document. Reason for this update: "
+                f"{reason or 'general refresh requested'}. Make ONLY the changes required by this reason — "
+                f"{stability_note}.\n\nCURRENT {label.upper()}:\n{existing}")
     return (f"\n\nThis is a revision of the current {label}, not a fresh document — triggered because: "
             f"{reason or 'general refresh requested'}. That reason is why this revision is happening now, not an "
             f"exhaustive list of everything to fix — reconcile the content below against everything currently known "
@@ -2514,9 +2525,9 @@ def build_monthly_goal(sys_prompt, existing=None, reason=None):
     return ai_generate(sys_prompt, prompt, max_tokens=1200)
 
 
-def build_supplement_plan(sys_prompt, week_context, consistency_context, existing=None, reason=None):
+def build_supplement_plan(sys_prompt, week_context, consistency_context, existing=None, reason=None, reconcile=True):
     prompt = "Generate this week's committed supplement schedule as a markdown table: Time | Supplement | Dose | Clinical notes. Derive dose, brand suitability, and timing from this person's actual labs, medications, and absorption considerations — explain timing rationale concisely in the notes column. If a thyroid medication is present, reason explicitly about its absorption timing relative to other supplements. Cover every supplement/timing slot that applies — never cut the table short; keep each note to one tight sentence rather than dropping rows. This is cached and re-read for days at a time — never reference an absolute calendar date, a \"today is [date]\" framing, or a specific cycle day number (e.g. \"Day 19 of 27\") anywhere, including in the notes column; cycle day advances daily just like a date, so a number embedded here goes stale within days. If cycle context is relevant to a note, name the phase only (menstrual/follicular/ovulatory/luteal)." + week_context + consistency_context
-    prompt += revision_suffix(existing, reason, label="committed schedule", stability_note="preserve row order, wording, and doses for any supplement whose dose/timing is still correct")
+    prompt += revision_suffix(existing, reason, label="committed schedule", stability_note="preserve row order, wording, and doses for any supplement whose dose/timing is still correct", reconcile=reconcile)
     return ai_generate(sys_prompt, prompt, max_tokens=2000)
 
 
@@ -2853,7 +2864,7 @@ def show_protocol(user_id, profile):
         adjust_flow("monthly goal focus", "monthly")
 
     with tabs[2]:
-        build_supps = lambda existing=None, reason=None: build_supplement_plan(sys_prompt, week_context, consistency_context, existing, reason)
+        build_supps = lambda existing=None, reason=None: build_supplement_plan(sys_prompt, week_context, consistency_context, existing, reason, reconcile=(reason != week_sync_reason_light))
         supps_flag = get_open_materiality_flag(user_id, "supplements")
         render_materiality_flag(supps_flag, on_regenerate=lambda: get_or_generate("supplement_plan", user_id, build_supps, force=True, reason=supps_flag.get("flag_text") if supps_flag else None))
         supps_manual_refresh = st.button("↻ Refresh", key="refresh_supps_btn")
