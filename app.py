@@ -2484,31 +2484,51 @@ def build_week_and_consistency_context(plan, roadmap):
     return week_context, consistency_context
 
 
+def revision_suffix(existing, reason, label="committed plan", stability_note="preserve wording and order for anything that's still accurate"):
+    """Shared by every build_* function's revision branch. The reason a
+    revision fires (a materiality flag, a manual adjustment) explains WHY
+    it's happening now — it is not an exhaustive list of every detail to
+    fix. Telling the model to change ONLY what the reason names (the old
+    behavior) meant a revision would silently leave other now-stale
+    details standing — an outdated lab value, a medication that's no
+    longer listed, a stale cycle-day mention — simply because the reason
+    text didn't happen to call them out by name. This reconciles against
+    everything currently in context while still avoiding needless
+    churn on parts that are genuinely still correct."""
+    if not existing:
+        return ""
+    return (f"\n\nThis is a revision of the current {label}, not a fresh document — triggered because: "
+            f"{reason or 'general refresh requested'}. That reason is why this revision is happening now, not an "
+            f"exhaustive list of everything to fix — reconcile the content below against everything currently known "
+            f"about this person in your context (their latest labs, current medications/supplements, most recent "
+            f"check-in trends, current phase): if anything here is now out of date against that current picture — a "
+            f"superseded lab value, a medication or supplement that's no longer listed, a stale cycle-day or date "
+            f"reference, or anything else the instructions above no longer allow — fix it too, even if this reason "
+            f"didn't name it specifically. But don't needlessly reorder, rephrase, or restructure anything that's "
+            f"still accurate just for the sake of change — {stability_note}.\n\nCURRENT {label.upper()}:\n{existing}")
+
+
 def build_monthly_goal(sys_prompt, existing=None, reason=None):
     prompt = "Generate this phase's Monthly Goal focus: one italic-style focus statement (1-2 sentences) plus a 4-week breakdown table (Week | Focus), covering all 4 weeks. Base this on the committed roadmap's current phase. Be concise but always complete all 4 rows — never truncate the table. This is cached and re-read for weeks at a time — never reference an absolute calendar date, a \"today is [date]\" framing, or a specific cycle day number (e.g. \"Day 19 of 27\"); cycle day advances daily just like a date, so a number embedded here goes stale within days. If cycle context is relevant, name the phase only (menstrual/follicular/ovulatory/luteal)."
-    if existing:
-        prompt += f"\n\nThis is a revision of the current version, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT VERSION:\n{existing}"
+    prompt += revision_suffix(existing, reason, label="version")
     return ai_generate(sys_prompt, prompt, max_tokens=1200)
 
 
 def build_supplement_plan(sys_prompt, week_context, consistency_context, existing=None, reason=None):
     prompt = "Generate this week's committed supplement schedule as a markdown table: Time | Supplement | Dose | Clinical notes. Derive dose, brand suitability, and timing from this person's actual labs, medications, and absorption considerations — explain timing rationale concisely in the notes column. If a thyroid medication is present, reason explicitly about its absorption timing relative to other supplements. Cover every supplement/timing slot that applies — never cut the table short; keep each note to one tight sentence rather than dropping rows. This is cached and re-read for days at a time — never reference an absolute calendar date, a \"today is [date]\" framing, or a specific cycle day number (e.g. \"Day 19 of 27\") anywhere, including in the notes column; cycle day advances daily just like a date, so a number embedded here goes stale within days. If cycle context is relevant to a note, name the phase only (menstrual/follicular/ovulatory/luteal)." + week_context + consistency_context
-    if existing:
-        prompt += f"\n\nThis is a revision of the current committed schedule, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve the existing row order, wording, and doses for everything else exactly as they were. Do not reorder or rephrase rows this reason doesn't touch.\n\nCURRENT COMMITTED SCHEDULE:\n{existing}"
+    prompt += revision_suffix(existing, reason, label="committed schedule", stability_note="preserve row order, wording, and doses for any supplement whose dose/timing is still correct")
     return ai_generate(sys_prompt, prompt, max_tokens=2000)
 
 
 def build_nutrition_plan(sys_prompt, week_context, consistency_context, existing=None, reason=None):
     prompt = "Generate this week's committed 7-day nutrition plan. Start with a short info box (2-3 sentences) on this phase's nutrition focus, reasoned from this person's actual gut/digestion check-in data, goals, and dietary preferences — not a generic rule. Then a markdown table: Day | Focus | Examples, covering all 7 days, labeled with generic weekday names only (Monday, Tuesday, ...) — never an absolute calendar date (e.g. never \"20 Jul\"), and never a \"today is [date]\" framing anywhere in this content. This plan is cached and re-read across many days without regenerating, so anything tied to a specific date goes stale the moment a day passes — daily-specific nudges are handled elsewhere in the app. The same applies to a specific cycle day number (e.g. \"Day 19 of 27\") — it advances daily just like a date, so never state one; if cycle context is relevant to the focus, name the phase only (menstrual/follicular/ovulatory/luteal). Respect their stated dietary pattern and restrictions exactly. Keep each row tight (a few words per cell) so all 7 days fit — completeness across all 7 days matters more than detail in any one day." + week_context + consistency_context
-    if existing:
-        prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
+    prompt += revision_suffix(existing, reason)
     return ai_generate(sys_prompt, prompt, max_tokens=2200)
 
 
 def build_workout_plan(sys_prompt, week_context, consistency_context, existing=None, reason=None):
     prompt = "Generate this week's committed 7-day training plan. Start with a short info box (2-3 sentences) on this phase's training principle, reasoned from this person's recovery/wearable data and goals. Then a markdown table: Day | Session type | Focus & exercises | Target duration, covering all 7 days, labeled with generic weekday names only (Monday, Tuesday, ...) — never an absolute calendar date (e.g. never \"20 Jul\" or \"Mon 20 Jul\"), and never a \"today is [date]\" framing or a closing \"do this today\" callout anywhere in this content. This plan is cached and re-read across many days without regenerating, so anything tied to a specific date goes stale the moment a day passes — daily-specific nudges are handled elsewhere in the app. The same applies to a specific cycle day number (e.g. \"Day 19 of 27\") — it advances daily just like a date, so never state one; if cycle context is relevant to the focus, name the phase only (menstrual/follicular/ovulatory/luteal). Calibrate intensity to recovery data if available. Keep each row tight so all 7 days fit — completeness across the full week matters more than depth on any single day." + week_context + consistency_context
-    if existing:
-        prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
+    prompt += revision_suffix(existing, reason)
     return ai_generate(sys_prompt, prompt, max_tokens=2000)
 
 
@@ -2532,8 +2552,7 @@ def build_lifestyle_plan(sys_prompt, week_context, consistency_context, existing
               "entirely and write only a brief, direct note deferring to a mental health professional — the same way a "
               "physician referral is handled — without extra framing or caveats around it."
               + week_context + consistency_context)
-    if existing:
-        prompt += f"\n\nThis is a revision of the current committed plan, not a fresh document. Reason for this update: {reason or 'general refresh requested'}. Make ONLY the changes required by this reason — preserve everything else exactly as it was.\n\nCURRENT COMMITTED PLAN:\n{existing}"
+    prompt += revision_suffix(existing, reason)
     return ai_generate(sys_prompt, prompt, max_tokens=2200)
 
 
@@ -2627,11 +2646,7 @@ Table: Phase | Focus | Key milestones | Checkpoint — one row per phase, all {p
 
 **Immediate priority:** [one specific first action to begin this phase — describe it without referencing "today" or any specific date/day; this document is cached and re-read across many days without regenerating, so anything framed as happening on a specific day goes stale the moment that day passes. Daily-specific nudges are handled elsewhere in the app.]
 """
-    if existing_text:
-        prompt += (f"\n\nThis is a REVISION of the current committed roadmap below, not a fresh document. "
-                   f"Reason for this update: {reason or 'general refresh requested'}. "
-                   f"Make ONLY the changes required by this reason — preserve the existing phase structure, wording, doses, and order for everything else exactly as they were. "
-                   f"Do not reorder, rephrase, or restate content that this reason doesn't touch.\n\nCURRENT COMMITTED ROADMAP:\n{existing_text}")
+    prompt += revision_suffix(existing_text, reason, label="committed roadmap", stability_note="preserve phase structure, wording, doses, and order for whatever is still accurate")
     with st.spinner("Updating your roadmap..."):
         new_text = ai_generate(sys_prompt, prompt, max_tokens=8000)
         db_upsert("roadmaps", {"user_id": user_id, "roadmap_text": new_text, "provisional": not labs_present}, on_conflict="user_id")
