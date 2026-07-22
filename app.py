@@ -3779,6 +3779,15 @@ def show_profile_wearable(user_id, profile):
     if files and st.button("Upload files"):
         imported, file_results = import_whoop_csvs(user_id, files)
         show_whoop_import_result(imported, file_results)
+        if imported:
+            fresh_w = db_get("wearable_data", user_id, order_col="data_date", limit=30)
+            def wavg(rows, field):
+                vals = [float(r[field]) for r in rows if r.get(field) is not None]
+                return round(statistics.mean(vals), 1) if vals else None
+            trend_str = " | ".join(f"{lbl}: 7d avg {wavg(fresh_w[:7], f)}, 30d avg {wavg(fresh_w, f)}"
+                                    for lbl, f in [("HRV", "hrv"), ("Recovery", "recovery_score"), ("Sleep performance", "sleep_performance")])
+            with st.spinner("Checking with your coach..."):
+                flag_profile_change(user_id, profile, f"New wearable data imported ({imported} day(s)). Current trends — {trend_str}")
 
     # Re-fetch fresh (rather than reusing the `wearable` list from the top of
     # this function) so a just-completed upload shows up here immediately —
@@ -3799,6 +3808,8 @@ def show_profile_wearable(user_id, profile):
         sleep_perf = c3.number_input("Sleep performance (%)", 0, 100, 75, key="manual_sleep")
         if st.button("Save manual entry"):
             db_upsert("wearable_data", {"user_id": user_id, "data_date": m_date.isoformat(), "hrv": hrv, "recovery_score": recovery, "sleep_performance": sleep_perf}, on_conflict="user_id,data_date")
+            with st.spinner("Checking with your coach..."):
+                flag_profile_change(user_id, profile, f"User manually logged wearable data for {m_date.isoformat()}: HRV {hrv}ms, Recovery {recovery}%, Sleep performance {sleep_perf}%")
             st.success("Saved.")
             st.rerun()
 
