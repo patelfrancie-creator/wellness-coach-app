@@ -2658,6 +2658,24 @@ Table: Phase | Focus | Key milestones | Checkpoint — one row per phase, all {p
 **Immediate priority:** [one specific first action to begin this phase — describe it without referencing "today" or any specific date/day; this document is cached and re-read across many days without regenerating, so anything framed as happening on a specific day goes stale the moment that day passes. Daily-specific nudges are handled elsewhere in the app.]
 """
     prompt += revision_suffix(existing_text, reason, label="committed roadmap", stability_note="preserve phase structure, wording, doses, and order for whatever is still accurate")
+    if existing_text:
+        # The roadmap is the longest, most itemized of the 6 documents — a
+        # generic "reconcile against current data" instruction isn't reliably
+        # applied to every single bullet in a long, multi-phase list; some get
+        # updated, some quietly don't. Revisions were also never told to
+        # re-enforce the 3-5-bullets-max cap from the FORMAT section above, so
+        # phases could accumulate new bullets across revisions without ever
+        # pruning old ones — a longer list is itself harder to fully reconcile,
+        # compounding the first problem. Verified fixing both together against
+        # a real stale-citation case (a B12 value cited from an old report that
+        # a newer report had since reversed).
+        prompt += (" When revising, re-derive each phase's bullets fresh against everything currently known — do not "
+                   "just patch the specific value a trigger mentioned and leave the rest of the list untouched. "
+                   "Re-check every specific number, date, or lab value already stated in a bullet against the current "
+                   "data before keeping it — a bullet can look untouched-and-fine at a glance while still citing a "
+                   "superseded value from an older report. Stay at 3-5 bullets max per phase as in the original "
+                   "format — do not let bullets accumulate across revisions; if a new finding displaces an older, "
+                   "now-less-relevant one, replace it rather than appending to a growing list.")
     with st.spinner("Updating your roadmap..."):
         new_text = ai_generate(sys_prompt, prompt, max_tokens=8000)
         db_upsert("roadmaps", {"user_id": user_id, "roadmap_text": new_text, "provisional": not labs_present}, on_conflict="user_id")
